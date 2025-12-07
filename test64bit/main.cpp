@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 
     //engine.addImportPath(":/");
     //engine.addImportPath("qrc:///");
-    engine.load("D:/MagicMirror/git/test64bit/QMLContent/App.qml");
+    engine.load("./QMLContent/App.qml");
 
     //engine.loadFromModule("test64bit", "TestWindow");
     //engine.load("D:/MagicMirror/git/test64bit/QMLContent/testWindow.qml");

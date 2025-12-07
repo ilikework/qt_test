@@ -4,40 +4,39 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Charts Quick3D OpenGL)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Charts Quick3D)
 
 qt_standard_project_setup()
 
 # --- C++ ソースファイルを定義 ---
 set(APP_SOURCES
     main.cpp
-    mycustom3ditem.cpp # ここに C++ ファイルを含める
+    #mycustom3ditem.cpp
 )
 
 set(APP_HEADERS
-    mycustom3ditem.h # ここにヘッダーを含める
+    #mycustom3ditem.h # ここにヘッダーを含める
 )
 
 # --- 実行ファイルの定義 ---
 qt_add_executable(apptest64bit
     ${APP_SOURCES}
     ${APP_HEADERS}
-    QMLContent/customerAnalyse3.qml
+    #QMLContent/customerAnalyse3.qml
 )
 
-# --- 1. アプリ本体の QML モジュール定義 ---
+file(GLOB_RECURSE QML_SOURCES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    QMLContent/*.qml
+)
+
 qt_add_qml_module(apptest64bit_module
     URI test64bit
     # URI Custom3D
     QML_FILES
         Main.qml
-        QMLContent/backupAndRestore.qml
-        QMLContent/components/MMCheckBox.qml
-        QMLContent/components/MMRadioButton.qml
+        ${QML_SOURCES}
 )
-
-# --- 2. Custom3D メタデータ生成用モジュール定義 ---
-# ソースファイルは含めない（空にする）
 
 
 # ... (ターゲットプロパティはそのまま) ...
@@ -54,7 +53,6 @@ target_link_libraries(apptest64bit
     Qt6::Quick
     Qt6::Charts
     Qt6::Quick3D
-    Qt6::OpenGL
     apptest64bit_module
 )
 
@@ -70,4 +68,9 @@ install(TARGETS apptest64bit
 )
 
 
-
+add_custom_command(
+    TARGET apptest64bit_module POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/QMLContent
+            ${CMAKE_CURRENT_BINARY_DIR}/QMLContent
+)
