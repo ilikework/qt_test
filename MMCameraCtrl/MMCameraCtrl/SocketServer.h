@@ -1,11 +1,11 @@
-#pragma once
-
+﻿#pragma once
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
 #include <windows.h>
-
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "CameraBase.h"
 
 // ================== 协议定义（示例） ==================
 // 如果你已有协议头文件，请删除这一段并 include 你自己的协议定义
@@ -22,7 +22,7 @@ enum FrameType : uint8_t {
     FRAME_TYPE_CAPTURE = 3,
 };
 
-enum PixelFormat : uint32_t {
+enum MMPixelFormat : uint32_t {
     PIX_FMT_JPEG = 1,
 };
 
@@ -56,7 +56,7 @@ public:
         double      previewFps    = 30.0;
         uint32_t    previewWidth  = 1280;
         uint32_t    previewHeight = 720;
-        PixelFormat previewFmt    = PIX_FMT_JPEG;
+        MMPixelFormat previewFmt    = PIX_FMT_JPEG;
     };
 
     explicit SocketServer(const Config& cfg);
@@ -84,13 +84,9 @@ private:
     // io helpers
     static bool recvAll(SOCKET s, char* buf, int len);
     static bool sendAll(SOCKET s, const char* buf, int len);
-    static bool containsCmd(const std::string& json, const std::string& cmd);
-
+    
     // protocol send/recv
-    bool sendCommandResponse(uint32_t requestId,
-                             const std::string& cmd,
-                             int result,
-                             const std::string& message);
+    bool sendCommandResponse(uint32_t requestId,const std::string& cmd, const std::string& result);
 
     bool sendFrame(uint32_t requestId,
                    FrameType frameType,
@@ -115,5 +111,8 @@ private:
 
     bool previewOn_ = false;
     uint64_t frameSeq_ = 1;
-	bool exitRequested_ = false;
+    bool exitRequested_ = false;
+
+    std::unique_ptr<ICameraBase> pCamera_ = std::make_unique<NullCamera>();
+
 };

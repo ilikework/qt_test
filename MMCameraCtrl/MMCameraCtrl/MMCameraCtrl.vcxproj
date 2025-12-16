@@ -76,10 +76,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>.\EDSDK\Header;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>./EDSDK/Library/EDSDK.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -123,10 +126,29 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AigoCamera.cpp" />
+    <ClCompile Include="CameraBase.cpp" />
+    <ClCompile Include="CanonEDSCamera.cpp" />
     <ClCompile Include="MMCameraCtrl.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="SocketServer.cpp" />
+    <ClCompile Include="USBControler.cpp" />
+    <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AigoCamera.h" />
+    <ClInclude Include="CameraBase.h" />
+    <ClInclude Include="CanonEDSCamera.h" />
+    <ClInclude Include="CanonEDSUILock.h" />
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="GdiplusInit.h" />
+    <ClInclude Include="IControler.h" />
+    <ClInclude Include="kzdsc.h" />
+    <ClInclude Include="pch.h" />
     <ClInclude Include="protocol_common.h" />
+    <ClInclude Include="SocketServer.h" />
+    <ClInclude Include="USBControler.h" />
+    <ClInclude Include="Util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

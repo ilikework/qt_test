@@ -1,9 +1,12 @@
-#include "SocketServer.h"
-
+﻿#include "SocketServer.h"
 #include <ws2tcpip.h>
 #include <iostream>
 #include <algorithm>
 #include <cstring>
+#include "./nlohmann/json.hpp"
+#include "CanonEDSCamera.h"
+#include "AigoCamera.h"
+using json = nlohmann::json;
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -18,8 +21,8 @@ static inline uint64_t bswap64(uint64_t x) {
            ((x & 0x00FF000000000000ULL) >> 40) |
            ((x & 0xFF00000000000000ULL) >> 56);
 }
-static inline uint64_t htonll(uint64_t x) { return bswap64(x); }
-static inline uint64_t ntohll(uint64_t x) { return bswap64(x); }
+//static inline uint64_t htonll(uint64_t x) { return bswap64(x); }
+//static inline uint64_t ntohll(uint64_t x) { return bswap64(x); }
 
 // ================== ctor/dtor ==================
 SocketServer::SocketServer(const Config& cfg)
@@ -231,31 +234,20 @@ bool SocketServer::sendAll(SOCKET s, const char* buf, int len) {
     return true;
 }
 
-bool SocketServer::containsCmd(const std::string& json, const std::string& cmd) {
-    std::string s = json;
-    std::string c = cmd;
-    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-    std::transform(c.begin(), c.end(), c.begin(), ::tolower);
-    return s.find(c) != std::string::npos;
-}
-
 // ================== protocol send/recv ==================
-bool SocketServer::sendCommandResponse(uint32_t requestId,
-                                       const std::string& cmd,
-                                       int result,
-                                       const std::string& message) {
-    std::string json = "{"
-        "\"cmd\":\"" + cmd + "\","
-        "\"result\":" + std::to_string(result) + ","
-        "\"message\":\"" + message + "\""
-        "}";
+bool SocketServer::sendCommandResponse(uint32_t requestId,const std::string& cmd,const std::string& result) 
+{
+    json j;
+    j["cmd"] = cmd;
+    j["result"] = result;
+    std::string str = j.dump();
 
     MessageHeader hdr{};
     hdr.msgType   = htons((uint16_t)MSG_COMMAND_RESPONSE);
     hdr.version   = htons((uint16_t)1);
     hdr.requestId = htonl(requestId);
 
-    uint32_t bodyLen = (uint32_t)(sizeof(hdr) + json.size());
+    uint32_t bodyLen = (uint32_t)(sizeof(hdr) + str.size());
     uint32_t netBodyLen = htonl(bodyLen);
 
     std::vector<char> buf;
@@ -263,7 +255,7 @@ bool SocketServer::sendCommandResponse(uint32_t requestId,
 
     memcpy(buf.data(), &netBodyLen, 4);
     memcpy(buf.data() + 4, &hdr, sizeof(hdr));
-    memcpy(buf.data() + 4 + sizeof(hdr), json.data(), json.size());
+    memcpy(buf.data() + 4 + sizeof(hdr), str.data(), str.size());
 
     return sendAll(clientSock_, buf.data(), (int)buf.size());
 }
@@ -352,36 +344,56 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
 
     switch (hdrHost.msgType) {
     case MSG_COMMAND_REQUEST: {
-        std::string json(payload, payloadLen);
         std::cout << "[REQ] requestId=" << hdrHost.requestId
-                  << " json=" << json << "\n";
+                  << " json=" << std::string(payload, payloadLen) << "\n";
 
-        if (containsCmd(json, "\"cmd\":\"opencamera\"")) {
-            return sendCommandResponse(hdrHost.requestId, "openCamera", 0, "OK");
-        } else if (containsCmd(json, "\"cmd\":\"closecamera\"")) {
-            return sendCommandResponse(hdrHost.requestId, "closeCamera", 0, "OK");
-        } else if (containsCmd(json, "\"cmd\":\"startpreview\"")) {
-            previewOn_ = true;
-            frameSeq_ = 1;
-            return sendCommandResponse(hdrHost.requestId, "startPreview", 0, "OK");
-        } else if (containsCmd(json, "\"cmd\":\"stoppreview\"")) {
-            previewOn_ = false;
-            return sendCommandResponse(hdrHost.requestId, "stopPreview", 0, "OK");
-        } else if (containsCmd(json, "\"cmd\":\"getpreviewframe\"")) {
-            if (!sendCommandResponse(hdrHost.requestId, "getPreviewFrame", 0, "OK"))
-                return false;
-            return sendFrame(hdrHost.requestId, FRAME_TYPE_SINGLE,
-                             frameSeq_++,
-                             cfg_.previewWidth, cfg_.previewHeight, cfg_.previewFmt);
-        } else if (containsCmd(json, "\"cmd\":\"capture\"")) {
-            if (!sendCommandResponse(hdrHost.requestId, "capture", 0, "OK"))
-                return false;
-            return sendFrame(hdrHost.requestId, FRAME_TYPE_CAPTURE,
-                             frameSeq_++,
-                             cfg_.previewWidth, cfg_.previewHeight, cfg_.previewFmt);
-        } else {
-            return sendCommandResponse(hdrHost.requestId, "unknown", -1, "Unknown cmd");
+        json j = nlohmann::json::parse(std::string(payload, payloadLen));
+        std::string cmd = j.value("cmd", "");
+        std::string result = "NG";
+        if (cmd == "open")
+        {
+            int series = j.value("series", NoneType);
+            if(series== CanonEOS)
+                pCamera_ = std::make_unique<CanonEDSCamera>();
+            else if (series == CanonEOS)
+                pCamera_ = std::make_unique<CAigoCamera>();
+            std::wstring dllname = Util::Instance().AnsiToWString(j.value("dllname", "").c_str());
+            pCamera_->Init(dllname.c_str());
+            result = "OK";
         }
+        else if (cmd == "close")
+        {
+            previewOn_ = false;
+            pCamera_->unInit();
+            result = "OK";
+        }
+        else if (cmd == "startpreview")
+        {
+            if (pCamera_->StartPreview())
+                previewOn_ = true;
+            result = "OK";
+        }
+        else if (cmd == "stoppreview")
+        {
+            pCamera_->StopPreview();
+            previewOn_ = false;
+            result = "OK";
+        }
+        else if (cmd == "capture")
+        {
+            pCamera_->Capture(nullptr);
+            result = "OK";
+        }
+        else if (cmd == "exit")
+        {
+            previewOn_ = false;
+            result = "OK";
+            sendCommandResponse(hdrHost.requestId, cmd, result);
+            exitRequested_ = true;
+            pCamera_->unInit(false);
+            return true;
+        }
+        return sendCommandResponse(hdrHost.requestId, cmd,result);
     }
 
     case MSG_HEARTBEAT:
