@@ -3,7 +3,7 @@
 
 NullCamera::NullCamera()
 {
-    this->m_pCtrler = std::make_unique<USBControler>();
+    
 }
 
 long NullCamera::Init(const wchar_t* pszDllName)

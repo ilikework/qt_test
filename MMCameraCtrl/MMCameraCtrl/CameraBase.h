@@ -5,8 +5,10 @@
 #include <string>
 #include "./lib/dllProc.h"
 #include "IControler.h"
+#include "USBControler.h"
 #include <filesystem>
 #include <functional>
+
 #pragma comment(lib,"./lib/dllProc.lib")
 
 
@@ -282,7 +284,7 @@ public:
 
 protected:
 	std::wstring	m_folderPath;
-	std::unique_ptr <IControler> m_pCtrler = nullptr;
+	std::unique_ptr <IControler> m_pCtrler = std::make_unique<USBControler>();
 	CaptureSetting m_captureSetting;
 	std::vector<std::wstring> m_captured_files;
 
