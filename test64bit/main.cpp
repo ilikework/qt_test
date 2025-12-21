@@ -1,12 +1,15 @@
 //#include <QGuiApplication>
 //#include <QQmlApplicationEngine>
+//#include <QSurfaceFormat>
+//#include "mycustom3ditem.h"
 
 #include <QApplication>
 #include <QQmlApplicationEngine>
-//#include <QSurfaceFormat>
+#include <QQmlContext>
 #include <QQuickWindow>
 #include <QQuickGraphicsConfiguration>
-//#include "mycustom3ditem.h"
+#include "cameraImageProvider.h"
+#include "cameraclient.h"
 
 int main(int argc, char *argv[])
 {
@@ -63,12 +66,26 @@ int main(int argc, char *argv[])
 
     //engine.addImportPath(":/");
     //engine.addImportPath("qrc:///");
+
+
+    auto* provider = new CameraImageProvider();
+    engine.addImageProvider("camera", provider);
+
+    CameraClient client(provider);
+    engine.rootContext()->setContextProperty("camClient", &client);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit,
+                     &client, &CameraClient::closeCamera);
+
     engine.load("./QMLContent/App.qml");
 
     //engine.loadFromModule("test64bit", "TestWindow");
     //engine.load("D:/MagicMirror/git/test64bit/QMLContent/testWindow.qml");
     //engine.loadFromModule("test64bit", "qrc:/QMLContent/testWindow.qml");
     //engine.addImportPath("D:/MagicMirror/git/test64bit/QMLContent");
+
+    // ⭐ QML 创建完之后，立即自检相机是否可以connect
+    QMetaObject::invokeMethod(&client, "startup", Qt::QueuedConnection);
+
 
     return app.exec();
 }

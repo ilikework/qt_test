@@ -130,7 +130,7 @@ public:
 	virtual bool StartPreview(void) = 0;
 	virtual void ReqOneFrame(std::function<void()> callback) = 0;
 	virtual std::string GetFrame() = 0;
-	virtual void ReqOneFrame2(std::function<void(void*)> callback, void* param) = 0;
+	virtual void ReqOneFrame2() = 0;
 	virtual std::vector<uint8_t> GetFrame2() = 0;
 	virtual void StopPreview(void) = 0;
 	virtual long Capture(std::function<void()> callback) = 0;
@@ -332,6 +332,6 @@ public:
 	bool GetSupportExposures(std::vector<int>& values) override;
 
 	// Í¨¹ý ICameraBase ¼Ì³Ð
-	void ReqOneFrame2(std::function<void(void*)> callback, void* param) override;
+	void ReqOneFrame2() override;
 	std::vector<uint8_t> GetFrame2() override;
 };

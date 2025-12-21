@@ -148,7 +148,7 @@ protected:
 
 
 	// Í¨¹ý ICameraBase ¼Ì³Ð
-	void ReqOneFrame2(std::function<void(void*)> callback, void* param) override;
+	void ReqOneFrame2() override;
 
 	std::vector<uint8_t> GetFrame2() override;
 

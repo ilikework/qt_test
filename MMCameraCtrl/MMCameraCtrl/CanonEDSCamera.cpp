@@ -581,13 +581,380 @@ bool CanonEDSCamera::GetSupportExposures(std::vector<int>& values)
 	return true;
 }
 
-void CanonEDSCamera::ReqOneFrame2(std::function<void(void*)> callback, void* param)
+void CanonEDSCamera::ReqOneFrame2()
 {
+
 }
 
 std::vector<uint8_t> CanonEDSCamera::GetFrame2()
 {
-	return std::vector<uint8_t>();
+	std::vector<uint8_t> voidvec = std::vector<uint8_t>();
+	if (this->IsPausePreview())
+		return voidvec;
+
+	this->PausePreview();
+	EdsStreamRef stream = nullptr;
+	EdsEvfImageRef evfImage = nullptr;
+	bool result = false;
+
+	// 创建内存流
+	EdsError err = EdsCreateMemoryStream(2 * 1024 * 1024, &stream);
+	if (err != EDS_ERR_OK)
+	{
+		this->ResumePreview();
+		LOG(L"EdsCreateMemoryStream error");
+		return voidvec;
+	}
+
+	// 创建 EVF 图像对象
+	err = EdsCreateEvfImageRef(stream, &evfImage);
+	if (err != EDS_ERR_OK) {
+		EdsRelease(stream);
+		this->ResumePreview();
+		LOG(L"EdsCreateEvfImageRef error");
+		return voidvec;
+	}
+
+	// 下载 EVF 图像
+	err = EdsDownloadEvfImage(m_hCamera, evfImage);
+	if (err != EDS_ERR_OK) {
+		if (evfImage) EdsRelease(evfImage);
+		if (stream) EdsRelease(stream);
+		LOG(L"EdsDownloadEvfImage error");
+		this->ResumePreview();
+		return voidvec;
+	}
+
+	// 获取数据指针
+	EdsUInt64 length = 0;
+	void* pData = nullptr;
+	err = EdsGetPointer(stream, (EdsVoid**)&pData);
+	if (err != EDS_ERR_OK) {
+		if (evfImage) EdsRelease(evfImage);
+		if (stream) EdsRelease(stream);
+		this->ResumePreview();
+		LOG(L"EdsGetPointer error");
+		return voidvec;
+	}
+	err = EdsGetLength(stream, &length);
+	if (err != EDS_ERR_OK) {
+		if (evfImage) EdsRelease(evfImage);
+		if (stream) EdsRelease(stream);
+		this->ResumePreview();
+		LOG(L"EdsGetLength error");
+		return voidvec;
+	}
+
+
+	HGLOBAL hMem = ::GlobalAlloc(GHND, (SIZE_T)length);
+	LPVOID pBuff = ::GlobalLock(hMem);
+
+	memcpy(pBuff, pData, (SIZE_T)length);
+
+	::GlobalUnlock(hMem);
+
+	IStream* pStream = nullptr;
+	if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) != S_OK) {
+		::GlobalFree(hMem);
+		this->ResumePreview();
+		LOG(L"CreateStreamOnHGlobal error");
+		return voidvec;
+	}
+
+	Gdiplus::Image image(pStream);
+	pStream->Release();  // GDI+ 内部会引用，不用担心
+
+	if (image.GetLastStatus() != Ok)
+	{
+		this->ResumePreview();
+		LOG(L"image.GetLastStatus() error");
+		return voidvec;
+	}
+
+	// 3. 创建缩放后的 Bitmap
+	Bitmap resized(320, 240, PixelFormat24bppRGB);
+	{
+		Graphics g(&resized);
+		g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+		g.DrawImage(&image, 0, 0, 320, 240);
+	}
+
+	// 4. 编码为 JPEG 到 IStream
+	IStream* outStream = nullptr;
+	if (CreateStreamOnHGlobal(NULL, TRUE, &outStream) != S_OK)
+	{
+		this->ResumePreview();
+		LOG(L"CreateStreamOnHGlobal2 error");
+		return voidvec;
+	}
+
+	CLSID clsidEncoder;
+	// 获取 JPEG 编码器 CLSID
+	UINT numEncoders = 0, sizeEncoders = 0;
+	GetImageEncodersSize(&numEncoders, &sizeEncoders);
+	if (sizeEncoders == 0) {
+		outStream->Release();
+		this->ResumePreview();
+		LOG(L"GetImageEncodersSize error");
+		return voidvec;
+	}
+	std::vector<BYTE> buf(sizeEncoders);
+	ImageCodecInfo* pEncoders = reinterpret_cast<ImageCodecInfo*>(buf.data());
+	GetImageEncoders(numEncoders, sizeEncoders, pEncoders);
+	for (UINT i = 0; i < numEncoders; i++) {
+		if (wcscmp(pEncoders[i].MimeType, L"image/jpeg") == 0) {
+			clsidEncoder = pEncoders[i].Clsid;
+			break;
+		}
+	}
+
+	EncoderParameters params;
+	params.Count = 1;
+	ULONG quality = 80;
+	params.Parameter[0].Guid = EncoderQuality;
+	params.Parameter[0].Type = EncoderParameterValueTypeLong;
+	params.Parameter[0].NumberOfValues = 1;
+	params.Parameter[0].Value = &quality;
+
+	if (resized.Save(outStream, &clsidEncoder, &params) != Ok) {
+		outStream->Release();
+		this->ResumePreview();
+		LOG(L"resized.Save error");
+		return voidvec;
+	}
+
+	// 5. 从 IStream 获取内存
+	HGLOBAL hGlobal = nullptr;
+	if (GetHGlobalFromStream(outStream, &hGlobal) != S_OK) {
+		outStream->Release();
+		this->ResumePreview();
+		LOG(L"GetHGlobalFromStream3 error");
+		return voidvec;
+	}
+	SIZE_T len = GlobalSize(hGlobal);
+	BYTE* pData2 = (BYTE*)GlobalLock(hGlobal);
+
+
+	std::vector<uint8_t> frameCopy;
+	frameCopy.assign(pData2, pData2 + len);
+	this->ResumePreview();
+
+	return frameCopy;
+
+
+	//enqueueTask([this]() {
+
+	//	if (this->IsPausePreview())
+	//		return;
+	//	frameReady_ = false;
+	//	m_bPause = true;
+	//	EdsStreamRef stream = nullptr;
+	//	EdsEvfImageRef evfImage = nullptr;
+	//	bool result = false;
+
+	//	// 创建内存流
+	//	EdsError err = EdsCreateMemoryStream(2 * 1024 * 1024, &stream);
+	//	if (err != EDS_ERR_OK)
+	//	{
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	// 创建 EVF 图像对象
+	//	err = EdsCreateEvfImageRef(stream, &evfImage);
+	//	if (err != EDS_ERR_OK) {
+	//		EdsRelease(stream);
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	// 下载 EVF 图像
+	//	err = EdsDownloadEvfImage(m_hCamera, evfImage);
+	//	if (err != EDS_ERR_OK) {
+	//		if (evfImage) EdsRelease(evfImage);
+	//		if (stream) EdsRelease(stream);
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	//EdsUInt32 format = 0;
+	//	//EdsGetPropertyData(evfImage, kEdsPropID_Evf_Mode, 0, sizeof(format), &format);
+	//	//LOG(std::format(L"EVF format = {}", format));
+
+	//	// 获取数据指针
+	//	EdsUInt64 length = 0;
+	//	void* pData = nullptr;
+	//	err = EdsGetPointer(stream, (EdsVoid**)&pData);
+	//	if (err != EDS_ERR_OK) {
+	//		if (evfImage) EdsRelease(evfImage);
+	//		if (stream) EdsRelease(stream);
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+	//	err = EdsGetLength(stream, &length);
+	//	if (err != EDS_ERR_OK) {
+	//		if (evfImage) EdsRelease(evfImage);
+	//		if (stream) EdsRelease(stream);
+	//		frameReady_ = true;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+
+	//	HGLOBAL hMem = ::GlobalAlloc(GHND, (SIZE_T)length);
+	//	LPVOID pBuff = ::GlobalLock(hMem);
+
+	//	memcpy(pBuff, pData, (SIZE_T)length);
+
+	//	::GlobalUnlock(hMem);
+
+	//	IStream* pStream = nullptr;
+	//	if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) != S_OK) {
+	//		::GlobalFree(hMem);
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	Gdiplus::Image image(pStream);
+	//	pStream->Release();  // GDI+ 内部会引用，不用担心
+
+	//	if (image.GetLastStatus() != Ok)
+	//	{
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	// 3. 创建缩放后的 Bitmap
+	//	Bitmap resized(320, 240, PixelFormat24bppRGB);
+	//	{
+	//		Graphics g(&resized);
+	//		g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+	//		g.DrawImage(&image, 0, 0, 320, 240);
+	//	}
+
+	//	// 4. 编码为 JPEG 到 IStream
+	//	IStream* outStream = nullptr;
+	//	if (CreateStreamOnHGlobal(NULL, TRUE, &outStream) != S_OK)
+	//	{
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	CLSID clsidEncoder;
+	//	// 获取 JPEG 编码器 CLSID
+	//	UINT numEncoders = 0, sizeEncoders = 0;
+	//	GetImageEncodersSize(&numEncoders, &sizeEncoders);
+	//	if (sizeEncoders == 0) {
+	//		outStream->Release();
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+	//	std::vector<BYTE> buf(sizeEncoders);
+	//	ImageCodecInfo* pEncoders = reinterpret_cast<ImageCodecInfo*>(buf.data());
+	//	GetImageEncoders(numEncoders, sizeEncoders, pEncoders);
+	//	for (UINT i = 0; i < numEncoders; i++) {
+	//		if (wcscmp(pEncoders[i].MimeType, L"image/jpeg") == 0) {
+	//			clsidEncoder = pEncoders[i].Clsid;
+	//			break;
+	//		}
+	//	}
+
+	//	EncoderParameters params;
+	//	params.Count = 1;
+	//	ULONG quality = 80;
+	//	params.Parameter[0].Guid = EncoderQuality;
+	//	params.Parameter[0].Type = EncoderParameterValueTypeLong;
+	//	params.Parameter[0].NumberOfValues = 1;
+	//	params.Parameter[0].Value = &quality;
+
+	//	if (resized.Save(outStream, &clsidEncoder, &params) != Ok) {
+	//		outStream->Release();
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+
+	//	// 5. 从 IStream 获取内存
+	//	HGLOBAL hGlobal = nullptr;
+	//	if (GetHGlobalFromStream(outStream, &hGlobal) != S_OK) {
+	//		outStream->Release();
+	//		frameReady_ = true;
+	//		m_bPause = false;
+	//		doneCv_.notify_one();
+	//		return;
+	//	}
+	//	SIZE_T len = GlobalSize(hGlobal);
+	//	BYTE* pData2 = (BYTE*)GlobalLock(hGlobal);
+
+
+	//	{
+	//		std::lock_guard<std::mutex> lock(m_frameMutex);
+	//		oneframe_.clear();
+	//		oneframe_.assign(pData2, pData2 + len);
+	//		frameReady_ = true;
+	//	}
+	//	m_bPause = true;
+	//	doneCv_.notify_one();
+
+	//	//// 6. Base64 编码
+	//	//DWORD base64Len = 0;
+	//	//if (!CryptBinaryToStringA((unsigned char*)pData2, (DWORD)len, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, NULL, &base64Len))
+	//	//{
+	//	//	GlobalUnlock(hGlobal);
+	//	//	outStream->Release();
+	//	//	return;
+	//	//}
+	//	//std::string base64;
+	//	//base64.resize(base64Len);
+	//	//CryptBinaryToStringA((unsigned char*)pData2, (DWORD)len, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, base64.data(), &base64Len);
+
+	//	//GlobalUnlock(hGlobal);
+	//	//outStream->Release();
+
+	//	//// 去掉末尾 '\0'
+	//	//if (!base64.empty() && base64.back() == '\0')
+	//	//	base64.pop_back();
+
+
+	//	////std::string base64 = Util::Instance().EncodeBase64Frame((unsigned char*)pData, (size_t)length);
+
+	//	//// 🔒 写入共享帧（上锁）
+	//	//{
+	//	//	std::lock_guard<std::mutex> lock(m_frameMutex);
+	//	//	m_oneframeBase64 = std::move(base64);
+	//	//}
+
+	//	//if (evfImage) EdsRelease(evfImage);
+	//	//if (stream) EdsRelease(stream);
+
+	//	});
+
+	//std::unique_lock<std::mutex> lk(m_frameMutex);
+	//doneCv_.wait(lk, [&] { return frameReady_; });
+
+	//std::vector<uint8_t> frameCopy;
+	//{
+	//	std::lock_guard<std::mutex> lock(m_frameMutex);
+	//	frameCopy = oneframe_;
+	//}
+	//return frameCopy;
 }
 
 bool CanonEDSCamera::StartPreview(void)
@@ -648,11 +1015,13 @@ bool CanonEDSCamera::StartPreview(void)
 	{
 		//CanonEDSUILock uilock(m_hCamera);
 
-		this->SetWB(m_captureSetting.get_rgb().wb);
-		this->SetISO(m_captureSetting.get_rgb().iso);
-		this->SetAperture(m_captureSetting.get_rgb().aperture);
-		this->SetExposure(m_captureSetting.get_rgb().exposure);
-		//this->SetImgQuality(m_captureSetting.getImgQuality());
+		// todo
+		//this->SetWB(m_captureSetting.get_rgb().wb);
+		//this->SetISO(m_captureSetting.get_rgb().iso);
+		//this->SetAperture(m_captureSetting.get_rgb().aperture);
+		//this->SetExposure(m_captureSetting.get_rgb().exposure);
+		
+		// this->SetImgQuality(m_captureSetting.getImgQuality());
 		//this->SetImgSize(m_captureSetting.getImgSize());
 	}
 
@@ -985,6 +1354,7 @@ EdsInt32 CanonEDSCamera::GetNearestValue(EdsPropertyID propID, EdsInt32 target) 
 
 void CanonEDSCamera::SetISO(int iso)
 {
+	LOG(L"CanonEDSCamera::SetISO in");
 	//CanonEDSUILock uilock(m_hCamera);
 
 	//EdsInt32 data = GetNearestValue(kEdsPropID_ISOSpeed, iso);
@@ -1004,6 +1374,7 @@ void CanonEDSCamera::SetISO(int iso)
 
 void CanonEDSCamera::SetWB(int wb)
 {
+	LOG(L"CanonEDSCamera::SetWB in");
 	//CanonEDSUILock uilock(m_hCamera);
 	//this->m_bPause = true;
 	enqueueTask([this, wb]() {
@@ -1020,6 +1391,7 @@ void CanonEDSCamera::SetWB(int wb)
 
 void CanonEDSCamera::SetExposure(int exposure)
 {
+	LOG(L"CanonEDSCamera::SetExposure in");
 	//CanonEDSUILock uilock(m_hCamera);
 
 	//EdsInt32 data = GetNearestValue(kEdsPropID_Tv, exposure);
@@ -1057,6 +1429,8 @@ void CanonEDSCamera::SetFlash(bool bflash)
 
 void CanonEDSCamera::SetImgSize(int imgSize)
 {
+	LOG(L"CanonEDSCamera::SetImgSize in");
+
 	//CanonEDSUILock uilock(m_hCamera);
 	//this->m_bPause = true;
 	enqueueTask([this,imgSize]() {
@@ -1085,6 +1459,8 @@ void CanonEDSCamera::SetImgQuality(int imgQuality)
 
 void CanonEDSCamera::SetAperture(int aperture)
 {
+	LOG(L"CanonEDSCamera::SetAperture in");
+
 	//CanonEDSUILock uilock(m_hCamera);
 
 	//EdsInt32 data = GetNearestValue(kEdsPropID_Av, aperture);

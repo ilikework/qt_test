@@ -53,7 +53,7 @@ public:
         std::string bindIp = "127.0.0.1";
         uint16_t    port   = 52345;
 
-        double      previewFps    = 30.0;
+        double      previewFps    = 20.0;
         uint32_t    previewWidth  = 1280;
         uint32_t    previewHeight = 720;
         MMPixelFormat previewFmt    = PIX_FMT_JPEG;

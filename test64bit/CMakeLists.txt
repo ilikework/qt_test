@@ -5,6 +5,7 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Charts Quick3D)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
 
@@ -22,6 +23,8 @@ set(APP_HEADERS
 qt_add_executable(apptest64bit
     ${APP_SOURCES}
     ${APP_HEADERS}
+    cameraclient.h cameraclient.cpp
+    CameraImageProvider.h
     #QMLContent/customerAnalyse3.qml
 )
 
@@ -55,6 +58,7 @@ target_link_libraries(apptest64bit
     Qt6::Quick3D
     apptest64bit_module
 )
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
 
 include(GNUInstallDirs)
 install(DIRECTORY ${QT_QML_DIR}/QtQuick3D

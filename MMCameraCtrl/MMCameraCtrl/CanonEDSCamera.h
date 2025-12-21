@@ -112,6 +112,10 @@ private:
     bool GetSupportExposures(std::vector<int>& values) override;
 
     // Í¨¹ý ICameraBase ¼Ì³Ð
-    void ReqOneFrame2(std::function<void(void*)> callback, void* param) override;
+    void ReqOneFrame2() override;
     std::vector<uint8_t> GetFrame2() override;
+    //std::mutex doneMutex_;
+    std::condition_variable doneCv_;
+    bool frameReady_ = false;
+    std::vector<uint8_t> oneframe_;
 };

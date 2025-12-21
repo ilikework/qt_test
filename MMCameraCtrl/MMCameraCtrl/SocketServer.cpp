@@ -67,51 +67,86 @@ void SocketServer::run() {
         frameSeq_ = 1;
         exitRequested_ = false;
 
-        ULONGLONG lastFrameTick = GetTickCount64();
-        const double frameIntervalMs = 1000.0 / cfg_.previewFps;
 
         // 3) 服务当前 client，直到断开或 exit 命令
+        ULONGLONG nextFrameTick = GetTickCount64(); // 下一帧目标时间点
+        const double frameIntervalMs = 1000.0 / cfg_.previewFps;
         while (running_ && clientSock_ != INVALID_SOCKET && !exitRequested_) {
+
+            // 1) 计算 select 超时：有预览就等到下一帧；没预览就“无限等消息”
+            timeval* ptv = nullptr;
+            timeval tv{};
+
+            if (previewOn_) {
+                ULONGLONG now = GetTickCount64();
+                long waitMs = 0;
+
+                if (now < nextFrameTick) {
+                    waitMs = (long)(nextFrameTick - now);
+                }
+                else {
+                    waitMs = 0; // 已经过点了，立刻醒来发帧（或先处理消息也行）
+                }
+
+                tv.tv_sec = waitMs / 1000;
+                tv.tv_usec = (waitMs % 1000) * 1000;
+                ptv = &tv;
+            }
+            else {
+                // 没开预览：不需要定时醒来，直接阻塞等消息（CPU 不空转）
+                ptv = nullptr;
+            }
+
+            // 2) 等消息（或等到发帧时间到）
             fd_set readfds;
             FD_ZERO(&readfds);
             FD_SET(clientSock_, &readfds);
 
-            timeval tv;
-            tv.tv_sec  = 0;
-            tv.tv_usec = 30 * 1000;
-
-            int ret = select(0, &readfds, nullptr, nullptr, &tv);
+            int ret = select(0, &readfds, nullptr, nullptr, ptv);
             if (ret == SOCKET_ERROR) {
                 std::cerr << "select error: " << WSAGetLastError() << "\n";
-                break; // 当前 client 会话结束
+                break;
             }
 
+            // 3) 有消息就处理（不会要求客户端持续发）
             if (ret > 0 && FD_ISSET(clientSock_, &readfds)) {
                 std::vector<char> body;
                 MessageHeader hdrHost{};
                 if (!recvOneMessage(body, hdrHost)) {
                     std::cout << "Client disconnected.\n";
-                    break; // client 断开 => 回到外层 accept 下一个
+                    break;
                 }
                 if (!handleMessage(hdrHost, body)) {
                     std::cout << "handleMessage failed.\n";
-                    break; // 当前 client 会话结束
+                    break;
                 }
+
+                // handleMessage 里可能会把 previewOn_ 打开/关闭
+                // 如果刚打开预览，可以重置 nextFrameTick：
+                //nextFrameTick = GetTickCount64();
             }
 
+            // 4) 时间到就发预览帧（即使没有收到任何消息）
             if (previewOn_) {
                 ULONGLONG now = GetTickCount64();
-                if (now - lastFrameTick >= (ULONGLONG)frameIntervalMs) {
+                if (now >= nextFrameTick) {
                     if (!sendFrame(/*requestId*/0,
-                                   FRAME_TYPE_PREVIEW,
-                                   frameSeq_++,
-                                   cfg_.previewWidth,
-                                   cfg_.previewHeight,
-                                   cfg_.previewFmt)) {
+                        FRAME_TYPE_PREVIEW,
+                        frameSeq_++,
+                        cfg_.previewWidth,
+                        cfg_.previewHeight,
+                        cfg_.previewFmt)) {
                         std::cout << "send preview frame failed.\n";
-                        break; // 当前 client 会话结束
+                        // 这里你要不要 break 取决于你希望“发送失败是否断开”
                     }
-                    lastFrameTick = now;
+
+                    // 计算下一帧时间点：用“加间隔”的方式比 now 更稳定（少抖动）
+                    nextFrameTick += (ULONGLONG)frameIntervalMs;
+
+                    // 如果卡太久导致 nextFrameTick 落后很多，做一下追赶，避免瞬间狂发：
+                    if (nextFrameTick + (ULONGLONG)frameIntervalMs < now) {
+                        nextFrameTick = now + (ULONGLONG)frameIntervalMs;
+                    }
                 }
             }
         }
@@ -265,9 +300,21 @@ bool SocketServer::sendFrame(uint32_t requestId,
                              uint64_t seq,
                              uint32_t width,
                              uint32_t height,
-                             PixelFormat fmt) {
-    const uint32_t dummySize = 50 * 1024;
-    std::vector<uint8_t> dummyData(dummySize, 0);
+                             PixelFormat fmt) 
+{
+    if (pCamera_->IsPreviewStop() || pCamera_->IsPausePreview())
+    {
+        LOG(L"Camera is not in preview");
+        return false;
+    }
+        
+    std::vector<uint8_t> dummyData = pCamera_->GetFrame2();
+    const uint32_t dummySize = dummyData.size();
+    if (dummySize == 0)
+    {
+        LOG(L"dummySize is 0");
+        return false;
+    }
 
     FrameDataHeader fHdrHost{};
     fHdrHost.frameType   = (uint8_t)frameType;

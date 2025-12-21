@@ -272,7 +272,7 @@ Item {
                             btn3D.checked = false
                             btn3DModule.checked = false
                             btn9face.checked = false
-
+                            btnCamera.checked = false
                         }
                     }
                     CheckButton
@@ -285,7 +285,7 @@ Item {
                             btnMain.checked = false
                             btn3DModule.checked = false
                             btn9face.checked = false
-
+                            btnCamera.checked = false
                         }
                     }
                     CheckButton
@@ -298,25 +298,22 @@ Item {
                             btnMain.checked = false
                             btn3D.checked = false
                             btn9face.checked = false
-
+                            btnCamera.checked = false
                         }
                     }
-                    //CheckButton  { text: "📊  定量分析"; onClicked: viewStack.currentIndex = 3 }
                     CheckButton
                     {
                         id:btn9face
                         text: "九画面"
                         onClicked:
                         {
-                            viewStack.currentIndex = 2
+                            viewStack.currentIndex = 3
                             btnMain.checked = false
                             btn3D.checked = false
                             btn3DModule.checked = false
-
+                            btnCamera.checked = false
                         }
                     }
-                    //MyButton  { text: "🔲  网格定位"; onClicked: viewStack.currentIndex = 5 }
-
                     /* ==== 测量按钮及子菜单 ==== */
                     CheckButton {
                         id: btnMeasure
@@ -346,21 +343,24 @@ Item {
                     CheckButton {
                         checked: false
 
-                        text: "🛠️  系统工具"
+                        text: "系统工具"
                     }
                     CheckButton
                     {
-                        checked: false
-                        text: "📷  拍摄"
-                        onClicked: {
-                            //cameraDlg.modality = Qt.WindowModal
-                            cameraDlg.parent = customerDetail
-                            cameraDlg.open()
+                        id: btnCamera
+                        text: "拍摄"
+                        onClicked:
+                        {
+                            viewStack.currentIndex = 2
+                            btnMain.checked = false
+                            btn3D.checked = false
+                            btn3DModule.checked = false
+                            btn9face.checked = false
                         }
                     }
                     CheckButton {
                         checked: false
-                        text: "📄  报告"
+                        text: "报告"
                         onClicked:
                         {
                             console.log("进入报告", customerID)
@@ -410,6 +410,7 @@ Item {
                 }
             }
 
+            /* 1: 3D */
             Item {
                 id: parentItem
                 anchors.centerIn: parent
@@ -544,17 +545,15 @@ Item {
                 }
             }
 
-            /* 2: 九画面 */
+            /* 2: 拍摄 */
+            CameraView{
+                onRequestShowMain: {
+                    viewStack.currentIndex = 0   // 切回主画面
+                }}
+
+            /* 3: 九画面 */
             Rectangle { color: "#18181b"; Label { anchors.centerIn: parent; text: "九画面" } }
         }
-    }
-
-
-    CameraDlg {
-        id: cameraDlg
-        // onAccepted: {
-        //     console.log("保存:", userName)
-        // }
     }
 
 }

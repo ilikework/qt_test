@@ -1463,24 +1463,8 @@ bool CAigoCamera::GetSupportExposures(std::vector<int>& values)
 	return false;
 }
 
-void CAigoCamera::ReqOneFrame2(std::function<void(void*)> callback, void* param)
+void CAigoCamera::ReqOneFrame2()
 {
-	if (!IsPausePreview()) {
-		OneVideoFrameFinish = false;
-
-		BOOL bRet = KZPreviewOneVideoFrameRGB(m_lpBuf1);
-		OneVideoFrameFinish = true;
-
-		std::string base64 = BmpBufferToBase64Jpeg(m_lpBuf1, this->m_usVideo_w, m_usVideo_h);
-
-		// 🔒 写入共享帧（上锁）
-		{
-			std::lock_guard<std::mutex> lock(m_frameMutex);
-			m_oneframeBase64 = std::move(base64);
-		}
-		//SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
-		callback(param);
-	}
 }
 
 std::vector<uint8_t> CAigoCamera::GetFrame2()

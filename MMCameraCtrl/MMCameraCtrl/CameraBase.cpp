@@ -129,7 +129,7 @@ bool NullCamera::GetSupportExposures(std::vector<int>& values)
     return false;
 }
 
-void NullCamera::ReqOneFrame2(std::function<void(void*)> callback, void* param)
+void NullCamera::ReqOneFrame2()
 {
 }
 
