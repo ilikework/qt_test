@@ -28,7 +28,7 @@ public:
 	virtual void unInit(bool bPowerOff = false) override;
 	virtual bool StartPreview(void) override;
 	virtual void StopPreview(void) override;
-	virtual long Capture(std::function<void()> callback) override;
+	virtual long Capture(uint32_t id, CapturedCallback callback) override;
 	virtual void SetISO(int iso) override;
 	virtual void SetWB(int wb) override;
 	virtual void SetExposure(int exposure) override;
@@ -151,5 +151,13 @@ protected:
 	void ReqOneFrame2() override;
 
 	std::vector<uint8_t> GetFrame2() override;
+
+
+	// 通过 ICameraBase 继承
+	bool IsInited() override;
+
+
+	// 通过 ICameraBase 继承
+	void PushGetEvent() override;
 
 };

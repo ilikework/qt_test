@@ -8,167 +8,142 @@
 #include <QBuffer>
 #include "CameraImageProvider.h"
 #include <QImage>
-#include <windows.h>
-#include <tlhelp32.h>
 #include <QThread>
+#include "appconfig.h"
+#include <QCoreApplication>
+#include <QDir>
+#include <windows.h>
+#include <QTimer>
+#include "CaptureFlow.h"
+#include "StartPreviewFlow.h"
 
-static constexpr int HEADER_LEN = 16; // TODO: 改成你的真实 MessageHeader 长度
+static constexpr int HEADER_LEN = 16;
 
 static constexpr quint16 PROTO_VER = 1;
 static constexpr quint16 MSG_COMMAND_REQUEST = 1;
 
 // TODO: 定义你的推帧消息类型（例如你 server 的 FRAME_TYPE_PREVIEW）
-static constexpr quint16 MSG_FRAME_PREVIEW  = 0x1001;
+//static constexpr quint16 MSG_FRAME_PREVIEW  = 0x1001;
 
-bool isProcessRunning(const wchar_t* exeName)
+static quint64 ntohll(quint64 v)
 {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return false;
-
-    PROCESSENTRY32W pe{};
-    pe.dwSize = sizeof(pe);
-
-    if (Process32FirstW(snap, &pe)) {
-        do {
-            if (_wcsicmp(pe.szExeFile, exeName) == 0) {
-                CloseHandle(snap);
-                return true;
-            }
-        } while (Process32NextW(snap, &pe));
-    }
-
-    CloseHandle(snap);
-    return false;
-}
-
-bool startProcess(const wchar_t* exePath)
-{
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-
-    BOOL ok = CreateProcessW(
-        exePath,
-        nullptr,
-        nullptr,
-        nullptr,
-        FALSE,
-        0,
-        nullptr,
-        nullptr,
-        &si,
-        &pi
-        );
-
-    if (!ok)
-        return false;
-
-    // 不需要等待它结束，只是启动
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return true;
-}
-
-bool waitForServerReady(const QString& host, quint16 port, int timeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-
-    while (timer.elapsed() < timeoutMs) {
-        QTcpSocket sock;
-        sock.connectToHost(host, port);
-        if (sock.waitForConnected(300)) {
-            sock.disconnectFromHost();
-            return true;
-        }
-        QThread::msleep(200);
-    }
-    return false;
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+    quint32 hi = ntohl(quint32(v >> 32));
+    quint32 lo = ntohl(quint32(v & 0xFFFFFFFFULL));
+    return (quint64(lo) << 32) | hi;
+#else
+    return v;
+#endif
 }
 
 
 CameraClient::CameraClient(CameraImageProvider* provider, QObject* parent)
-    : QObject(parent)
-    ,provider_(provider)
+    : provider_(provider)
 {
-    connect(&socket_, &QTcpSocket::connected, this, &CameraClient::onConnected);
-    connect(&socket_, &QTcpSocket::disconnected, this, &CameraClient::onDisconnected);
-    connect(&socket_, &QTcpSocket::readyRead, this, &CameraClient::onReadyRead);
-    connect(&socket_, &QTcpSocket::errorOccurred, this, &CameraClient::onErrorOccurred);
+    worker_ = new SocketWorker();
+    worker_->moveToThread(&socketThread_);
+    connect(&socketThread_, &QThread::finished, worker_, &QObject::deleteLater);
+    socketThread_.start();
+
+    // ✅ 就 4 条：和你原来几乎一一对应
+    connect(worker_, &SocketWorker::connected,    this, &CameraClient::onConnected, Qt::QueuedConnection);
+    connect(worker_, &SocketWorker::disconnected, this, &CameraClient::onDisconnected, Qt::QueuedConnection);
+    connect(worker_, &SocketWorker::readyReadData,this, &CameraClient::onReadyRead, Qt::QueuedConnection);
+    connect(worker_, &SocketWorker::errorOccurredStr, this, &CameraClient::onErrorOccurred, Qt::QueuedConnection);
+    connect(worker_, &SocketWorker::exitFinished,
+            this, [this](bool ok){
+                emit log(ok ? "exit ok" : "exit timeout");
+
+                // 1) 唤醒等待（给析构/退出流程用）
+                exitDone_.store(true, std::memory_order_release);
+                {
+                    QMutexLocker lk(&exitMtx_);
+                    exitCv_.wakeAll();
+                }
+
+                // 2) 业务收尾：让 worker 清理 socket（异步，不阻塞 UI）
+                QMetaObject::invokeMethod(worker_, "shutdown", Qt::QueuedConnection);
+
+                connected_ = false;
+
+                // 3) 请求线程退出（不 wait！wait 放到析构里）
+                socketThread_.quit();
+            },
+            Qt::QueuedConnection);
+
+}
+
+CameraClient::~CameraClient()
+{
+    if (exitInProgress_.load(std::memory_order_acquire) &&
+        !exitDone_.load(std::memory_order_acquire))
+    {
+        QMutexLocker lk(&exitMtx_);
+        exitCv_.wait(&exitMtx_, 1200); // 最多等 1.2s，避免卡死
+    }
+
+
+    // 让 worker 线程去断开（不等待）
+    if (socketThread_.isRunning()) {
+        socketThread_.quit();
+        socketThread_.wait();   // ✅ 关键：等线程真的退出
+    }
+
+}
+
+void CameraClient::setCustomerID(const QString &strCustomerID)
+{
+    CustomerID_ = strCustomerID;
 }
 
 void CameraClient::startup()
 {
+    // 1) 启动 worker 线程（如果你在构造函数里已经 start 了，可省略）
+    if (!socketThread_.isRunning())
+        socketThread_.start();
 
-    const wchar_t* exeName = L"MMCameraCtrl.exe";
-    const wchar_t* exePath = L"D:\\MagicMirror\\git\\qt_test\\MMCameraCtrl\\Debug\\MMCameraCtrl.exe";
+    // 2) 通过 queued 方式，让 worker 在自己的线程里创建 QTcpSocket 并 connect
+    QMetaObject::invokeMethod(worker_, "startup",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, QStringLiteral("127.0.0.1")),
+                              Q_ARG(quint16, 12345));
 
-    // 1) 是否已启动
-    if (!isProcessRunning(exeName)) {
-        emit log("MMCameraCtrl not running, starting...");
-        if (!startProcess(exePath)) {
-            emit fatalError("Failed to start MMCameraCtrl.exe");
-            return;
-        }
-    } else {
-        emit log("MMCameraCtrl already running.");
-    }
-
-    // 2) 等待服务就绪
-    if (!waitForServerReady("127.0.0.1", 52345, 5000)) {
-        emit fatalError("MMCameraCtrl did not become ready in time.");
-        return;
-    }
-
-
-    //连接 server
-
-    connectToServer("127.0.0.1", 52345);
-}
-
-void CameraClient::connectToServer(const QString& host, quint16 port) {
-    if (socket_.state() != QAbstractSocket::UnconnectedState)
-        socket_.abort();
-    emit log(QString("Connecting to %1:%2 ...").arg(host).arg(port));
-    socket_.connectToHost(host, port);
-}
-
-void CameraClient::disconnectFromServer() {
-    previewOn_ = false;
-    emit previewOnChanged();
-    socket_.disconnectFromHost();
 }
 
 void CameraClient::openCamera() {
     if (!connected()) { emit log("Not connected."); return; }
     QJsonObject obj;
     obj["cmd"] = "open";
-    obj["series"] = CanonEOS;
+    obj["series"] = AppConfig::instance().CameraSeries();
 
     sendCommandRequest(obj);
 }
 
 void CameraClient::startPreview() {
     if (!connected()) { emit log("Not connected."); return; }
-    QJsonObject obj;
-    obj["cmd"] = "startpreview";
 
-    sendCommandRequest(obj);
-
-    previewOn_ = true;
-    emit previewOnChanged();
+    auto* flow = new StartPreviewFlow(this,this);
+    connect(flow, &StartPreviewFlow::finished, this, [this](bool ok, const QString& msg){
+        emit log(msg);
+        if(ok)
+        {
+            previewOn_ = true;
+            emit previewOnChanged();
+        }
+    });
+    flow->start();
 }
 
-void CameraClient::capture() {
+void CameraClient::capture()
+{
     if (!connected()) { emit log("Not connected."); return; }
     if (!previewOn()) { emit log("Not previewOn."); return; }
-    QJsonObject obj;
-    obj["cmd"] = "capture";
 
-    sendCommandRequest(obj);
-
-    emit previewOnChanged();
+    auto* flow = new CaptureFlow(this,CustomerID_,AppDb::instance().GetNextGroupID(CustomerID_),this);
+    connect(flow, &CaptureFlow::finished, this, [this](bool ok, const QString& msg){
+        emit log(msg);
+    });
+    flow->start();
 }
 
 void CameraClient::stopPreview()
@@ -179,8 +154,25 @@ void CameraClient::stopPreview()
 
     sendCommandRequest(obj);
 
-    previewOn_ = true;
+    previewOn_ = false;
     emit previewOnChanged();
+}
+
+void CameraClient::save()
+{
+    stopPreview();
+
+    left_pics_.clear();
+    right_pics_.clear();
+}
+
+void CameraClient::cancel()
+{
+    stopPreview();
+    left_pics_.clear();
+    right_pics_.clear();
+    emit left_picsChanged();
+    emit right_picsChanged();
 }
 
 
@@ -192,21 +184,12 @@ void CameraClient::closeCamera() {
     sendCommandRequest(obj);
     previewOn_ = false;
 
-    // 2) 尝试把数据真正送出去（给一点时间）
-    socket_.flush();
-    socket_.waitForBytesWritten(200);
 
-    // 3) 正常断开
-    socket_.disconnectFromHost();
-    socket_.waitForDisconnected(200);
-    //emit previewOnChanged();
 }
+
 
 bool CameraClient::sendMessage(quint16 msgType, quint32 requestId, const QByteArray& payload)
 {
-    if (socket_.state() != QAbstractSocket::ConnectedState)
-        return false;
-
     // body = [MessageHeader][payload]
     const quint32 bodyLen = 8u + (quint32)payload.size(); // MessageHeader 固定 8 字节
     QByteArray buf;
@@ -234,13 +217,56 @@ bool CameraClient::sendMessage(quint16 msgType, quint32 requestId, const QByteAr
         memcpy(buf.data() + 12, payload.constData(), payload.size());
     }
 
-    // 4) 一次性写入
-    qint64 n = socket_.write(buf);
-    if (n != buf.size()) {
-        // write 可能是异步写入到 Qt 缓冲区，这里 n 通常等于 buf.size()
-        // 如果你担心，可加 waitForBytesWritten
-    }
+    // 4) ✅ 投递到 socket 线程写入
+    bool accepted = false;
+    QMetaObject::invokeMethod(worker_, "send",
+                              Qt::QueuedConnection,
+                              Q_ARG(QByteArray, buf));
+
+
     return true;
+}
+
+quint32 CameraClient::sendCommandRequest2(const QJsonObject& obj, RespHandler onResp)
+{
+    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+
+    quint32 reqId = nextReqId_.fetch_add(1, std::memory_order_relaxed);
+    if (!sendMessage(MSG_COMMAND_REQUEST, reqId, json)) {
+        emit log("sendCommandRequest failed: not connected?");
+        return 0;
+    }
+
+    QString cmdSend = obj.value("cmd").toString();
+    if (cmdSend == "exit") {
+        exitInProgress_.store(true, std::memory_order_release);
+        exitDone_.store(false, std::memory_order_release);
+        QMetaObject::invokeMethod(worker_, "beginExitWait",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(quint32, reqId),
+                                  Q_ARG(int, 1000));
+    }
+
+    pending_[reqId] = [this, reqId, onResp](const QJsonObject& resp) mutable {
+        QString cmd = resp.value("cmd").toString();
+        QString result = resp.value("result").toString();
+        emit log(QString("RESP cmd=%1 result=%2").arg(cmd, result));
+
+        // 你的原逻辑：exit 特殊处理
+        if (cmd == "exit") {
+            QMetaObject::invokeMethod(worker_, "notifyExitResp",
+                                      Qt::QueuedConnection,
+                                      Q_ARG(quint32, reqId));
+        }
+
+        // ⭐ 调用调用者传入的回调
+        if (onResp) onResp(resp);
+
+        // 处理完就清理，避免 pending_ 越积越多
+        pending_.remove(reqId);
+    };
+
+    return reqId;
 }
 
 quint32 CameraClient::sendCommandRequest(const QJsonObject& obj)
@@ -253,39 +279,59 @@ quint32 CameraClient::sendCommandRequest(const QJsonObject& obj)
         emit log("sendCommandRequest failed: not connected?");
         return 0;
     }
-    pending_[reqId] = [this](const QJsonObject& resp){
+
+
+    // ⭐ 如果是 exit，提前告诉 worker：我要等这个 reqId
+    QString cmd = obj.value("cmd").toString();
+    if (cmd == "exit")
+    {
+        exitInProgress_.store(true, std::memory_order_release);
+        exitDone_.store(false, std::memory_order_release);
+        QMetaObject::invokeMethod(worker_, "beginExitWait",Qt::QueuedConnection,Q_ARG(quint32, reqId),Q_ARG(int, 1000));   //  1 秒超时
+
+    }
+
+    pending_[reqId] = [this,reqId](const QJsonObject& resp){
         QString cmd = resp.value("cmd").toString();
         QString result = resp.value("result").toString();
-        emit log(QString("RESP  cmd=%1 result=%2 ")
-                 .arg(cmd)
-                 .arg(result));
+        emit log(QString("RESP  cmd=%1 result=%2 ").arg(cmd).arg(result));
+        if (result != "OK")
+        {
+            return;
+        }
+        else if(cmd=="exit")
+        {
+            // ⭐ 通知 worker：exit response 已收到
+            QMetaObject::invokeMethod(worker_, "notifyExitResp",Qt::QueuedConnection,Q_ARG(quint32, reqId));
+        }
     };
     return reqId;
 }
 
 void CameraClient::onConnected() {
     emit log("Connected.");
-    emit connectedChanged();
+    //emit connectedChanged();
     // 程序启动连接成功后，自动 open camera
+    connected_ =true;
     openCamera();
 }
 
 void CameraClient::onDisconnected() {
     emit log("Disconnected.");
-    emit connectedChanged();
-    previewOn_ = false;
-    emit previewOnChanged();
     rxBuf_.clear();
 }
 
-void CameraClient::onErrorOccurred(QAbstractSocket::SocketError) {
-    emit log(QString("Socket error: %1").arg(socket_.errorString()));
-    emit connectedChanged();
+void CameraClient::onErrorOccurred(const QString& err) {
+    qWarning() << "[CameraClient][SocketError]" << err;
+
+    //emit socketError(err);
+
+    //emit connectedChanged();
 }
 
-void CameraClient::onReadyRead()
+void CameraClient::onReadyRead(const QByteArray& chunk)
 {
-    rxBuf_ += socket_.readAll();
+    rxBuf_.append(chunk);
 
     while (true) {
         // 1) 至少要有 4 字节长度
@@ -299,7 +345,6 @@ void CameraClient::onReadyRead()
         // 保护：防止异常长度导致内存炸
         if (bodyLen > 50 * 1024 * 1024) { // 50MB 你可按需改
             emit log("Bad bodyLen, drop connection.");
-            socket_.disconnectFromHost();
             rxBuf_.clear();
             return;
         }
@@ -341,7 +386,7 @@ void CameraClient::onReadyRead()
             break;
 
         case 3: // MSG_FRAME_DATA
-            handleFrameData(reqId, payload);
+            handleFrameData(reqId, payload,bodyLen);
             break;
 
         case 4: // MSG_EVENT_NOTIFICATION
@@ -360,9 +405,50 @@ void CameraClient::handleEventNotification(const QByteArray& payload)
 
 }
 
-void CameraClient::handleFrameData(quint32 reqId, const QByteArray& payload)
+void CameraClient::handleFrameData(quint32 reqId, const QByteArray& payload, quint32 bodyLen)
 {
+    // 解析 FrameDataHeader（网络序->主机序）
+    const char* p = payload.constData();
+    FrameDataHeader fNet;
 
+    memcpy(&fNet.frameType, p, 1);
+    memcpy(&fNet.reserved1, p+1, 1);
+    memcpy(&fNet.reserved2, p+2, 2);
+    memcpy(&fNet.seq, p+4, 8);
+    memcpy(&fNet.timestampMs, p+12, 8);
+    memcpy(&fNet.width, p+20, 4);
+    memcpy(&fNet.height, p+24, 4);
+    memcpy(&fNet.pixelFormat, p+28, 4);
+    memcpy(&fNet.dataLength, p+32, 4);
+
+    FrameDataHeader fHost = fNet;
+    fHost.seq         = ntohll(fNet.seq);
+    fHost.timestampMs = ntohll(fNet.timestampMs);
+    fHost.width       = ntohl(fNet.width);
+    fHost.height      = ntohl(fNet.height);
+    fHost.pixelFormat = ntohl(fNet.pixelFormat);
+    fHost.dataLength  = ntohl(fNet.dataLength);
+    // frameType 1字节无需转换
+    // 计算 payload 起始与长度
+    const int headerBytes = 8+36;
+    const int payloadBytesByBody = int(bodyLen) - headerBytes;
+
+    // 用 header 的 dataLength 做一致性校验
+    if (payloadBytesByBody < 0 || quint32(payloadBytesByBody) != fHost.dataLength) {
+        qWarning() << "Payload length mismatch. body says"
+                   << payloadBytesByBody << "hdr says" << fHost.dataLength;
+        return;
+    }
+
+    QByteArray imgData = payload.mid(36);
+    // 拷贝 payload（图像数据）
+    QImage img;
+    if (!img.loadFromData(reinterpret_cast<const uchar*>(imgData.constData()), imgData.size())) {
+        qWarning() << "loadFromData failed";
+        return;
+    }
+
+    onFrameImageDecoded(img);
 }
 
 void CameraClient::handleCommandResponse(quint32 requestId, const QByteArray& payload)
@@ -402,45 +488,186 @@ void CameraClient::onFrameImageDecoded(const QImage& img)
     emit frameTokenChanged();
 }
 
-bool CameraClient::tryParseOneMessage() {
-    if (rxBuf_.size() < HEADER_LEN) return false;
+QVariantList CameraClient::isos() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "iso");
+}
 
-    // TODO: 按你真实 header 解包
-    QDataStream ds(rxBuf_);
-    ds.setByteOrder(QDataStream::LittleEndian);
+QVariantList CameraClient::exposuretimes() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
+}
 
-    quint32 magic = 0;
-    quint16 msgType = 0;
-    quint16 reserved = 0;
-    quint32 bodyLen = 0;
-    quint32 reserved2 = 0;
+QVariantList CameraClient::apertures() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
 
-    ds >> magic >> msgType >> reserved >> bodyLen >> reserved2;
+}
+QVariantList CameraClient::wbs() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
 
-    if (magic != 0x43414D30) {
-        emit log("Bad magic. Drop buffer.");
-        rxBuf_.clear();
-        return false;
+}
+QVariantList CameraClient::imageSizes() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "ImageSize");
+
+}
+
+QVariantList CameraClient::imageQualities() const
+{
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "ImageQuality");
+
+}
+
+static int findIndexByValue(const QVariantList& list, const QVariant& target)
+{
+    for (int i = 0; i < list.size(); ++i) {
+        const auto m = list[i].toMap();
+        const QVariant v = m.value("value");
+
+        if (v.toInt()==target.toInt())
+             return i;
     }
+    return -1;
+}
 
-    const int totalLen = HEADER_LEN + (int)bodyLen;
-    if (rxBuf_.size() < totalLen) return false; // 半包
+QVariantList  CameraClient::settings()
+{
+    // 1) 取 T_CaptureSetting
+    CaptureSetting s;
+    AppDb::instance().loadCaptureSettingBySeries(AppConfig::instance().CameraSeries(),s);
 
-    QByteArray body = rxBuf_.mid(HEADER_LEN, bodyLen);
-    rxBuf_.remove(0, totalLen);
+    // 2) 定义输出项的“模板”（顺序就是你 QML settings 的顺序）
+    struct RowDef {
+        QString key;      // ConfigType
+        QString title;    // 显示标题（你 settings 里的 text）
+        QVariant raw;     // T_CaptureSetting 对应的值
+    };
 
-    // 处理消息
-    if (msgType == MSG_FRAME_PREVIEW) {
-        QImage img;
-        if (img.loadFromData(body)) {
-            onFrameImageDecoded(img);
+    const QList<RowDef> rows = {
+        {"iso",          "RGB ISO",   s.rgb_iso},
+        {"exposuretime", "RGB 快门",   s.rgb_exposureTime},
+        {"aperture",     "RGB 光圈",   s.rgb_aperture},
+        {"wb",           "RGB 白平衡", s.rgb_wb},
+
+        {"iso",          "UV ISO",    s.uv_iso},
+        {"exposuretime", "UV 快门",    s.uv_exposureTime},
+        {"aperture",     "UV 光圈",    s.uv_aperture},
+        {"wb",           "UV 白平衡",  s.uv_wb},
+
+        {"iso",          "PL ISO",    s.pl_iso},
+        {"exposuretime", "PL 快门",    s.pl_exposureTime},
+        {"aperture",     "PL 光圈",    s.pl_aperture},
+        {"wb",           "PL 白平衡",  s.pl_wb},
+
+        {"iso",          "NPL ISO",   s.npl_iso},
+        {"exposuretime", "NPL 快门",   s.npl_exposureTime},
+        {"aperture",     "NPL 光圈",   s.npl_aperture},
+        {"wb",           "NPL 白平衡", s.npl_wb},
+
+        {"ImageSize",    "图片尺寸",    s.imageSize},
+        {"ImageQuality", "图片质量",    s.imageQuality}
+    };
+
+    QVariantList  out;
+    // 3) 为了避免重复查库：按 key 缓存候选列表（ISO/WB/...）
+    QHash<QString, QVariantList> cache;
+
+    auto getOptions = [&](const QString& key) -> const QVariantList& {
+        auto it = cache.find(key);
+        if (it != cache.end()) return it.value();
+        cache.insert(key, AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), key));
+        return cache[key];
+    };
+
+    // 4) 组装输出 settings
+    out.reserve(rows.size());
+
+    for (const auto& r : rows) {
+        const QVariantList& opts = getOptions(r.key);
+        const int idx = findIndexByValue(opts, r.raw);
+
+        QVariantMap item;
+        item.insert("key", r.key);
+        item.insert("text", r.title);
+        item.insert("curIndex", idx);
+
+        if (idx >= 0) {
+            const auto m = opts[idx].toMap();
+            item.insert("value", m.value("text").toString()); // 给 UI 显示
+            // 如果你希望 QML 侧也能拿到真实数值（用于回写/设置相机），建议一起带上：
+            item.insert("rawValue", m.value("value"));
         } else {
-            emit log("Failed to decode image frame.");
+            // 找不到映射就直接显示数值
+            item.insert("value", r.raw.toString());
+            item.insert("rawValue", r.raw);
         }
-    } else {
-        // 其他消息：ACK / 状态 / 错误码
-        emit log(QString("Recv msgType=0x%1 bodyLen=%2").arg(msgType, 0, 16).arg(body.size()));
+
+        out.push_back(item);
     }
 
-    return true;
+    //applyCaptureSettingToCamera(s);
+
+    return out;
+
+}
+
+QVariantList  CameraClient::left_pics() const
+{
+    return left_pics_;
+}
+QVariantList  CameraClient::right_pics() const
+{
+    return right_pics_;
+}
+
+void CameraClient::addleft(const QString& str)
+{
+    QString abs = QFileInfo(str).absoluteFilePath();
+    QUrl url = QUrl::fromLocalFile(abs);
+
+    left_pics_.append(url);
+    emit left_picsChanged();
+}
+
+void CameraClient::addright(const QString& str)
+{
+    QString abs = QFileInfo(str).absoluteFilePath();
+    QUrl url = QUrl::fromLocalFile(abs);
+    right_pics_.append(url);
+    emit right_picsChanged();
+}
+
+void CameraClient::onSettingChanged(int rowIndex, const QString& key, const QString& displayText,const QVariant& rawValue)
+{
+    Q_UNUSED(displayText);
+
+    // 1) 按 rowIndex 映射到 T_CaptureSetting 字段名（最关键）
+    static const QStringList fieldMap = {
+        "RGB_ISO", "RGB_ExposureTime", "RGB_Aperture", "RGB_WB",
+        "UV_ISO",  "UV_ExposureTime",  "UV_Aperture",  "UV_WB",
+        "PL_ISO",  "PL_ExposureTime",  "PL_Aperture",  "PL_WB",
+        "NPL_ISO", "NPL_ExposureTime", "NPL_Aperture", "NPL_WB",
+        "ImageSize", "ImageQuality"
+    };
+
+    if (rowIndex < 0 || rowIndex >= fieldMap.size()) return;
+    const QString col = fieldMap[rowIndex];
+
+    // 2) 写回数据库：只更新这一列（只改动的地方）
+    AppDb::instance().CaptureSettingUpdate(AppConfig::instance().CameraSeries(),col,rawValue.toInt());
+
+    // 3) 同步设相机参数（按你的 key 或 col 判断）
+    if(col.startsWith("RGB_") || col.startsWith("Image"))
+    {
+        if (!connected()) { emit log("Not connected."); return; }
+        QJsonObject obj;
+        obj["cmd"] = "online_setting";
+        obj["key"] = key;
+        obj["value"] = rawValue.toInt();
+        obj["series"] = AppConfig::instance().CameraSeries();
+
+        sendCommandRequest(obj);
+    }
 }

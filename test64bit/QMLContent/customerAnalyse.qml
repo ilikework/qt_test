@@ -547,6 +547,7 @@ Item {
 
             /* 2: 拍摄 */
             CameraView{
+                customerID : customerDetail.customerID
                 onRequestShowMain: {
                     viewStack.currentIndex = 0   // 切回主画面
                 }}

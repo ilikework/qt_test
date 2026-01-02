@@ -29,7 +29,7 @@ public:
     void unInit(bool bPowerOff) override;
     bool StartPreview(void) override;
     void StopPreview(void) override;
-    long Capture(std::function<void()> callback) override;
+    long Capture(uint32_t id, CapturedCallback callback) override;
     void SetISO(int iso) override;
     void SetWB(int wb) override;
     void SetExposure(int exposure) override;
@@ -48,10 +48,6 @@ public:
     void SetCaptureType(LONG nType) override;
 
 
-    void SetILLType(int nILLType) { m_type = nILLType; }
-    int  GetILLType() { return m_type; }
-    int  GetNextILLType() { return m_type+1;  }  // for the type is index continued.
-    void EndCatpure();
 
 protected:
 	EdsBaseRef    m_hCamera;
@@ -71,6 +67,7 @@ protected:
 	void cleanup(EdsEvfImageRef evfImage, EdsStreamRef stream);
 	//EdsError DownloadPicture(EdsBaseRef inRef);
 	long doCapture();
+    void EndCatpure(const std::vector<std::string>& create_files);
 	bool SaveCapturedItem(EdsDirectoryItemRef dirItem, const wchar_t* pstrFileName);
 
 	static EdsError EDSCALLBACK  handleObjectEvent(EdsUInt32 inEvent, EdsBaseRef inRef, EdsVoid* inContext);
@@ -97,8 +94,8 @@ protected:
     std::mutex m_frameMutex;        // 互斥锁
 
 private:
-    int m_type = ILL_NONE_TYPE;
-    std::function<void()> m_callback = nullptr;
+    CapturedCallback m_callback = nullptr;
+    uint32_t m_id = 0;
 
     int GetCameraSeries() override;
 
@@ -118,4 +115,22 @@ private:
     std::condition_variable doneCv_;
     bool frameReady_ = false;
     std::vector<uint8_t> oneframe_;
+
+    // 通过 ICameraBase 继承
+    bool IsInited() override;
+
+
+    // === 新增：同步用 ===
+    std::mutex m_capMtx;
+    std::condition_variable m_capCv;
+
+    // “当前这张是否处理完成”
+    bool m_oneShotDone = false;
+
+    // 防止旧通知唤醒：每张递增一个序号
+    uint64_t m_shotSeq = 0;          // Capture() 侧期望的序号
+    uint64_t m_doneSeq = 0;
+    // 通过 ICameraBase 继承
+    void PushGetEvent() override;
+    // 回调处理完毕的序号
 };

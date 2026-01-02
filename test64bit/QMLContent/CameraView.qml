@@ -9,34 +9,72 @@ Item   {
     width: 1920
     height: 1080
     anchors.centerIn: parent
+    property string customerID : ""
 
     signal requestShowMain()   // 请求返回主画面
+    signal settingChanged(int rowIndex, string key, var rawValue, string displayText)
 
     Connections {
         target: camClient
         function onLog(msg) { console.log("[client]", msg) }
     }
 
-    property var settings: [
-        {text:"RGB ISO", value:"100"},
-        {text:"RGB 快门", value:"1/60"},
-        {text:"RGB 光圈", value:"f/2.8"},
-        {text:"RGB 白平衡", value:"Auto"},
-        {text:"UV ISO", value:"100"},
-        {text:"UV 快门", value:"1/60"},
-        {text:"UV 光圈", value:"f/2.8"},
-        {text:"UV 白平衡", value:"Auto"},
-        {text:"PL ISO", value:"100"},
-        {text:"PL 快门", value:"1/60"},
-        {text:"PL 光圈", value:"f/2.8"},
-        {text:"PL 白平衡", value:"Auto"},
-        {text:"NPL ISO", value:"100"},
-        {text:"NPL 快门", value:"1/60"},
-        {text:"NPL 光圈", value:"f/2.8"},
-        {text:"NPL 白平衡", value:"Auto"},
-        {text:"图片尺寸", value:"1920x1080"},
-        {text:"图片质量", value:"高"}
-    ]
+    property var settings: camClient.settings
+    property var isos: camClient.isos
+    property var exposuretimes: camClient.exposuretimes
+    property var apertures: camClient.apertures
+    property var wbs: camClient.wbs
+    property var sizes: camClient.sizes
+    property var qualities: camClient.qualities
+
+
+    function optionsForItem(itemKey) {
+        if (itemKey.indexOf("iso") !== -1) return isos
+        if (itemKey.indexOf("exposuretime") !== -1) return exposuretimes
+        if (itemKey.indexOf("aperture") !== -1) return apertures
+        if (itemKey.indexOf("wb") !== -1) return wbs
+        if (itemKey === "ImageSize") return sizes
+        if (itemKey === "ImageQuality") return qualities
+        return []
+    }
+
+    function stepSetting(rowIndex, step) {
+        if (!settings || settings.length === 0) return
+
+        // 取要改的项（拷贝）
+        var item = Object.assign({}, settings[rowIndex])
+
+        // 用 key 去拿候选项（不要用 item.text！）
+        // item.text 是 "RGB ISO" 这种标题
+        var opts = optionsForItem(item.key)
+        if (!opts || opts.length === 0) return
+
+        var cur = item.curIndex
+        if (cur < 0) cur = 0
+
+        var next = cur + step
+        if (next < 0) next = 0
+        if (next >= opts.length) next = opts.length - 1
+
+        item.curIndex = next
+        item.value = opts[next].text      // ✅ 用于 UI 显示
+        item.rawValue = opts[next].value  // ✅ 用于后续设相机/写DB（建议）
+
+        // 用新数组替换 settings（最稳触发刷新）
+        var arr = settings.slice()
+        arr[rowIndex] = item
+        settings = arr
+
+        settingChanged(rowIndex, item.key, item.value,item.rawValue)
+    }
+
+    // ✅ 初始化完成时传给 C++
+    Component.onCompleted: {
+      if (customerID !== "")
+      {
+          camClient.setCustomerID(customerID)
+      }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -54,15 +92,19 @@ Item   {
             Layout.fillHeight: true
             Layout.fillWidth: true
             color: "black"
+            clip: true
 
             Image {
                 id: cameraPreview
+                anchors.fill: parent
                 anchors.centerIn: parent
                 fillMode: Image.PreserveAspectFit
-                source: ""  // base64 或文件路径
-                sourceSize.width: 1280
-                sourceSize.height: 960
+                source: camClient.previewOn
+                        ? ("image://camera/frame?" + camClient.frameToken)
+                        : ""                  // stop 时置空
             }
+
+
         }
 
         // ============================
@@ -97,7 +139,7 @@ Item   {
                             RowLayout {
                                 Label { text: modelData.text;color: "white"; font.bold: true ; Layout.preferredWidth: 80}
                                 spacing: 6
-                                TextButton { text: "-"; Layout.preferredWidth: 35 }
+                                TextButton { text: "-"; Layout.preferredWidth: 24; Layout.preferredHeight: 24; onClicked: stepSetting(index, -1) }
                                 Label {
                                     text: modelData.value
                                     color: "white"
@@ -106,7 +148,7 @@ Item   {
                                     horizontalAlignment: Text.AlignHCenter
                                     font.bold: true
                                 }
-                                TextButton { text: "+"; Layout.preferredWidth: 35 }
+                                TextButton { text: "+"; Layout.preferredWidth: 24 ; Layout.preferredHeight: 24; onClicked: stepSetting(index, 1)}
                             }
                         }
                     }
@@ -132,7 +174,7 @@ Item   {
                             spacing: 10
 
                             Repeater {
-                                model: 4
+                                model: camClient.left_pics
                                 delegate: Rectangle {
                                     width: parent.width / 4 - 10
                                     height: width * 4/3
@@ -142,7 +184,8 @@ Item   {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         fillMode: Image.PreserveAspectFit
-                                        source: ""   // photoX
+                                        cache: false
+                                        source: modelData   // photoX
                                     }
                                 }
                             }
@@ -153,7 +196,7 @@ Item   {
                             spacing: 10
 
                             Repeater {
-                                model: 4
+                                model: camClient.right_pics
                                 delegate: Rectangle {
                                     width: parent.width / 4 - 10
                                     height: width * 4/3
@@ -163,7 +206,8 @@ Item   {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         fillMode: Image.PreserveAspectFit
-                                        source: ""   // photoX
+                                        cache: false
+                                        source: modelData   // photoX
                                     }
                                 }
                             }
@@ -208,8 +252,11 @@ Item   {
                                     switch (modelData.key)
                                     {
                                        case "save":
+                                           camClient.save()
+                                           cameraRoot.requestShowMain()
+                                           break
                                        case "cancel":
-                                           camClient.stopPreview()
+                                           camClient.cancel()
                                            cameraRoot.requestShowMain()
                                            break
 

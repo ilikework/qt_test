@@ -85,6 +85,30 @@ public:
 	void set_npl(camera_param param) { npl = param; }
 };
 
+class CaptureSetting2 {
+private:
+	int m_imgSize = 0;
+	int m_imgQuality = 0; // use default.
+
+	camera_param m_param;
+	std::string m_capture_type;
+
+
+public:
+	// --- General Getters/Setters ---
+	int getImgSize() const { return m_imgSize; }
+	void setImgSize(int val) { m_imgSize = val; }
+
+	int getImgQuality() const { return m_imgQuality; }
+	void setImgQuality(int val) { m_imgQuality = val; }
+
+	std::string getCaptureType() const { return m_capture_type; }
+	void setCaptureType(const std::string &capture_type) { m_capture_type = capture_type; }
+
+	camera_param get_param() const { return m_param; }
+	void set_param(camera_param param) { m_param = param; }
+};
+
 
 class CSAutoLock
 {
@@ -125,6 +149,8 @@ public:
 	ICameraBase() { }
 	virtual ~ICameraBase() {}
 
+	using CapturedCallback = std::function<void(const uint32_t id,const std::vector<std::string>& files)>;
+
 	virtual long Init(const wchar_t* pszDllName) = 0;
 	virtual void unInit(bool bPowerOff = false) = 0;
 	virtual bool StartPreview(void) = 0;
@@ -133,7 +159,7 @@ public:
 	virtual void ReqOneFrame2() = 0;
 	virtual std::vector<uint8_t> GetFrame2() = 0;
 	virtual void StopPreview(void) = 0;
-	virtual long Capture(std::function<void()> callback) = 0;
+	virtual long Capture(uint32_t id, CapturedCallback callback) = 0;
 	virtual void SetZoom(int zoom) = 0;
 	virtual void Autofocusing(int usauto) = 0;
 	virtual void SetFocusType(int focusType) = 0;
@@ -157,116 +183,48 @@ public:
 	virtual bool GetSupportExposures(std::vector<int>& values) = 0;
 
 	virtual void PreviewShowVideo(HWND hwnd, HDC hDC, RECT& rc) = 0;
-	//virtual long SetAssistantLight() = 0;
-	//virtual long SetWhite() = 0;
-	//virtual long SetUV() = 0;
-	//virtual long SetPolarize() = 0;
-	//virtual long SetNormal() = 0;
-	//virtual long Set405Blue() = 0;
-	//virtual long SetNegtivePolarization() = 0;
 	virtual void SetCaptureType(LONG nType) = 0;
+	virtual bool IsInited() = 0;
+	virtual void PushGetEvent() = 0; // special for Canon EDS
 
-	void SetCaptureFolder(const wchar_t* folderPath)
+	void setCaptureSetting(const CaptureSetting& captureSetting)
 	{
-		m_folderPath = folderPath;
-	};
+		m_captureSetting = captureSetting;
+	}
+
+	CaptureSetting getCaptureSetting() const
+	{
+		return m_captureSetting;
+	}
+
+	void SetCaptureFolder(const std::string & folderPath)
+	{
+		Util::Instance().EnsureDirectory(folderPath);
+		
+		m_folderPath = Util::Instance().AnsiToWString(folderPath.c_str());
+	}
+
+	void SetCaptureID(const int nID)
+	{
+		m_nID = nID;
+	}
 
 	std::wstring GetCaptureFileName(int nIllType)
 	{
-		std::wstring str = m_folderPath + L"\\";
-		switch (nIllType)
-		{
-		case ILL_RGB_TYPE:
-			str += L"RGB.jpg";
-			break;
-		case ILL_365UV_TYPE:
-			str += L"365UV.jpg";
-			break;
-		case ILL_405UV_TYPE:
-			str += L"405UV.jpg";
-			break;
-		case ILL_PL_TYPE:
-			str += L"PL.jpg";
-			break;
-		case ILL_NPL_TYPE:
-			str += L"NPL.jpg";
-			break;
-		default:
-			return L"";
-		}
+		std::wstring str = m_folderPath;
+		str  += L"/";
+		str += std::format(L"{:02}", m_nID);
+		str += L".jpg";
 		return str;
 	}
 
-	void BeforeCapture(int nILLTypes)
-	{
-		switch (nILLTypes)
-		{
-		case ILL_RGB_TYPE:
-			this->m_pCtrler->SetRGBModeOn();
-			
-			this->SetWB(m_captureSetting.get_rgb().wb);
-			this->SetISO(m_captureSetting.get_rgb().iso);
-			this->SetAperture(m_captureSetting.get_rgb().aperture);
-			this->SetExposure(m_captureSetting.get_rgb().exposure);
-			break;
-		case ILL_365UV_TYPE:
-			this->m_pCtrler->SetUVModeOn();
-			this->SetWB(m_captureSetting.get_uv().wb);
-			this->SetISO(m_captureSetting.get_uv().iso);
-			this->SetAperture(m_captureSetting.get_uv().aperture);
-			this->SetExposure(m_captureSetting.get_uv().exposure);
-			break;
-		case ILL_PL_TYPE:
-			this->m_pCtrler->SetPLModeOn();
-			this->SetWB(m_captureSetting.get_pl().wb);
-			this->SetISO(m_captureSetting.get_pl().iso);
-			this->SetAperture(m_captureSetting.get_pl().aperture);
-			this->SetExposure(m_captureSetting.get_pl().exposure);
-			break;
-		case ILL_NPL_TYPE:
-			this->m_pCtrler->SetNPLModeOn();
-			this->SetWB(m_captureSetting.get_npl().wb);
-			this->SetISO(m_captureSetting.get_npl().iso);
-			this->SetAperture(m_captureSetting.get_npl().aperture);
-			this->SetExposure(m_captureSetting.get_npl().exposure);
-			break;
-		}
+	void SetILLType(int nILLType) { m_nILLType = nILLType; }
+	int  GetILLType() { return m_nILLType; }
+	void BeforeCapture(int nILLTypes);
+	void AfterCapture(int nILLTypes);
+	bool CropAndSplitImage(const std::wstring& inputPath, const std::wstring& leftPath, const std::wstring& rightPath);
+	bool SplitFile(const std::wstring& input, std::wstring& left, std::wstring& right);
 
-		Sleep(Util::Instance().GetIntervalBeforeCapture(nILLTypes));
-	};
-
-	void AfterCapture(int nILLTypes)
-	{
-		switch (nILLTypes)
-		{
-		case ILL_RGB_TYPE:
-			this->m_pCtrler->SetRGBModeOff();
-			break;
-		case ILL_365UV_TYPE:
-			this->m_pCtrler->SetUVModeOff();
-			break;
-		case ILL_PL_TYPE:
-			this->m_pCtrler->SetPLModeOff();
-			break;
-		case ILL_NPL_TYPE:
-			this->m_pCtrler->SetNPLModeOff();
-			break;
-		}
-
-		if (std::filesystem::exists(GetCaptureFileName(nILLTypes).c_str()))
-		{
-			m_captured_files.push_back(GetCaptureFileName(nILLTypes));
-		}
-
-		Sleep(Util::Instance().GetIntervalAfterCapture(nILLTypes));
-	};
-
-	std::vector<std::wstring> GetCaptureFilenames() { return m_captured_files; };
-	void setResultCaptureFiles(const std::vector<std::wstring>& files)
-	{
-		m_captured_files.clear();
-		m_captured_files.insert(m_captured_files.end(), files.begin(), files.end());
-	}
 	
 	void PausePreview()
 	{
@@ -283,10 +241,11 @@ public:
 	}
 
 protected:
-	std::wstring	m_folderPath;
+	std::wstring m_folderPath = L"";
+	int m_nID = 0;
+	int m_nILLType = ILL_NONE_TYPE;
 	std::unique_ptr <IControler> m_pCtrler = std::make_unique<USBControler>();
 	CaptureSetting m_captureSetting;
-	std::vector<std::wstring> m_captured_files;
 
 	std::atomic<bool> m_bPause{ true };
 
@@ -306,7 +265,7 @@ public:
 	void ReqOneFrame(std::function<void()> callback) override;
 	std::string GetFrame() override;
 	void StopPreview(void) override;
-	long Capture(std::function<void()> callback) override;
+	long Capture(uint32_t id, CapturedCallback callback) override;
 	void SetISO(int iso) override;
 	void SetWB(int wb) override;
 	void SetExposure(int exposure) override;
@@ -334,4 +293,10 @@ public:
 	// 通过 ICameraBase 继承
 	void ReqOneFrame2() override;
 	std::vector<uint8_t> GetFrame2() override;
+
+	// 通过 ICameraBase 继承
+	bool IsInited() override;
+
+	// 通过 ICameraBase 继承
+	void PushGetEvent() override;
 };

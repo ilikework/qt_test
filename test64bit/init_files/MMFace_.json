@@ -1,0 +1,15 @@
+{
+  "language": "zh_CN",
+  
+  "CameraSeriesComment": "4:CanonEOS, 5:Aigo880",
+  "CameraSeries": 4,
+  
+  "BeforeRGBShootInterval":1,
+  "AfterRGBShootInterval":1,
+  "BeforeUVShootInterval":1000,
+  "AfterUVShootInterval":1,
+  "BeforePLShootInterval":1500,
+  "AfterPLShootInterval":1,
+  "BeforeNPLShootInterval":1,
+  "AfterNPLShootInterval":1
+}

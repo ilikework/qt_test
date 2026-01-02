@@ -1197,7 +1197,7 @@ bool CAigoCamera::doCapture(const wchar_t* pstrFileName)
 }
 
 
-long CAigoCamera::Capture(std::function<void()> callback)
+long CAigoCamera::Capture(uint32_t id, CapturedCallback callback)
 {
 	int nILLTypes[] = {ILL_RGB_TYPE,
   				  ILL_365UV_TYPE,
@@ -1216,8 +1216,8 @@ long CAigoCamera::Capture(std::function<void()> callback)
 			AfterCapture(type);
 		}
 	}
-
-	callback();
+	std::vector<std::string> create_files;
+	callback(id, create_files);
 	
 	return 0;
 
@@ -1470,6 +1470,15 @@ void CAigoCamera::ReqOneFrame2()
 std::vector<uint8_t> CAigoCamera::GetFrame2()
 {
 	return std::vector<uint8_t>();
+}
+
+bool CAigoCamera::IsInited()
+{
+	return this->m_bInit;
+}
+
+void CAigoCamera::PushGetEvent()
+{
 }
 
 void CAigoCamera::do_analyse(int iHeight, int iWidth, unsigned char * p, unsigned char * p2, int stride, int nThreshold)

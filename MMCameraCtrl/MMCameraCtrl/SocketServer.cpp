@@ -3,10 +3,12 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
-#include "./nlohmann/json.hpp"
+
+
 #include "CanonEDSCamera.h"
 #include "AigoCamera.h"
-using json = nlohmann::json;
+
+
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -120,7 +122,6 @@ void SocketServer::run() {
                     std::cout << "handleMessage failed.\n";
                     break;
                 }
-
                 // handleMessage 里可能会把 previewOn_ 打开/关闭
                 // 如果刚打开预览，可以重置 nextFrameTick：
                 //nextFrameTick = GetTickCount64();
@@ -130,6 +131,7 @@ void SocketServer::run() {
             if (previewOn_) {
                 ULONGLONG now = GetTickCount64();
                 if (now >= nextFrameTick) {
+
                     if (!sendFrame(/*requestId*/0,
                         FRAME_TYPE_PREVIEW,
                         frameSeq_++,
@@ -139,6 +141,7 @@ void SocketServer::run() {
                         std::cout << "send preview frame failed.\n";
                         // 这里你要不要 break 取决于你希望“发送失败是否断开”
                     }
+                    pCamera_->PushGetEvent();
 
                     // 计算下一帧时间点：用“加间隔”的方式比 now 更稳定（少抖动）
                     nextFrameTick += (ULONGLONG)frameIntervalMs;
@@ -270,12 +273,15 @@ bool SocketServer::sendAll(SOCKET s, const char* buf, int len) {
 }
 
 // ================== protocol send/recv ==================
-bool SocketServer::sendCommandResponse(uint32_t requestId,const std::string& cmd,const std::string& result) 
+bool SocketServer::sendCommandResponse(uint32_t requestId,const std::string& cmd,const std::string& result, const std::vector<std::string>* param)
 {
     json j;
     j["cmd"] = cmd;
     j["result"] = result;
+    if(param)
+        j["created_files"] = *param;
     std::string str = j.dump();
+    std::cout << "[RES] requestId=" << requestId << " json=" << str << "\n";
 
     MessageHeader hdr{};
     hdr.msgType   = htons((uint16_t)MSG_COMMAND_RESPONSE);
@@ -378,6 +384,64 @@ bool SocketServer::recvOneMessage(std::vector<char>& outBody, MessageHeader& hdr
     return true;
 }
 
+camera_param SocketServer::parse_camera_param(const json& j)
+{
+    camera_param p;
+
+    // value(key, default) → key 不存在直接用 default
+    p.iso = j.value("iso", 0);
+    p.exposure = j.value("exposuretime", 0);
+    p.aperture = j.value("aperture", 0);
+    p.wb = j.value("wb", 0);
+
+    return p;
+}
+bool SocketServer::parseCaptureSettingFromJson(const json& j,CaptureSetting& outSetting)
+{
+    // --- 通用参数 ---
+    if(j.contains("ImageSize"))
+        outSetting.setImgSize(j.value("ImageSize", 0));
+    if (j.contains("ImageQuality"))
+        outSetting.setImgQuality(j.value("ImageQuality", 0));
+
+    // --- 各通道 ---
+    if (j.contains("RGB") && j["RGB"].is_object()) {
+        outSetting.set_rgb(parse_camera_param(j["RGB"]));
+    }
+
+    if (j.contains("UV") && j["UV"].is_object()) {
+        outSetting.set_uv(parse_camera_param(j["UV"]));
+    }
+
+    if (j.contains("PL") && j["PL"].is_object()) {
+        outSetting.set_pl(parse_camera_param(j["PL"]));
+    }
+
+    if (j.contains("NPL") && j["NPL"].is_object()) {
+        outSetting.set_npl(parse_camera_param(j["NPL"]));
+    }
+
+    return true;
+}
+
+bool SocketServer::parseCaptureSettingFromJson(const json& j, CaptureSetting2& outSetting)
+{
+    // --- 通用参数 ---
+    if (j.contains("ImageSize"))
+        outSetting.setImgSize(j.value("ImageSize", 0));
+    if (j.contains("ImageQuality"))
+        outSetting.setImgQuality(j.value("ImageQuality", 0));
+
+    if (j.contains("capture_type")) {
+        outSetting.setCaptureType(j.value("capture_type", ""));
+    }
+
+    if (j.contains("params") && j["params"].is_object()) {
+        outSetting.set_param(parse_camera_param(j["params"]));
+    }
+    return true;
+}
+
 // ================== message handler ==================
 bool SocketServer::handleMessage(const MessageHeader& hdrHost,
                                  const std::vector<char>& body) {
@@ -405,8 +469,10 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
             else if (series == CanonEOS)
                 pCamera_ = std::make_unique<CAigoCamera>();
             std::wstring dllname = Util::Instance().AnsiToWString(j.value("dllname", "").c_str());
-            pCamera_->Init(dllname.c_str());
-            result = "OK";
+            if(pCamera_->Init(dllname.c_str())==0)
+                result ="OK";
+            else
+                result = "NG";
         }
         else if (cmd == "close")
         {
@@ -417,8 +483,10 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
         else if (cmd == "startpreview")
         {
             if (pCamera_->StartPreview())
+            {
                 previewOn_ = true;
-            result = "OK";
+                result = "OK";
+            }
         }
         else if (cmd == "stoppreview")
         {
@@ -426,18 +494,119 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
             previewOn_ = false;
             result = "OK";
         }
+        else if (cmd == "preview_setting")
+        {
+            if (pCamera_->IsInited())
+            {
+                CaptureSetting2 settings;
+                if (parseCaptureSettingFromJson(j, settings))
+                {
+                    pCamera_->SetImgQuality(settings.getImgQuality());
+                    pCamera_->SetImgSize(settings.getImgSize());
+                    pCamera_->SetISO(settings.get_param().iso);
+                    pCamera_->SetExposure(settings.get_param().exposure);
+                    pCamera_->SetAperture(settings.get_param().aperture);
+                    pCamera_->SetWB(settings.get_param().wb);
+                    result = "OK";
+                }
+
+            }
+        }
+        else if (cmd == "capture_setting")
+        {
+            if (pCamera_->IsInited())
+            {
+                CaptureSetting2 settings;
+                if (parseCaptureSettingFromJson(j, settings))
+                {
+                    pCamera_->SetISO(settings.get_param().iso);
+                    pCamera_->SetExposure(settings.get_param().exposure);
+                    pCamera_->SetAperture(settings.get_param().aperture);
+                    pCamera_->SetWB(settings.get_param().wb);
+                    result = "OK";
+                }
+            }
+        }
+        else if (cmd == "online_setting")
+        {
+            if (pCamera_->IsInited() && !pCamera_->IsPreviewStop() )
+            {
+                int value = j.value("value", -1);
+                if (value > 0)
+                {
+                    std::string key = j.value("key", "");
+                    if (key == "iso")
+                    {
+                        pCamera_->SetISO(value);
+                        result = "OK";
+                    }
+                    else if (key == "exposuretime")
+                    {
+                        pCamera_->SetExposure(value);
+                        result = "OK";
+                    }
+                    else if (key == "aperture")
+                    {
+                        pCamera_->SetAperture(value);
+                        result = "OK";
+                    }
+                    else if (key == "wb")
+                    {
+                        pCamera_->SetWB(value);
+                        result = "OK";
+                    }
+                    else if (key == "wb")
+                    {
+                        pCamera_->SetWB(value);
+                        result = "OK";
+                    }
+                    else if (key == "ImageSize")
+                    {
+                        pCamera_->SetImgSize(value);
+                        result = "OK";
+                    }
+                    else if (key == "ImageQuality")
+                    {
+                        pCamera_->SetImgQuality(value);
+                        result = "OK";
+                    }
+                }
+            }
+        }
         else if (cmd == "capture")
         {
-            pCamera_->Capture(nullptr);
-            result = "OK";
+            if (pCamera_->IsInited() && !pCamera_->IsPreviewStop())
+            {
+                std::string save_folder = j.value("save_folder", "");
+                
+                pCamera_->SetCaptureFolder(save_folder);
+                int nID = j.value("capture_id", 0);
+                
+                pCamera_->SetCaptureID(nID);
+                std::string capture_type = j.value("capture_type", "");
+                if(capture_type=="RGB")
+                    pCamera_->SetILLType(ILL_RGB_TYPE);
+                else if (capture_type == "UV")
+                    pCamera_->SetILLType(ILL_365UV_TYPE);
+                else if (capture_type == "PL")
+                    pCamera_->SetILLType(ILL_PL_TYPE);
+                else if (capture_type == "NPL")
+                    pCamera_->SetILLType(ILL_NPL_TYPE);
+
+                if(0==pCamera_->Capture(hdrHost.requestId, [this](const uint32_t requestId,const std::vector<std::string>& files)
+                    {
+                         OnCaptureDone(requestId, files);
+                    }))
+                       return true;
+            }
         }
         else if (cmd == "exit")
         {
-            previewOn_ = false;
+            //pCamera_->StopPreview();
+            pCamera_->unInit(true);
             result = "OK";
             sendCommandResponse(hdrHost.requestId, cmd, result);
             exitRequested_ = true;
-            pCamera_->unInit(false);
             return true;
         }
         return sendCommandResponse(hdrHost.requestId, cmd,result);
@@ -452,4 +621,12 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
                   << " len=" << body.size() << "\n";
         return true;
     }
+}
+
+void SocketServer::OnCaptureDone(const uint32_t requestId , const std::vector<std::string>& createdfiles)
+{
+    const std::string cmd = "capture";
+    const std::string result = "OK";
+    sendCommandResponse(requestId, cmd, result, &createdfiles);
+
 }

@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include "CameraBase.h"
+#include "./nlohmann/json.hpp"
+using json = nlohmann::json;
 
 // ================== 协议定义（示例） ==================
 // 如果你已有协议头文件，请删除这一段并 include 你自己的协议定义
@@ -47,13 +49,14 @@ struct FrameDataHeader {
 #pragma pack(pop)
 
 // ================== SocketServer ==================
-class SocketServer {
+class SocketServer 
+{
 public:
     struct Config {
         std::string bindIp = "127.0.0.1";
         uint16_t    port   = 52345;
 
-        double      previewFps    = 20.0;
+        double      previewFps    = 10.0;
         uint32_t    previewWidth  = 1280;
         uint32_t    previewHeight = 720;
         MMPixelFormat previewFmt    = PIX_FMT_JPEG;
@@ -86,7 +89,7 @@ private:
     static bool sendAll(SOCKET s, const char* buf, int len);
     
     // protocol send/recv
-    bool sendCommandResponse(uint32_t requestId,const std::string& cmd, const std::string& result);
+    bool sendCommandResponse(uint32_t requestId,const std::string& cmd, const std::string& result, const std::vector<std::string> *param=nullptr);
 
     bool sendFrame(uint32_t requestId,
                    FrameType frameType,
@@ -99,6 +102,10 @@ private:
 
     // message handler
     bool handleMessage(const MessageHeader& hdrHost, const std::vector<char>& body);
+    void OnCaptureDone(const uint32_t requestId, const std::vector<std::string> & createdfiles);
+    camera_param parse_camera_param(const json& j);
+    bool parseCaptureSettingFromJson(const json& j, CaptureSetting& outSetting);
+    bool parseCaptureSettingFromJson(const json& j, CaptureSetting2& outSetting);
 
 private:
     Config cfg_;

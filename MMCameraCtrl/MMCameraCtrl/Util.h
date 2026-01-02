@@ -1,6 +1,7 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN             // 从 Windows 头文件中排除极少使用的内容
 // Windows 头文件
+#include <filesystem>
 #include <string>
 #include <vector>
 //#include "DBHandler.h"
@@ -75,7 +76,20 @@ public:
 
         return out;
     }
+    bool EnsureDirectory(const std::string& path)
+    {
+        try
+        {
+            if (std::filesystem::exists(path))
+                return true;
 
+            return std::filesystem::create_directories(path);
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
 private:
     Util() = default;
     ~Util() = default;

@@ -4,7 +4,9 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Charts Quick3D)
+find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
@@ -25,6 +27,12 @@ qt_add_executable(apptest64bit
     ${APP_HEADERS}
     cameraclient.h cameraclient.cpp
     CameraImageProvider.h
+    appdb.h appdb.cpp
+    appconfig.h appconfig.cpp
+    SocketWorker.h SocketWorker.cpp
+    FlowBase.h FlowBase.cpp
+    CaptureFlow.h CaptureFlow.cpp
+    StartPreviewFlow.h StartPreviewFlow.cpp
     #QMLContent/customerAnalyse3.qml
 )
 
@@ -52,12 +60,17 @@ set_target_properties(apptest64bit PROPERTIES
 target_link_libraries(apptest64bit
     PRIVATE
     Qt6::Core
+    Qt6::Sql
     Qt6::Gui
     Qt6::Quick
     Qt6::Charts
     Qt6::Quick3D
     apptest64bit_module
 )
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
 target_link_libraries(apptest64bit PRIVATE Qt6::Core)
 
 include(GNUInstallDirs)
