@@ -4,8 +4,6 @@ import QtQuick.Controls.Basic
 
 Button{
     id: rootButton
-    width: 100
-    height: width
     property url source: ""
 
     contentItem: Image {

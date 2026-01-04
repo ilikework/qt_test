@@ -98,7 +98,11 @@ Item {
             anchors.margins: 10
             spacing: 8
 
-            Button { text: "←"; Layout.preferredWidth: 60 }
+            IconButton {
+                Layout.preferredWidth:60
+                Layout.preferredHeight:120
+                source: "./images/left_icon.svg"
+            }
             // ⭐ 中间区域占满宽度
             Item {
                 Layout.fillWidth: true     // 重点
@@ -159,7 +163,11 @@ Item {
                     }
                 }
             }
-           Button { text: "→"; Layout.preferredWidth: 60 }
+            IconButton {
+                Layout.preferredWidth:60
+                Layout.preferredHeight:120
+                source: "./images/right_icon.svg"
+            }
         }
     }
     Rectangle

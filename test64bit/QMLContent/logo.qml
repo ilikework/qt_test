@@ -36,14 +36,19 @@ Item {
         spacing: 10
 
         LogoButton {
-			id:userButton
+            width: 100
+            height: 100
+            id:userButton
             source: "./images/user_icon.svg"
             ToolTip.text: "用户管理"
             onClicked: {
-                pageLoader.source = "customerManager.qml"
+                //pageLoader.source = "customerManager.qml"
+                root.loadPage("customerManager.qml", {})
             }
         }
         LogoButton {
+            width: 100
+            height: 100
             id:bakcupButton
             source: "./images/backup_icon.svg"
             ToolTip.text: "资料备份"
@@ -53,6 +58,8 @@ Item {
             }
         }
         LogoButton {
+            width: 100
+            height: 100
             id:exitButton
             source: "./images/exit_icon.svg"
             ToolTip.text: "退出程序"

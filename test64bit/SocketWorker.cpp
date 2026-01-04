@@ -82,12 +82,14 @@ void SocketWorker::startup(const QString& host, quint16 port)
     connect(socket_, &QTcpSocket::readyRead,    this, &SocketWorker::onReadyRead);
     connect(socket_, &QTcpSocket::errorOccurred,this, &SocketWorker::onErrorOccurred);
     const wchar_t* exeName = L"MMCameraCtrl.exe";
-    const wchar_t* exePath = L"D:\\MagicMirror\\git\\qt_test\\MMCameraCtrl\\Debug\\MMCameraCtrl.exe";
+    std::wstring exePath =QCoreApplication::applicationDirPath().toStdWString();
+    exePath += L"/";
+    exePath += exeName;
 
     // 1) 是否已启动
     if (!isProcessRunning(exeName)) {
         emit log("MMCameraCtrl not running, starting...");
-        if (!startProcess(exePath)) {
+        if (!startProcess(exePath.c_str())) {
             emit fatalError("Failed to start MMCameraCtrl.exe");
             return;
         }

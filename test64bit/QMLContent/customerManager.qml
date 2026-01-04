@@ -147,103 +147,117 @@ Item {
             radius: 6                 // 可选，圆角
 
             ListView {
-            id: userListView
-            //Layout.fillWidth: true
-            //Layout.fillHeight: true
-            anchors.fill: parent
-            anchors.topMargin: 5
-            anchors.leftMargin: 5
-            anchors.rightMargin: 5
-            anchors.bottomMargin: 5
+                id: userListView
+                //Layout.fillWidth: true
+                //Layout.fillHeight: true
+                anchors.fill: parent
+                anchors.topMargin: 5
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                anchors.bottomMargin: 5
 
-            clip: true
-            spacing: 2
+                clip: true
+                spacing: 2
 
-            model: users.slice((currentPage-1)*pageSize, currentPage*pageSize)
+                model: users.slice((currentPage-1)*pageSize, currentPage*pageSize)
 
 
-            delegate: Rectangle {
-                width: parent.width
-                height: rowHeight
-                radius: 12
-                color: "#FAEAE8"
-                border.color: "#444"
-                border.width: 1
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 4
+                delegate: Rectangle {
+                    width: parent.width
+                    height: rowHeight
+                    radius: 12
 
-                    // 客户照片
-                    Rectangle {
-                        width: 80
-                        height: 100
-                        color: "#fff"
-                        radius: 6
-                        Image {
-                            anchors.fill: parent
-                            anchors.margins: 4
-                            source: modelData.photo
-                            fillMode: Image.PreserveAspectFit
-                        }
+                    // ✅ 是否选中当前项
+                    property bool selected: ListView.isCurrentItem
+
+                    // ✅ 选中样式（颜色/边框/阴影你随便调）
+                    color: selected ? "#FFD6D1" : "#FAEAE8"
+                    border.color: selected ? "#FF6A00" : "#444"
+                    border.width: selected ? 2 : 1
+
+                    // ✅ 点击任意位置选中
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: userListView.currentIndex = index
                     }
 
-                    // 客户信息
-                    ColumnLayout {
-                        spacing: 2
-                        Label { text: "客户编号: " + modelData.id; color:"#ffb300" }
-                        Label { text: "客户姓名: " + modelData.name; color:"#ffb300" }
-                        Label { text: "登记时间: " + modelData.date; color:"#ffb300" }
-                        Label { text: "性别: " + modelData.gender + "   生日: " + modelData.birthday; color:"#ffb300" }
-                        Label { text: "Email: " + modelData.email; color:"#ffb300" }
-                        Label { text: "电话: " + modelData.phone; color:"#ffb300" }
-                    }
 
-                    // 最新报告
-                    ColumnLayout {
-                        spacing: 2
-                        Label { text: "报告日期: " + modelData.reportDate; color:"#ffb300" }
-                        Label { text: "报告摘要: " + modelData.reportSummary; color:"#ffb300" }
-                        Label { text: "肌肤皱纹: " + modelData.wrinkle; color:"#ffb300" }
-                        Label { text: "肌肤色斑: " + modelData.spot; color:"#ffb300" }
-                        Label { text: "肌肤粉刺: " + modelData.acne; color:"#ffb300" }
-                        Label { text: "肌肤血红斑: " + modelData.erythema; color:"#ffb300" }
-                    }
-
-                    // 功能按钮
-                    ColumnLayout {
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
                         spacing: 4
-                        TextButton
-                        {
-                            width: 100
-                            height: 25
-                            font.bold: false          // 可选，加粗
-                            text: "进入详情"
-                            onClicked:
-                            {
-                                console.log("进入详情", modelData.id)
-                                //customerAnalyse2.showFullScreen()
-                                loadPage("customerAnalyse.qml", { customerID: modelData.id })
-                                //loadPage("customerAnalyse.qml", { customerID: "0000001" })
+
+                        // 客户照片
+                        Rectangle {
+                            width: 80
+                            height: 100
+                            color: "#fff"
+                            radius: 6
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                source: modelData.photo
+                                fillMode: Image.PreserveAspectFit
                             }
                         }
-                        TextButton
-                        {
-                            width: 100
-                            height: 25
-                            font.bold: false          // 可选，加粗
-                            text: "编辑信息"
-                            onClicked: console.log("编辑信息", modelData.id)
+
+                        // 客户信息
+                        ColumnLayout {
+                            spacing: 2
+                            Label { text: "客户编号: " + modelData.id; color:"#ffb300" }
+                            Label { text: "客户姓名: " + modelData.name; color:"#ffb300" }
+                            Label { text: "登记时间: " + modelData.date; color:"#ffb300" }
+                            Label { text: "性别: " + modelData.gender + "   生日: " + modelData.birthday; color:"#ffb300" }
+                            Label { text: "Email: " + modelData.email; color:"#ffb300" }
+                            Label { text: "电话: " + modelData.phone; color:"#ffb300" }
                         }
+
+                        // 最新报告
+                        ColumnLayout {
+                            spacing: 2
+                            Label { text: "报告日期: " + modelData.reportDate; color:"#ffb300" }
+                            Label { text: "报告摘要: " + modelData.reportSummary; color:"#ffb300" }
+                            Label { text: "肌肤皱纹: " + modelData.wrinkle; color:"#ffb300" }
+                            Label { text: "肌肤色斑: " + modelData.spot; color:"#ffb300" }
+                            Label { text: "肌肤粉刺: " + modelData.acne; color:"#ffb300" }
+                            Label { text: "肌肤血红斑: " + modelData.erythema; color:"#ffb300" }
+                        }
+
+                        // // 功能按钮
+                        // ColumnLayout {
+                        //     spacing: 4
+                        //     TextButton
+                        //     {
+                        //         width: 100
+                        //         height: 25
+                        //         font.bold: false          // 可选，加粗
+                        //         text: "进入详情"
+                        //         onClicked:
+                        //         {
+                        //             console.log("进入详情", modelData.id)
+                        //             //customerAnalyse2.showFullScreen()
+                        //             loadPage("customerAnalyse.qml", { customerID: modelData.id })
+                        //             //loadPage("customerAnalyse.qml", { customerID: "0000001" })
+                        //         }
+                        //     }
+                        //     TextButton
+                        //     {
+                        //         width: 100
+                        //         height: 25
+                        //         font.bold: false          // 可选，加粗
+                        //         text: "编辑信息"
+                        //         onClicked: console.log("编辑信息", modelData.id)
+                        //     }
+                        // }
                     }
                 }
+                onHeightChanged:
+                {
+                    console.log("onHeightChanged in")
+                    pageSize = Math.floor(userListView.height / rowHeight)
+                }
             }
-            onHeightChanged:
-            {
-                console.log("onHeightChanged in")
-                pageSize = Math.floor(userListView.height / rowHeight)
-            }
-        }
         }
         // 分页按钮
         RowLayout {
@@ -274,7 +288,93 @@ Item {
                 text: "新增用户"
 
                 onClicked: {
-                    onClicked: customerDialog.open()
+                    customerDialog.setUser({
+                        id: "自动生成",
+                        photo: "images/user_icon.svg",
+                        name: "",
+                        date: Qt.formatDate(new Date(), "yyyy-MM-dd"),
+                        gender: "",
+                        birthday: "",
+                        email: "",
+                        phone: ""
+                    })
+                    customerDialog.show()
+                }
+            }
+
+            TextButton {
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 50
+                text: "编辑信息"
+                onClicked:
+                {
+                    if (userListView.currentIndex < 0) {
+                        console.log("未选择任何客户")
+                        return
+                    }
+
+                    let realIndex =
+                            (currentPage - 1) * pageSize
+                            + userListView.currentIndex
+
+                    if (realIndex < 0 || realIndex >= users.length) {
+                        console.log("index 越界", realIndex)
+                        return
+                    }
+
+                    customerDialog.setUser({
+                        id: users[realIndex].id,
+                        photo: users[realIndex].photo,
+                        name: users[realIndex].name,
+                        date: users[realIndex].date,
+                        gender: users[realIndex].gender,
+                        birthday: users[realIndex].dirthday,
+                        email: users[realIndex].email,
+                        phone: users[realIndex].phone
+                    })
+                    let customerId = users[realIndex].id
+                    console.log("进入详情 customerId =", customerId)
+                    customerDialog.open()
+
+                }
+            }
+            TextButton {
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 50
+                text: "删除用户"
+
+                onClicked: {
+
+                }
+            }
+
+
+            TextButton {
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 50
+                text: "进入详情"
+                onClicked:
+                {
+                    if (userListView.currentIndex < 0) {
+                        console.log("未选择任何客户")
+                        return
+                    }
+
+                    let realIndex =
+                            (currentPage - 1) * pageSize
+                            + userListView.currentIndex
+
+                    if (realIndex < 0 || realIndex >= users.length) {
+                        console.log("index 越界", realIndex)
+                        return
+                    }
+
+                    let customerId = users[realIndex].id
+                    console.log("进入详情 customerId =", customerId)
+
+                    loadPage("customerAnalyse.qml", {
+                        customerID: customerId
+                    })
                 }
             }
 
@@ -298,6 +398,7 @@ Item {
 
         CustomerEditDialog {
             id: customerDialog
+
             onAccepted: {
                 console.log("保存:", userName)
             }
