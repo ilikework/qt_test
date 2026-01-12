@@ -19,7 +19,10 @@ public:
     int AfterPLShootInterval() const;
     int BeforeNPLShootInterval() const;
     int AfterNPLShootInterval() const;
-
+    QString GrayCreateFrom() const;
+    QString RedCreateFrom() const;
+    QString BrownCreateFrom() const;
+    QString WholeCreateFrom() const;
 
 
     bool save();   // 写回 MMFace_.json

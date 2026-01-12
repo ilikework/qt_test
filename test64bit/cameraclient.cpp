@@ -139,6 +139,12 @@ void CameraClient::capture()
     if (!connected()) { emit log("Not connected."); return; }
     if (!previewOn()) { emit log("Not previewOn."); return; }
 
+    left_pics_.clear();
+    right_pics_.clear();
+    emit left_picsChanged();
+    emit right_picsChanged();
+
+
     auto* flow = new CaptureFlow(this,CustomerID_,AppDb::instance().GetNextGroupID(CustomerID_),this);
     connect(flow, &CaptureFlow::finished, this, [this](bool ok, const QString& msg){
         emit log(msg);
@@ -164,6 +170,8 @@ void CameraClient::save()
 
     left_pics_.clear();
     right_pics_.clear();
+    emit left_picsChanged();
+    emit right_picsChanged();
 }
 
 void CameraClient::cancel()
@@ -500,12 +508,12 @@ QVariantList CameraClient::exposuretimes() const
 
 QVariantList CameraClient::apertures() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "aperture");
 
 }
 QVariantList CameraClient::wbs() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "wb");
 
 }
 QVariantList CameraClient::imageSizes() const

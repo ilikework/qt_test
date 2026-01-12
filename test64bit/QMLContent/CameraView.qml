@@ -12,7 +12,6 @@ Item   {
     property string customerID : ""
 
     signal requestShowMain()   // 请求返回主画面
-    signal settingChanged(int rowIndex, string key, var rawValue, string displayText)
 
     Connections {
         target: camClient
@@ -65,7 +64,7 @@ Item   {
         arr[rowIndex] = item
         settings = arr
 
-        settingChanged(rowIndex, item.key, item.value,item.rawValue)
+        camClient.onSettingChanged(rowIndex, item.key,item.value, item.rawValue)
     }
 
     // ✅ 初始化完成时传给 C++

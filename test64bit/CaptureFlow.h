@@ -4,6 +4,10 @@
 #include <QTimer>
 #include <QJsonObject>
 
+#define JPG ".jpg"
+#define LEFT "_L"
+#define RIGHT "_R"
+
 class CameraClient;
 
 class CaptureFlow : public FlowBase {
@@ -27,10 +31,14 @@ private:
     int index_ = 0;   // 当前第几张（0-based）
     int done_ = 0;    // 已完成张数
     QStringList capture_types = {"RGB","UV","PL","NPL"};
+    QStringList autocreate_types = {"GRAY","RED","BROWN","WHOLE"};
 
     void setting_camera_params(const bool bcontinue=true);
     void stepDelayBeforeCapture();
     void stepDelayAfterCapture();
     void stepSendCapture();
     void next();
+    int get_capture_index(const QString & str) const;
+    void auto_create_pictures();
+    QString get_captured_filename(const int index) const;
 };

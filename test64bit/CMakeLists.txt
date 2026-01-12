@@ -8,6 +8,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
 
@@ -19,6 +20,7 @@ set(APP_SOURCES
 
 set(APP_HEADERS
     #mycustom3ditem.h # ここにヘッダーを含める
+
 )
 
 # --- 実行ファイルの定義 ---
@@ -33,6 +35,7 @@ qt_add_executable(apptest64bit
     FlowBase.h FlowBase.cpp
     CaptureFlow.h CaptureFlow.cpp
     StartPreviewFlow.h StartPreviewFlow.cpp
+    CustomerManager.h CustomerManager.cpp
     #QMLContent/customerAnalyse3.qml
 )
 
@@ -55,6 +58,9 @@ set_target_properties(apptest64bit PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
+# --- 1. 指定头文件搜索路径 (为了能找到 dllProc.h) ---
+target_include_directories(apptest64bit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/libs")
+
 # --- リンク設定 ---
 # 実行ファイルに両方のモジュールターゲットと必要なQtライブラリをリンク
 target_link_libraries(apptest64bit
@@ -66,12 +72,9 @@ target_link_libraries(apptest64bit
     Qt6::Charts
     Qt6::Quick3D
     apptest64bit_module
+    # 使用绝对路径直接链接 lib
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
 )
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
 
 include(GNUInstallDirs)
 install(DIRECTORY ${QT_QML_DIR}/QtQuick3D
@@ -84,6 +87,11 @@ install(TARGETS apptest64bit
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+add_custom_command(TARGET apptest64bit POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.dll"
+        $<TARGET_FILE_DIR:apptest64bit>
+)
 
 add_custom_command(
     TARGET apptest64bit_module POST_BUILD

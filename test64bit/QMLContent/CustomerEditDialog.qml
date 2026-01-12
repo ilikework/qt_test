@@ -14,33 +14,104 @@ Window {
     flags: Qt.FramelessWindowHint
     property int baseFontSize: 20
 
-    signal accepted(var userData)
+    signal accepted(var customer)
     signal canceled()
 
     QtObject {
-        id: user
+        id: customer
+        property int ix: -1
         property string id: ""
         property string photo: ""
+        property bool photo_update: false
         property string name: ""
         property string date: ""
-        property string gender: ""
+        property int gender: 0
         property string birthday: ""
         property string email: ""
         property string phone: ""
     }
 
-    function setUser(data) {
+    function getPhotoSource(photo, gender) {
+        // 1. 优先使用用户上传的照片
+        if (photo && photo !== "") {
+            if (photo.startsWith("file:///") || photo.startsWith("qrc:/") || photo.startsWith("http")) {
+                    return photo
+            }
+            // 假设 path 是相对路径 "customer/ID/photo.jpg"
+            // Qt.resolvedUrl(".") 会定位到当前 QML 所在的目录
+            return "file:///" + applicationDirPath + "/" + photo;
+        }
+
+        // 2. 根据性别返回默认图 (假设 1是男, 2是女)
+        switch(gender) {
+            case 1:  return "images/male.png";
+            case 2:  return "images/female.png";
+            default: return "images/user_icon.svg";
+        }
+    }
+    function setCustomer(data) {
         if (!data) return
-        user.id       = data.id       || ""
-        user.photo    = data.photo    || ""
-        user.name     = data.name     || ""
-        user.date     = data.date     || ""
-        user.gender   = data.gender   || ""
-        user.birthday = data.birthday || ""
-        user.email    = data.email    || ""
-        user.phone    = data.phone    || ""
+        customer.ix       = data.ix       || -1
+        customer.id       = data.id       || ""
+        customer.photo    = data.photo    || ""
+        customer.name     = data.name     || ""
+        customer.date     = data.date     || ""
+        customer.gender   = data.gender   || 0
+        customer.birthday = data.birthday || ""
+        customer.email    = data.email    || ""
+        customer.phone    = data.phone    || ""
+        customer.photo_update = false
+
+        // 手动更新组件状态，而不是靠自动绑定
+        if (customer.date.length > 0) {
+            createDate.selectedDate = Date.fromLocaleString(Qt.locale(), customer.date, "yyyy-MM-dd")
+        } else {
+            createDate.selectedDate = new Date()
+        }
+        if (customer.birthday.length > 0) {
+            birthday.selectedDate = Date.fromLocaleString(Qt.locale(), customer.birthday, "yyyy-MM-dd")
+        } else {
+            birthday.selectedDate = new Date(2000, 0, 1)
+        }
+
+        customerPhoto.source = getPhotoSource(customer.photo,customer.gender)
     }
 
+
+
+    function validate() {
+            // 1. 检查必填项（非空）
+            if (nameInput.text.trim() === "") {
+                errorLabel.text = "⚠️ 姓名不能为空"
+                nameInput.forceActiveFocus() // 让错误的输入框获得焦点
+                return false
+            }
+            if(genderBox.currentIndex!==1 && genderBox.currentIndex!==2 ) {
+                errorLabel.text = "⚠️ 请选择性别"
+                genderBox.forceActiveFocus()
+                return false
+            }
+
+            // 2. 检查手机号格式（简单正则：1开头且为11位数字）
+            let phoneRegex = /^1[3-9]\d{9}$/
+            if (!phoneRegex.test(phoneInput.text)) {
+                errorLabel.text = "⚠️ 手机号格式错误"
+                phoneInput.forceActiveFocus()
+                return false
+            }
+
+            // 3. 检查邮箱格式（如果有输入的话）
+            if (emailInput.text.trim() !== "") {
+                let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                if (!emailRegex.test(emailInput.text)) {
+                    errorLabel.text = "⚠️ 邮箱格式不正确！"
+                    emailInput.forceActiveFocus()
+                    return false
+                }
+            }
+            errorLabel.text = "" // 清空错误
+            return true // 全部通过
+        }
 
     Rectangle {
         anchors.fill: parent
@@ -94,16 +165,11 @@ Window {
                                 color: "#ffffff"
                                 border.color: "#444444"
                                 Image {
-                                    id: userPhoto
+                                    id: customerPhoto
                                     anchors.fill: parent
                                     anchors.margins: 0
-                                    fillMode: Image.PreserveAspectCrop
-                                    source: {
-                                        if(user.photo.length>0)
-                                            return user.photo
-                                        else
-                                            return "images/user_icon.svg"
-                                    }
+                                    fillMode: Image.PreserveAspectFit
+                                    //source: getPhotoSource(customer.photo, genderBox.currentIndex)
                                 }
                             }
 
@@ -112,22 +178,18 @@ Window {
                                 title: "选择照片"
                                 nameFilters: ["Images (*.png *.jpg *.jpeg *.bmp)"]
                                 onAccepted: {
-                                    userPhoto.source = fileDialog.fileUrl
+                                    customerPhoto.source = fileDialog.selectedFile
+                                    customer.photo = fileDialog.selectedFile.toString()
+                                    customer.photo_update = true
                                 }
                             }
                             RowLayout {
-                                spacing: 28
+                                Layout.alignment: Qt.AlignHCenter
+                                spacing: 0
                                 TextButton {
                                     text: "选择照片"
                                     onClicked: fileDialog.open()
                                 }
-
-                                // TextButton {
-                                //     text: "拍摄"
-                                //     onClicked: {
-                                //         console.log("这里可集成摄像头拍摄功能")
-                                //     }
-                                // }
                             }
                         }
 
@@ -141,7 +203,7 @@ Window {
                                 spacing: 8
                                 Label { text: "客户编号"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight}
                                 TextField {
-                                    text: user.id
+                                    text: customer.id
                                     readOnly: true
                                     Layout.fillWidth: true
                                     background: Rectangle { color: "#777777"; radius: 6; border.color: "#444444"}
@@ -154,9 +216,11 @@ Window {
                                 Label { text: "客户姓名"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90 ; horizontalAlignment: Text.AlignRight}
                                 TextField
                                 {
+                                    id:nameInput
                                     placeholderText: "请输入客户姓名"
-                                    text: user.name
+                                    text: customer.name
                                     Layout.fillWidth: true
+                                    onTextEdited: customer.name = text
                                     background: Rectangle { color: "#fbeeee"; radius: 6; border.color: "#444444"}
                                 }
                             }
@@ -166,8 +230,9 @@ Window {
                                 spacing: 8
                                 Label { text: "登记日"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 DatePicker {
+                                    id: createDate
                                     Layout.fillWidth: true
-                                    selectedDate: user.date.length>0 ? Date.fromLocaleString(Qt.locale(), user.date, "yyyy-MM-dd"):new Date()
+                                    onSelectedDateChanged: customer.date =Qt.formatDate(selectedDate, "yyyy-MM-dd")
                                 }
 
                             }
@@ -198,17 +263,16 @@ Window {
                                         border.color: "#444444"
                                         border.width: 1
                                     }
-                                    currentIndex: {
-                                        if (user.gender === "男") return 1
-                                        if (user.gender === "女") return 2
-                                        return 0
-                                    }
+                                    currentIndex: customer.gender
+                                    onActivated: (index) => { customer.gender = index }
                                 }
 
                                 Label { text: "生日"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight }
                                 DatePicker {
+                                    id: birthday
                                     Layout.fillWidth: true
-                                    selectedDate : user.birthday.length>0 ? Date.fromLocaleString(Qt.locale(), user.birthday, "yyyy-MM-dd"):new Date(2000,1,1)
+                                    onSelectedDateChanged: customer.birthday =Qt.formatDate(selectedDate, "yyyy-MM-dd")
+
                                 }
                             }
 
@@ -217,22 +281,26 @@ Window {
                                 spacing: 8
                                 Label { text: "Email"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 TextField {
+                                    id:emailInput
                                     placeholderText: "请输入Email"
                                     Layout.fillWidth: true
                                     background: Rectangle { color: "#fbeeee"; radius: 6; border.color: "#444444"}
-                                    text: user.email
+                                    text: customer.email
+                                    onTextEdited: customer.email = text
                                 }
                             }
 
                             // 电话
                             RowLayout {
                                 spacing: 8
-                                Label { text: "电话"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
+                                Label { text: "手机号"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 TextField {
-                                    placeholderText: "请输入电话"
+                                    id:phoneInput
+                                    placeholderText: "请输入手机号"
                                     Layout.fillWidth: true
                                     background: Rectangle { color: "#fbeeee"; radius: 6; border.color: "#444444"}
-                                    text: user.phone
+                                    text: customer.phone
+                                    onTextEdited: customer.phone = text
                                 }
                             }
 
@@ -242,14 +310,8 @@ Window {
                                 Layout.alignment: Qt.AlignRight
                                 TextButton { text: "保存"; width: 200; height: 50
                                     onClicked: {
-                                        dlg.accepted({
-                                            id: user.id,
-                                            name: user.name,
-                                            gender: user.gender,
-                                            birthday: user.birthday,
-                                            email: user.email,
-                                            phone: user.phone
-                                        })
+                                        if (!validate()) return
+                                        dlg.accepted(customer)
                                         dlg.close()
                                     }
                                 }
@@ -260,6 +322,14 @@ Window {
                                         dlg.close()
                                     }
                                 }
+                            }
+                            // 统一的错误提示区域
+                            Label {
+                                id: errorLabel
+                                text: ""
+                                color: "red"
+                                visible: text !== ""
+                                Layout.alignment: Qt.AlignHCenter
                             }
 
                         } // ColumnLayout 右侧

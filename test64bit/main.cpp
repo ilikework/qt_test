@@ -5,6 +5,7 @@
 #include <QQuickGraphicsConfiguration>
 #include "cameraImageProvider.h"
 #include "cameraclient.h"
+#include "CustomerManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -17,6 +18,13 @@ int main(int argc, char *argv[])
 
     CameraClient client(provider);
     engine.rootContext()->setContextProperty("camClient", &client);
+
+    CustomerManager customerModule;
+    engine.rootContext()->setContextProperty("customerModule", &customerModule);
+
+    // 注入全局“应用根路径”
+    engine.rootContext()->setContextProperty("applicationDirPath", QCoreApplication::applicationDirPath());
+
     QObject::connect(&app, &QCoreApplication::aboutToQuit,
                      &client, &CameraClient::closeCamera);
     engine.load("./QMLContent/App.qml");

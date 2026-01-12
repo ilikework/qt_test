@@ -229,3 +229,63 @@ int AppConfig::AfterNPLShootInterval() const
     qDebug() << "AfterNPLShootInterval ret=" << ret;
     return ret;
 }
+
+QString AppConfig::GrayCreateFrom() const
+{
+    QString ret = "UV";
+
+    if (m_root.contains("GrayCreateFrom") &&
+        m_root.value("GrayCreateFrom").isDouble())   // JSON 里数字都是 double
+    {
+        ret = m_root.value("GrayCreateFrom").toString();
+    }
+
+    qDebug() << "GrayCreateFrom ret=" << ret;
+    return ret;
+}
+
+QString AppConfig::RedCreateFrom() const
+{
+    QString ret = "NPL";
+
+    if (m_root.contains("RedCreateFrom") &&
+        m_root.value("RedCreateFrom").isDouble())   // JSON 里数字都是 double
+    {
+        ret = m_root.value("RedCreateFrom").toString();
+    }
+
+    qDebug() << "RedCreateFrom ret=" << ret;
+    return ret;
+
+}
+
+QString AppConfig::BrownCreateFrom() const
+{
+    QString ret = "UV";
+
+    if (m_root.contains("BrownCreateFrom") &&
+        m_root.value("BrownCreateFrom").isDouble())   // JSON 里数字都是 double
+    {
+        ret = m_root.value("BrownCreateFrom").toString();
+    }
+
+    qDebug() << "BrownCreateFrom ret=" << ret;
+    return ret;
+
+}
+
+QString AppConfig::WholeCreateFrom() const
+{
+    QString ret = "PL";
+
+    if (m_root.contains("WholeCreateFrom") &&
+        m_root.value("WholeCreateFrom").isDouble())   // JSON 里数字都是 double
+    {
+        ret = m_root.value("WholeCreateFrom").toString();
+    }
+
+    qDebug() << "WholeCreateFrom ret=" << ret;
+    return ret;
+
+}
+

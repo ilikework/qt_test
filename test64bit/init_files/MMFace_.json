@@ -11,5 +11,10 @@
   "BeforePLShootInterval":1500,
   "AfterPLShootInterval":1,
   "BeforeNPLShootInterval":1,
-  "AfterNPLShootInterval":1
+  "AfterNPLShootInterval":1,
+  
+  "GrayCreateFrom":"UV",
+  "RedCreateFrom":"NPL",
+  "BrownCreateFrom":"UV",
+  "WholeCreateFrom":"PL",
 }
