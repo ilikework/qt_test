@@ -362,7 +362,7 @@ bool AppDb::FindCustomers(const QString &filter, QVector<Customer> &customerList
     return true;
 }
 
-bool AppDb::AddCustomer( Customer &customer)
+bool AppDb::addCustomer( Customer &customer)
 {
     if (!m_db.isOpen())
     {
@@ -385,7 +385,7 @@ bool AppDb::AddCustomer( Customer &customer)
                     Cust_Des
         )
         VALUES(
-            :id, :name, :gender, :birthday, :editdate, :phone, :address, :email, :photo,:des
+            :id, :name, :gender, :birthday, CURRENT_TIMESTAMP, :phone, :address, :email, :photo,:des
         )
     )SQL");
 
@@ -394,7 +394,6 @@ bool AppDb::AddCustomer( Customer &customer)
     q.bindValue(":name", customer.Cust_Name);
     q.bindValue(":gender", customer.Cust_Gender);
     q.bindValue(":birthday", customer.Cust_Birthday);       // "yyyy-MM-dd"
-    q.bindValue(":editdate", customer.Cust_EditTime);               // "yyyy-MM-dd"
     q.bindValue(":phone", customer.Cust_Phone);
     q.bindValue(":address",customer.Cust_Addr);
     q.bindValue(":email", customer.Cust_EMail);
@@ -449,7 +448,6 @@ bool AppDb::editCustomer(const Customer &customer)
             Cust_Name = :name,
             Cust_Gender = :gender,
             Cust_Birthday = :birthday,
-            Cust_EditTime = :editdate,
             Cust_Phone = :phone,
             Cust_Addr = :address,
             Cust_EMail = :email,
@@ -462,7 +460,6 @@ bool AppDb::editCustomer(const Customer &customer)
     q.bindValue(":name", customer.Cust_Name);
     q.bindValue(":gender", customer.Cust_Gender);
     q.bindValue(":birthday", customer.Cust_Birthday);       // "yyyy-MM-dd"
-    q.bindValue(":editdate", customer.Cust_EditTime);               // "yyyy-MM-dd"
     q.bindValue(":phone", customer.Cust_Phone);
     q.bindValue(":address",customer.Cust_Addr);
     q.bindValue(":email", customer.Cust_EMail);
@@ -515,6 +512,132 @@ bool AppDb::updateCustomerPhoto(const int IX, const QString &photo)
         qWarning() << "editCustomer: no rows affected, ix not found?" << IX;
         // 你可以选择 return false; 或者当作成功
         return false;
+    }
+
+    return true;
+}
+
+bool AppDb::addPhoto(FacePhoto &photo)
+{
+    if (!m_db.isOpen())
+    {
+        m_lastError = "DB not open";
+        return false;
+    }
+    QSqlQuery q(m_db);
+    // ⚠️ 按你的 T_Customers 实际列名改这里
+    q.prepare(R"SQL(
+                INSERT
+                INTO "T_Customers_FacePhoto" (
+                  IX
+                  , "Cust_ID"
+                  , "Photo_CapType"
+                  , "Photo_DirType"
+                  , "Group_ID"
+                  , "Photo_ID"
+                  , "Photo_Name"
+                  , "Photo_EditTime"
+                  , "photo_iso"
+                  , "photo_wb"
+                  , "photo_aperture"
+                  , "photo_exposuretime"
+                  , "photo_comment"
+                )
+                VALUES (
+                  :IX
+                  , :Cust_ID
+                  , :Photo_CapType
+                  , :Photo_DirType
+                  , :Group_ID
+                  , :Photo_ID
+                  , :Photo_Name
+                  , CURRENT_TIMESTAMP
+                  , :photo_iso
+                  , :photo_wb
+                  , :photo_aperture
+                  , :photo_exposuretime
+                  , :photo_comment
+                )
+            )SQL");
+
+    q.bindValue(":Cust_ID", photo.Cust_ID);
+    q.bindValue(":Photo_CapType", photo.Photo_CapType);
+    q.bindValue(":Photo_DirType", photo.Photo_DirType);
+    q.bindValue(":Group_ID", photo.Group_ID);
+    q.bindValue(":Photo_ID", photo.Photo_ID);
+    q.bindValue(":Photo_Name", photo.Photo_Name);
+    q.bindValue(":photo_iso", photo.photo_iso);
+    q.bindValue(":photo_wb", photo.photo_wb);
+    q.bindValue(":photo_aperture", photo.photo_aperture);
+    q.bindValue(":photo_exposuretime", photo.photo_exposuretime);
+    q.bindValue(":photo_comment", photo.photo_comment);
+
+    if (!q.exec()) {
+        qWarning() << "addCustomer INSERT failed:" << q.lastError().text();
+        return false;
+    }
+
+    photo.IX = q.lastInsertId().toInt();
+    return true;
+}
+
+bool AppDb::findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &photoList)
+{
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return false;
+    }
+
+    photoList.clear(); // 建议先清空列表，防止重复添加
+
+    QSqlQuery q(m_db);
+    QString sql = R"(SELECT
+                      IX
+                      , "Cust_ID"
+                      , "Photo_CapType"
+                      , "Photo_DirType"
+                      , "Group_ID"
+                      , "Photo_ID"
+                      , "Photo_Name"
+                      , "Photo_EditTime"
+                      , "photo_iso"
+                      , "photo_wb"
+                      , "photo_aperture"
+                      , "photo_exposuretime"
+                      , "photo_comment"
+                    FROM
+                      "T_Customers_FacePhoto"
+                    WHERE Cust_ID = :Cust_ID
+                    )";
+
+    q.bindValue(":Cust_ID",CustomID);
+
+    q.prepare(sql);
+
+    if (!q.exec()) { // 不要传入 sql 字符串
+        m_lastError = q.lastError().text();
+        qWarning() << "T_Customers SELECT failed:" << m_lastError;
+        return false;
+    }
+
+
+    while (q.next()) {
+        FacePhoto p;
+        p.IX                 = q.value(0).toInt();
+        p.Cust_ID            = q.value(1).toString();
+        p.Photo_CapType      = q.value(2).toString();
+        p.Photo_DirType      = q.value(3).toString();
+        p.Group_ID           = q.value(4).toInt();
+        p.Photo_ID           = q.value(5).toInt();
+        p.Photo_Name         = q.value(6).toString();
+        p.Photo_EditTime     = q.value(7).toString();
+        p.photo_iso          = q.value(8).toString();
+        p.photo_wb           = q.value(9).toString();
+        p.photo_aperture     = q.value(10).toString();
+        p.photo_exposuretime = q.value(11).toString();
+        p.photo_comment      = q.value(12).toString();
+
+        photoList.push_back(std::move(p));
     }
 
     return true;

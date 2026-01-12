@@ -2,12 +2,12 @@
 #define CUSTOMERMANAGER_H
 
 #include <QObject>
-#include "AppDb.h"
+#include <QVariantList>
 
 class CustomerManager : public QObject
 {
     Q_OBJECT
-     Q_PROPERTY(QVariantList customers READ customers NOTIFY customersChanged)
+    Q_PROPERTY(QVariantList customers READ customers NOTIFY customersChanged)
 public:
     explicit CustomerManager(QObject *parent = nullptr);
 

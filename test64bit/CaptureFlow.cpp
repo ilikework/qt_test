@@ -9,7 +9,7 @@
 #include <functional>
 using FunctionType = std::function<int(wchar_t*, wchar_t*)>;
 
-#define DIR_CUSTOMERS "/customers"
+
 
 void CaptureFlow::start()
 {
@@ -102,10 +102,7 @@ void CaptureFlow::stepSendCapture()
 
     QJsonObject cap;
     cap["cmd"] = "capture";
-    cap["save_folder"] =  QCoreApplication::applicationDirPath()
-                         + DIR_CUSTOMERS
-                         + "/" +strCustomID_
-                         + "/" +QString("%1").arg(nGroupID_, 2, 10, QChar('0'));
+    cap["save_folder"] =  cli_->get_save_folder();
 
     cap["capture_id"] = index_+1;
     cap["capture_type"] = capture_types[index_];
@@ -132,11 +129,7 @@ void CaptureFlow::stepSendCapture()
 
 QString CaptureFlow::get_captured_filename(const int index) const
 {
-    QString ret = QCoreApplication::applicationDirPath()
-                + DIR_CUSTOMERS
-                    + "/" +strCustomID_
-                    + "/" +QString("%1").arg(nGroupID_, 2, 10, QChar('0'));
-    ret += QString("/%1").arg(index, 2, 10, QChar('0'));
+    QString ret = QString("%1").arg(index, 2, 10, QChar('0'));
     return ret;
 }
 
@@ -144,16 +137,6 @@ void CaptureFlow::next()
 {
     if (done_ >= capture_types.length()) {
         // add auto create pictures.
-
-        // from UV to GRAY.
-        QString strFrom = get_captured_filename(2);
-        strFrom += LEFT;
-        strFrom += JPG;
-        QString strTo = get_captured_filename(5);
-        strTo += LEFT;
-        strTo += JPG;
-
-        Gray_Enhance(strFrom.toStdWString().data(),strTo.toStdWString().data());
 
         emit finished(true, "capture finished");
         index_=0;
@@ -196,8 +179,11 @@ void CaptureFlow::auto_create_pictures()
         QString strTo = get_captured_filename(i+5);
         strTo += LEFT;
         strTo += JPG;
-        if(functions[i](strFrom.toStdWString().data(),strTo.toStdWString().data())<0)
-            qWarning() << "Failed to create from: " << strFrom << " to: " << strTo;
+
+        QString strFromFull = cli_->get_save_folder() + "/" + strFrom;
+        QString strToFull = cli_->get_save_folder() + "/" + strTo;
+        if(functions[i](strFromFull.toStdWString().data(),strToFull.toStdWString().data())<0)
+            qWarning() << "Failed to create from: " << strFromFull << " to: " << strToFull;
         cli_->addleft(strTo);
 
         strFrom = get_captured_filename(nFromCapType[i]);
@@ -206,16 +192,19 @@ void CaptureFlow::auto_create_pictures()
         strTo = get_captured_filename(i+5);
         strTo += RIGHT;
         strTo += JPG;
-        if(functions[i](strFrom.toStdWString().data(),strTo.toStdWString().data())<0)
-            qWarning() << "Failed to create from: " << strFrom << " to: " << strTo;
+
+        strFromFull = cli_->get_save_folder() + "/" + strFrom;
+        strToFull = cli_->get_save_folder() + "/" + strTo;
+        if(functions[i](strFromFull.toStdWString().data(),strToFull.toStdWString().data())<0)
+            qWarning() << "Failed to create from: " << strFromFull << " to: " << strTo;
         cli_->addright(strTo);
 
-        strFrom = get_captured_filename(nFromCapType[i]);
-        strFrom += JPG;
-        strTo = get_captured_filename(i+5);
-        strTo += JPG;
-        if(functions[i](strFrom.toStdWString().data(),strTo.toStdWString().data())<0)
-            qWarning() << "Failed to create from: " << strFrom << " to: " << strTo;
+        // strFrom = get_captured_filename(nFromCapType[i]);
+        // strFrom += JPG;
+        // strTo = get_captured_filename(i+5);
+        // strTo += JPG;
+        // if(functions[i](strFrom.toStdWString().data(),strTo.toStdWString().data())<0)
+        //     qWarning() << "Failed to create from: " << strFrom << " to: " << strTo;
 
     }
 }

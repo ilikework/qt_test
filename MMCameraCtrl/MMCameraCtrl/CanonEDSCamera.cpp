@@ -1191,7 +1191,9 @@ bool CanonEDSCamera::SaveCapturedItem(EdsDirectoryItemRef dirItem, const wchar_t
 	if (EdsGetDirectoryItemInfo(dirItem, &dirInfo) != EDS_ERR_OK) return false;
 
 	EdsStreamRef stream = nullptr;
-	if (EdsCreateFileStream(Util::Instance().WStringToString(pstrFileName).c_str(),
+
+	std::string fullpath = Util::Instance().WStringToString(this->m_folderPath + L"/" + std::wstring(pstrFileName));
+	if (EdsCreateFileStream(fullpath.c_str(),
 		kEdsFileCreateDisposition_CreateAlways,
 		kEdsAccess_ReadWrite,
 		&stream) != EDS_ERR_OK) return false;

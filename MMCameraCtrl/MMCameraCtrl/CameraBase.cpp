@@ -61,10 +61,14 @@ bool ICameraBase::CropAndSplitImage(const std::wstring& inputPath, const std::ws
 
     bool result = false;
 
+    std::wstring input_fullpath = this->m_folderPath + L"/" + inputPath;
+    std::wstring left_fullpath = this->m_folderPath + L"/" + leftPath;
+    std::wstring right_fullpath = this->m_folderPath + L"/" + rightPath;
+
     {
-        Bitmap* bmp = Bitmap::FromFile(inputPath.c_str());
+        Bitmap* bmp = Bitmap::FromFile(input_fullpath.c_str());
         if (!bmp || bmp->GetLastStatus() != Ok) {
-            LOG(std::format(L"¼ÓÔØÍ¼Æ¬Ê§°Ü: {}", inputPath));
+            LOG(std::format(L"¼ÓÔØÍ¼Æ¬Ê§°Ü: {}", input_fullpath));
             delete bmp;
             return false;
         }
@@ -106,8 +110,8 @@ bool ICameraBase::CropAndSplitImage(const std::wstring& inputPath, const std::ws
         CGdiplusInit::GetEncoderClsid(L"image/jpeg", &clsidJpg);
 
         // ±£´æÁ½ÕÅÍ¼
-        if (leftBmp->Save(leftPath.c_str(), &clsidJpg, nullptr) == Ok &&
-            rightBmp->Save(rightPath.c_str(), &clsidJpg, nullptr) == Ok) {
+        if (leftBmp->Save(left_fullpath.c_str(), &clsidJpg, nullptr) == Ok &&
+            rightBmp->Save(right_fullpath.c_str(), &clsidJpg, nullptr) == Ok) {
             result = true;
         }
 

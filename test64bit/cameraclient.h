@@ -1,5 +1,6 @@
 #pragma once
 #include <QObject>
+#include <QVariantList>
 #include <QTcpSocket>
 #include <QByteArray>
 #include "AppDb.h"
@@ -59,7 +60,7 @@ public:
     int frameToken() const { return frameToken_; }
     bool previewOn() const { return previewOn_; }
 
-    Q_INVOKABLE void setCustomerID(const QString & strCustomerID);
+    Q_INVOKABLE void init(const QString & strCustomerID);
     Q_INVOKABLE void startup();
     Q_INVOKABLE void openCamera();
     Q_INVOKABLE void startPreview();
@@ -85,6 +86,7 @@ public:
 
     void addleft(const QString& str);
     void addright(const QString& str);
+    QString get_save_folder() const;
 
 signals:
     void connectedChanged();
@@ -117,6 +119,8 @@ private:
     void handleCommandResponse(quint32 requestId, const QByteArray& payload);
     void handleEventNotification(const QByteArray& payload);
     void handleFrameData(quint32 reqId, const QByteArray& payload, quint32 bodyLen);
+    CaptureParameter get_camera_params(const QString & capType) const;
+    QString FindParamText(const QVariantList & list, const int raw) const;
 
 private:
     //QTcpSocket socket_;
@@ -140,6 +144,7 @@ private:
     QWaitCondition exitCv_;
 
     QString CustomerID_ = ""; // not valuable 0.
+    int GroupID_ = 0;
     QVariantList  left_pics_;
     QVariantList  right_pics_;
 };

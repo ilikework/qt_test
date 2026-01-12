@@ -3,10 +3,7 @@
 #include "FlowBase.h"
 #include <QTimer>
 #include <QJsonObject>
-
-#define JPG ".jpg"
-#define LEFT "_L"
-#define RIGHT "_R"
+#include "MM_Const_Define.h"
 
 class CameraClient;
 
@@ -30,8 +27,8 @@ private:
     bool running_ = false;
     int index_ = 0;   // 当前第几张（0-based）
     int done_ = 0;    // 已完成张数
-    QStringList capture_types = {"RGB","UV","PL","NPL"};
-    QStringList autocreate_types = {"GRAY","RED","BROWN","WHOLE"};
+    QStringList capture_types = {MM_RGB,MM_UV,MM_PL,MM_NPL};
+    QStringList autocreate_types = {MM_GRAY,MM_RED,MM_BROWN,MM_WHOLE};
 
     void setting_camera_params(const bool bcontinue=true);
     void stepDelayBeforeCapture();

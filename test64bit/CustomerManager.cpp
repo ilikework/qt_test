@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QUrl>
 #include <QImage>
+#include "AppDb.h"
 
 CustomerManager::CustomerManager(QObject *parent)
     : QObject{parent}
@@ -68,7 +69,7 @@ QString CustomerManager::saveCustomer(const QVariantMap& customer) {
     bool ret = false;
     if(c.IX==-1)
     { //add.
-        ret = AppDb::instance().AddCustomer(c);
+        ret = AppDb::instance().addCustomer(c);
         // if(ret)
         // {
         //     customer["ix"] = c.IX;

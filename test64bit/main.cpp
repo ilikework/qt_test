@@ -6,6 +6,7 @@
 #include "cameraImageProvider.h"
 #include "cameraclient.h"
 #include "CustomerManager.h"
+#include "AnalyseManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -21,6 +22,9 @@ int main(int argc, char *argv[])
 
     CustomerManager customerModule;
     engine.rootContext()->setContextProperty("customerModule", &customerModule);
+
+    AnalyseManager analyseModule;
+    engine.rootContext()->setContextProperty("analyseModule", &analyseModule);
 
     // 注入全局“应用根路径”
     engine.rootContext()->setContextProperty("applicationDirPath", QCoreApplication::applicationDirPath());

@@ -211,9 +211,10 @@ public:
 
 	std::wstring GetCaptureFileName(int nIllType)
 	{
-		std::wstring str = m_folderPath;
-		str  += L"/";
-		str += std::format(L"{:02}", m_nID);
+		//not use full path.
+		//std::wstring str = m_folderPath;
+		//str  += L"/";
+		std::wstring str = std::format(L"{:02}", m_nID);
 		str += L".jpg";
 		return str;
 	}

@@ -71,7 +71,7 @@ Item   {
     Component.onCompleted: {
       if (customerID !== "")
       {
-          camClient.setCustomerID(customerID)
+          camClient.init(customerID)
       }
     }
 

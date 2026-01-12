@@ -4,6 +4,13 @@
 #include <QVariantMap>
 #include <QVector>
 
+#define ISO          "iso"
+#define EXPOSURETIME "exposuretime"
+#define APERTURE     "aperture"
+#define WB           "wb"
+#define IMAGESIZE    "ImageSize"
+#define IMAGEQUALITY "ImageQuality"
+
 struct CaptureSetting
 {
     int series = 0;
@@ -34,6 +41,19 @@ struct CaptureSetting
     int gender = 0;
 };
 
+class CaptureParameter
+{
+public:
+    int iso = 0;
+    QString iso_text = "";
+    int exposureTime = 0;
+    QString exposureTime_text = "";
+    int aperture = 0;
+    QString aperture_text = "";
+    int wb = 0;
+    QString wb_text = "";
+};
+
 class Customer
 {
 public:
@@ -50,6 +70,24 @@ public:
     //QString Cust_Height;
     //QString Cust_Weight;
     QString Cust_Des;
+};
+
+class FacePhoto
+{
+public:
+    int IX;
+    QString Cust_ID;
+    QString Photo_CapType;  //RGB/UV/PL/NPL/GRAY/RED/BROWN/WHOLE
+    QString Photo_DirType;  //L/R/M
+    int     Group_ID;
+    int     Photo_ID;
+    QString Photo_Name;
+    QString Photo_EditTime;
+    QString photo_iso;
+    QString photo_wb;
+    QString photo_aperture;
+    QString photo_exposuretime;
+    QString photo_comment;
 };
 
 class AppDb : public QObject {
@@ -72,10 +110,12 @@ public:
     int GetNextGroupID(const QString &CustomID);
     bool FindCustomers(const QString &filter, QVector<Customer> &customerList);
     QString GetNextCustomID();
-    bool AddCustomer(Customer &customer); // need return IX and ID
+    bool addCustomer(Customer &customer); // need return IX and ID
     bool DeleteCustomer(const QString &CustomID);
     bool editCustomer(const Customer &customer);
     bool updateCustomerPhoto(const int IX, const QString &photo);
+    bool addPhoto(FacePhoto &photo);
+    bool findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &photoList);
 
 
 private:

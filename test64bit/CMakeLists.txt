@@ -9,6 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
 
@@ -36,6 +37,8 @@ qt_add_executable(apptest64bit
     CaptureFlow.h CaptureFlow.cpp
     StartPreviewFlow.h StartPreviewFlow.cpp
     CustomerManager.h CustomerManager.cpp
+    AnalyseManager.h AnalyseManager.cpp
+    MM_Const_Define.h
     #QMLContent/customerAnalyse3.qml
 )
 
@@ -75,6 +78,7 @@ target_link_libraries(apptest64bit
     # 使用绝对路径直接链接 lib
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
 )
+target_link_libraries(apptest64bit PRIVATE Qt6::Core)
 
 include(GNUInstallDirs)
 install(DIRECTORY ${QT_QML_DIR}/QtQuick3D
@@ -96,6 +100,6 @@ add_custom_command(TARGET apptest64bit POST_BUILD
 add_custom_command(
     TARGET apptest64bit_module POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/QMLContent
-            ${CMAKE_CURRENT_BINARY_DIR}/QMLContent
+            "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent"
+            "${CMAKE_CURRENT_BINARY_DIR}/QMLContent"
 )

@@ -17,6 +17,9 @@
 #include "CaptureFlow.h"
 #include "StartPreviewFlow.h"
 
+#include "MM_Const_Define.h"
+
+
 static constexpr int HEADER_LEN = 16;
 
 static constexpr quint16 PROTO_VER = 1;
@@ -91,9 +94,14 @@ CameraClient::~CameraClient()
 
 }
 
-void CameraClient::setCustomerID(const QString &strCustomerID)
+void CameraClient::init(const QString &strCustomerID)
 {
     CustomerID_ = strCustomerID;
+    GroupID_ = 0;
+
+    left_pics_.clear();
+    right_pics_.clear();
+
 }
 
 void CameraClient::startup()
@@ -144,8 +152,10 @@ void CameraClient::capture()
     emit left_picsChanged();
     emit right_picsChanged();
 
+    if(GroupID_==0)
+        GroupID_ = AppDb::instance().GetNextGroupID(CustomerID_);
 
-    auto* flow = new CaptureFlow(this,CustomerID_,AppDb::instance().GetNextGroupID(CustomerID_),this);
+    auto* flow = new CaptureFlow(this,CustomerID_,GroupID_,this);
     connect(flow, &CaptureFlow::finished, this, [this](bool ok, const QString& msg){
         emit log(msg);
     });
@@ -164,9 +174,120 @@ void CameraClient::stopPreview()
     emit previewOnChanged();
 }
 
+QString CameraClient::FindParamText(const QVariantList & list, const int raw) const
+{
+    for (const QVariant &var : list) {
+        const QVariantMap item = var.toMap();
+
+        // 2. 显式判断 key 是否存在，增加代码健壮性
+        if (item.contains(QStringLiteral("value")) && item.value(QStringLiteral("value")).toInt() == raw) {
+            return item.value(QStringLiteral("text")).toString();
+        }
+    }
+
+    return QString(); // 3. 返回构造的空字符串比 "" 更规范
+}
+
+CaptureParameter CameraClient::get_camera_params(const QString & capType) const
+{
+    CaptureParameter ret;
+    CaptureSetting s;
+    AppDb::instance().loadCaptureSettingBySeries(AppConfig::instance().CameraSeries(),s);
+
+    if(capType=="RGB")
+    {
+        ret.iso = s.rgb_iso;
+        ret.iso_text = FindParamText(isos(),s.rgb_iso);
+        ret.exposureTime = s.rgb_exposureTime;
+        ret.exposureTime_text = FindParamText(exposuretimes(),s.rgb_exposureTime);
+        ret.aperture = s.rgb_aperture;
+        ret.aperture_text = FindParamText(apertures(),s.rgb_aperture);
+        ret.wb = s.rgb_wb;
+        ret.wb_text = FindParamText(wbs(),s.rgb_wb);
+        return ret;
+    }
+    else if(capType=="UV")
+    {
+        ret.iso = s.uv_iso;
+        ret.iso_text = FindParamText(isos(),s.uv_iso);
+        ret.exposureTime = s.uv_exposureTime;
+        ret.exposureTime_text = FindParamText(exposuretimes(),s.uv_exposureTime);
+        ret.aperture = s.uv_aperture;
+        ret.aperture_text = FindParamText(apertures(),s.uv_aperture);
+        ret.wb = s.uv_wb;
+        ret.wb_text = FindParamText(wbs(),s.uv_wb);
+        return ret;
+    }
+    else if(capType=="PL")
+    {
+        ret.iso = s.pl_iso;
+        ret.iso_text = FindParamText(isos(),s.pl_iso);
+        ret.exposureTime = s.pl_exposureTime;
+        ret.exposureTime_text = FindParamText(exposuretimes(),s.pl_exposureTime);
+        ret.aperture = s.pl_aperture;
+        ret.aperture_text = FindParamText(apertures(),s.pl_aperture);
+        ret.wb = s.pl_wb;
+        ret.wb_text = FindParamText(wbs(),s.pl_wb);
+        return ret;
+    }
+    else if(capType=="NPL")
+    {
+        ret.iso = s.npl_iso;
+        ret.iso_text = FindParamText(isos(),s.npl_iso);
+        ret.exposureTime = s.npl_exposureTime;
+        ret.exposureTime_text = FindParamText(exposuretimes(),s.npl_exposureTime);
+        ret.aperture = s.npl_aperture;
+        ret.aperture_text = FindParamText(apertures(),s.npl_aperture);
+        ret.wb = s.npl_wb;
+        ret.wb_text = FindParamText(wbs(),s.npl_wb);
+        return ret;
+    }
+
+    return ret;
+}
+
+
 void CameraClient::save()
 {
     stopPreview();
+    QStringList cap_types = {MM_RGB,MM_UV,MM_PL,MM_NPL,MM_GRAY,MM_RED,MM_BROWN,MM_WHOLE};
+
+    // add information to db and clear them.
+    for(int i=0;i<left_pics_.size();i++)
+    {
+        FacePhoto p;
+        p.Cust_ID = CustomerID_;
+        p.Photo_CapType = cap_types[i];  //RGB/UV/PL/NPL/GRAY/RED/BROWN/WHOLE
+        p.Photo_DirType = LEFT;
+        p.Group_ID = GroupID_;
+        p.Photo_ID = i+1;
+        p.Photo_Name = left_pics_[i].toString();
+        CaptureParameter cp = get_camera_params(p.Photo_CapType);
+        p.photo_iso = cp.iso_text;
+        p.photo_wb = cp.wb_text;
+        p.photo_aperture = cp.aperture_text;
+        p.photo_exposuretime = cp.exposureTime_text;
+
+        AppDb::instance().addPhoto(p);
+    }
+
+    for(int i=0;i<right_pics_.size();i++)
+    {
+        FacePhoto p;
+        p.Cust_ID = CustomerID_;
+        p.Photo_CapType = cap_types[i];  //RGB/UV/PL/NPL/GRAY/RED/BROWN/WHOLE
+        p.Photo_DirType = RIGHT;
+        p.Group_ID = GroupID_;
+        p.Photo_ID = i+1;
+        p.Photo_Name = right_pics_[i].toString();
+        CaptureParameter cp = get_camera_params(p.Photo_CapType);
+        p.photo_iso = cp.iso_text;
+        p.photo_wb = cp.wb_text;
+        p.photo_aperture = cp.aperture_text;
+        p.photo_exposuretime = cp.exposureTime_text;
+
+        AppDb::instance().addPhoto(p);
+    }
 
     left_pics_.clear();
     right_pics_.clear();
@@ -498,33 +619,33 @@ void CameraClient::onFrameImageDecoded(const QImage& img)
 
 QVariantList CameraClient::isos() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "iso");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), ISO);
 }
 
 QVariantList CameraClient::exposuretimes() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "exposuretime");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), EXPOSURETIME);
 }
 
 QVariantList CameraClient::apertures() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "aperture");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), APERTURE);
 
 }
 QVariantList CameraClient::wbs() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "wb");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), WB);
 
 }
 QVariantList CameraClient::imageSizes() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "ImageSize");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), IMAGESIZE);
 
 }
 
 QVariantList CameraClient::imageQualities() const
 {
-    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), "ImageQuality");
+    return AppDb::instance().cameraConfigList(AppConfig::instance().CameraSeries(), IMAGEQUALITY);
 
 }
 
@@ -621,29 +742,47 @@ QVariantList  CameraClient::settings()
 
 }
 
+QString CameraClient::get_save_folder() const
+{
+    return QCoreApplication::applicationDirPath()
+            + DIR_CUSTOMERS
+            + "/" +CustomerID_
+            + "/" +QString("%1").arg(GroupID_, 2, 10, QChar('0'));
+}
+
 QVariantList  CameraClient::left_pics() const
 {
-    return left_pics_;
+    QVariantList list;
+    for (const QVariant &var : left_pics_) {
+        QString str = get_save_folder() + "/" + var.toString();
+        QString abs = QFileInfo(str).absoluteFilePath();
+        QUrl url = QUrl::fromLocalFile(abs);
+        list.append(url);
+    }
+    return list;
 }
+
 QVariantList  CameraClient::right_pics() const
 {
-    return right_pics_;
+    QVariantList list;
+    for (const QVariant &var : right_pics_) {
+        QString str = get_save_folder() + "/" + var.toString();
+        QString abs = QFileInfo(str).absoluteFilePath();
+        QUrl url = QUrl::fromLocalFile(abs);
+        list.append(url);
+    }
+    return list;
 }
 
 void CameraClient::addleft(const QString& str)
 {
-    QString abs = QFileInfo(str).absoluteFilePath();
-    QUrl url = QUrl::fromLocalFile(abs);
-
-    left_pics_.append(url);
+    left_pics_.append(str);
     emit left_picsChanged();
 }
 
 void CameraClient::addright(const QString& str)
 {
-    QString abs = QFileInfo(str).absoluteFilePath();
-    QUrl url = QUrl::fromLocalFile(abs);
-    right_pics_.append(url);
+    right_pics_.append(str);
     emit right_picsChanged();
 }
 
