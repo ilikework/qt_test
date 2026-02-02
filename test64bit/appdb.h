@@ -94,6 +94,8 @@ class AppDb : public QObject {
     Q_OBJECT
 public:
     static AppDb& instance();
+    bool openDb();
+    void closeDb();
 
     bool openSqlite(const QString& filePath);
     bool isOpen() const;
@@ -116,13 +118,23 @@ public:
     bool updateCustomerPhoto(const int IX, const QString &photo);
     bool addPhoto(FacePhoto &photo);
     bool findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &photoList);
+    bool findPhotoesbyCustomIDandGropuID(const QString &CustomID, const int nGroupID, QVector<FacePhoto> &photoList);
 
+    // 插入单条绘图信息，并返回该条记录的 IX (主键)
+    int insertDrawInfo(int facePhotoIx, const QString& jsonInfo);
+
+    // 根据主键 IX 物理删除单条记录
+    bool deleteDrawInfoByIX(int ix);
+
+    // 一次性获取某张图片关联的所有绘图信息
+    // 返回值：QList<QPair<主键IX, JSON字符串>>
+    QList<QPair<int, QString>> getAllDrawInfos(int facePhotoIx);
+    QString getTemplateInfo(const QString &dirType);
 
 private:
     explicit AppDb(QObject* parent=nullptr);
     ~AppDb();
 
-    bool openDb();
     // 通用执行：insert/update/delete
     bool exec(const QString& sql, const QVariantList& binds = {});
     // 事务（可选）

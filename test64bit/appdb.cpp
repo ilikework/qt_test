@@ -5,8 +5,7 @@
 #include <QSqlError>
 #include <QSqlRecord>
 #include <QUuid>
-
-static const char* DB_FILENAME = "MMFace_.db";
+#include "MM_Const_Define.h"
 
 AppDb& AppDb::instance()
 {
@@ -20,12 +19,7 @@ AppDb::AppDb(QObject* parent) : QObject(parent)
 }
 
 AppDb::~AppDb() {
-    if (m_db.isValid()) {
-        const auto name = m_db.connectionName();
-        m_db.close();
-        m_db = QSqlDatabase();
-        QSqlDatabase::removeDatabase(name);
-    }
+    closeDb();
 }
 
 bool AppDb::openDb()
@@ -48,6 +42,16 @@ bool AppDb::openDb()
 
     m_lastError.clear();
     return true;
+}
+
+void AppDb::closeDb()
+{
+    if (m_db.isValid()) {
+        const auto name = m_db.connectionName();
+        m_db.close();
+        m_db = QSqlDatabase();
+        QSqlDatabase::removeDatabase(name);
+    }
 }
 
 bool AppDb::exec(const QString& sql, const QVariantList& binds) {
@@ -253,10 +257,11 @@ int AppDb::GetNextGroupID(const QString &CustomID)
     }
 
     QSqlQuery q(m_db);
-    const QString sql = QString("SELECT Max(Group_ID) AS GroupID FROM T_Customers_FacePhoto WHERE Cust_ID=%1").arg(CustomID);
+    const QString sql = QString("SELECT Max(Group_ID) AS GroupID FROM T_Customers_FacePhoto WHERE Cust_ID=:id");
     q.prepare(sql);
-    if (!q.exec(sql)) {
-        qWarning() << "Update failed:" << lastErrorText();
+    q.bindValue(":id", CustomID);
+    if (!q.exec()) {
+        qWarning() << "SELECT failed:" << lastErrorText();
     }
 
     if (!q.next()) {
@@ -264,8 +269,7 @@ int AppDb::GetNextGroupID(const QString &CustomID)
         return ret;
     }
 
-    int c = 0;
-    ret = q.value(c++).toInt();
+    ret = q.value(0).toInt();
     ret++;
 
     return ret;
@@ -530,47 +534,47 @@ bool AppDb::addPhoto(FacePhoto &photo)
                 INSERT
                 INTO "T_Customers_FacePhoto" (
                   IX
-                  , "Cust_ID"
-                  , "Photo_CapType"
-                  , "Photo_DirType"
-                  , "Group_ID"
-                  , "Photo_ID"
-                  , "Photo_Name"
-                  , "Photo_EditTime"
-                  , "photo_iso"
-                  , "photo_wb"
-                  , "photo_aperture"
-                  , "photo_exposuretime"
-                  , "photo_comment"
+                  ,Cust_ID
+                  ,Photo_CapType
+                  ,Photo_DirType
+                  ,Group_ID
+                  ,Photo_ID
+                  ,Photo_Name
+                  ,Photo_EditTime
+                  ,photo_iso
+                  ,photo_wb
+                  ,photo_aperture
+                  ,photo_exposuretime
+                  ,photo_comment
                 )
                 VALUES (
                   :IX
-                  , :Cust_ID
-                  , :Photo_CapType
-                  , :Photo_DirType
-                  , :Group_ID
-                  , :Photo_ID
-                  , :Photo_Name
+                  , :id
+                  , :CapType
+                  , :DirType
+                  , :GroupID
+                  , :PhotoID
+                  , :Name
                   , CURRENT_TIMESTAMP
-                  , :photo_iso
-                  , :photo_wb
-                  , :photo_aperture
-                  , :photo_exposuretime
-                  , :photo_comment
+                  , :iso
+                  , :wb
+                  , :aperture
+                  , :exposuretime
+                  , :comment
                 )
             )SQL");
 
-    q.bindValue(":Cust_ID", photo.Cust_ID);
-    q.bindValue(":Photo_CapType", photo.Photo_CapType);
-    q.bindValue(":Photo_DirType", photo.Photo_DirType);
-    q.bindValue(":Group_ID", photo.Group_ID);
-    q.bindValue(":Photo_ID", photo.Photo_ID);
-    q.bindValue(":Photo_Name", photo.Photo_Name);
-    q.bindValue(":photo_iso", photo.photo_iso);
-    q.bindValue(":photo_wb", photo.photo_wb);
-    q.bindValue(":photo_aperture", photo.photo_aperture);
-    q.bindValue(":photo_exposuretime", photo.photo_exposuretime);
-    q.bindValue(":photo_comment", photo.photo_comment);
+    q.bindValue(":id", photo.Cust_ID);
+    q.bindValue(":CapType", photo.Photo_CapType);
+    q.bindValue(":DirType", photo.Photo_DirType);
+    q.bindValue(":GroupID", photo.Group_ID);
+    q.bindValue(":PhotoID", photo.Photo_ID);
+    q.bindValue(":Name", photo.Photo_Name);
+    q.bindValue(":iso", photo.photo_iso);
+    q.bindValue(":wb", photo.photo_wb);
+    q.bindValue(":aperture", photo.photo_aperture);
+    q.bindValue(":exposuretime", photo.photo_exposuretime);
+    q.bindValue(":comment", photo.photo_comment);
 
     if (!q.exec()) {
         qWarning() << "addCustomer INSERT failed:" << q.lastError().text();
@@ -593,26 +597,24 @@ bool AppDb::findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &p
     QSqlQuery q(m_db);
     QString sql = R"(SELECT
                       IX
-                      , "Cust_ID"
-                      , "Photo_CapType"
-                      , "Photo_DirType"
-                      , "Group_ID"
-                      , "Photo_ID"
-                      , "Photo_Name"
-                      , "Photo_EditTime"
-                      , "photo_iso"
-                      , "photo_wb"
-                      , "photo_aperture"
-                      , "photo_exposuretime"
-                      , "photo_comment"
+                      ,Cust_ID
+                      ,Photo_CapType
+                      ,Photo_DirType
+                      ,Group_ID
+                      ,Photo_ID
+                      ,Photo_Name
+                      ,Photo_EditTime
+                      ,photo_iso
+                      ,photo_wb
+                      ,photo_aperture
+                      ,photo_exposuretime
+                      ,photo_comment
                     FROM
-                      "T_Customers_FacePhoto"
-                    WHERE Cust_ID = :Cust_ID
+                      T_Customers_FacePhoto
+                    WHERE Cust_ID = :id
                     )";
-
-    q.bindValue(":Cust_ID",CustomID);
-
     q.prepare(sql);
+    q.bindValue(":id",CustomID);
 
     if (!q.exec()) { // 不要传入 sql 字符串
         m_lastError = q.lastError().text();
@@ -641,4 +643,147 @@ bool AppDb::findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &p
     }
 
     return true;
+}
+
+bool AppDb::findPhotoesbyCustomIDandGropuID(const QString &CustomID, const int nGroupID, QVector<FacePhoto> &photoList)
+{
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return false;
+    }
+
+    photoList.clear(); // 建议先清空列表，防止重复添加
+
+    QSqlQuery q(m_db);
+    QString sql = R"(SELECT
+                      IX
+                      ,Cust_ID
+                      ,Photo_CapType
+                      ,Photo_DirType
+                      ,Group_ID
+                      ,Photo_ID
+                      ,Photo_Name
+                      ,Photo_EditTime
+                      ,photo_iso
+                      ,photo_wb
+                      ,photo_aperture
+                      ,photo_exposuretime
+                      ,photo_comment
+                    FROM
+                      T_Customers_FacePhoto
+                    WHERE Cust_ID = :id
+                      AND Group_ID = :groupid
+                    )";
+    q.prepare(sql);
+    q.bindValue(":id",CustomID);
+    q.bindValue(":groupid",nGroupID);
+
+    if (!q.exec()) { // 不要传入 sql 字符串
+        m_lastError = q.lastError().text();
+        qWarning() << "T_Customers SELECT failed:" << m_lastError;
+        return false;
+    }
+
+
+    while (q.next()) {
+        FacePhoto p;
+        p.IX                 = q.value(0).toInt();
+        p.Cust_ID            = q.value(1).toString();
+        p.Photo_CapType      = q.value(2).toString();
+        p.Photo_DirType      = q.value(3).toString();
+        p.Group_ID           = q.value(4).toInt();
+        p.Photo_ID           = q.value(5).toInt();
+        p.Photo_Name         = q.value(6).toString();
+        p.Photo_EditTime     = q.value(7).toString();
+        p.photo_iso          = q.value(8).toString();
+        p.photo_wb           = q.value(9).toString();
+        p.photo_aperture     = q.value(10).toString();
+        p.photo_exposuretime = q.value(11).toString();
+        p.photo_comment      = q.value(12).toString();
+
+        photoList.push_back(std::move(p));
+    }
+
+    return true;
+}
+
+int AppDb::insertDrawInfo(int facePhotoIx, const QString& jsonInfo) {
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("INSERT INTO T_FacePhoto_DrawInfo (FacePhoto_IX, Info, EditTime) "
+                  "VALUES (?, ?, DATETIME('now', 'localtime'))");
+    query.addBindValue(facePhotoIx);
+    query.addBindValue(jsonInfo);
+
+    if (!query.exec()) {
+        qDebug() << "insertDrawInfo Error:" << query.lastError().text();
+        return -1;
+    }
+
+    // 获取 SQLite 刚刚生成的自增主键 IX
+    return query.lastInsertId().toInt();
+}
+
+bool AppDb::deleteDrawInfoByIX(int ix) {
+    if (ix < 0) return false;
+
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("DELETE FROM T_FacePhoto_DrawInfo WHERE IX = ?");
+    query.addBindValue(ix);
+
+    if (!query.exec()) {
+        qDebug() << "deleteDrawInfoByIX Error:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QList<QPair<int, QString>> AppDb::getAllDrawInfos(int facePhotoIx) {
+    QList<QPair<int, QString>> results;
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return results;
+    }
+
+    QSqlQuery query(m_db);
+
+    // 按时间顺序或 IX 顺序查询所有属于该图片的标注
+    query.prepare("SELECT IX, Info FROM T_FacePhoto_DrawInfo WHERE FacePhoto_IX = ? ORDER BY IX ASC");
+    query.addBindValue(facePhotoIx);
+
+    if (query.exec()) {
+        while (query.next()) {
+            int ix = query.value(0).toInt();
+            QString info = query.value(1).toString();
+            results.append(qMakePair(ix, info));
+        }
+    } else {
+        qDebug() << "getAllDrawInfos Error:" << query.lastError().text();
+    }
+
+    return results;
+}
+
+QString AppDb::getTemplateInfo(const QString &dirType)
+{
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return "";
+    }
+    QSqlQuery query(m_db);
+    query.prepare("SELECT Info FROM T_FacePhoto_DrawInfo_Template WHERE Photo_DirType = :type");
+    query.bindValue(":type", dirType);
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+    return "";
 }

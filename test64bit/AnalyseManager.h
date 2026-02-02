@@ -7,17 +7,18 @@
 class AnalyseManager : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QVariantList tmbphotoes READ tmbphotoes NOTIFY tmbphotoesChanged)
+    Q_PROPERTY(QVariantList thumbphotoes READ thumbphotoes NOTIFY thumbphotoesChanged)
 public:
     explicit AnalyseManager(QObject *parent = nullptr);
 
-    QVariantList tmbphotoes() const;
+    QVariantList thumbphotoes() const;
 
     Q_INVOKABLE void init(const QString & strCustomerID);
+    Q_INVOKABLE QVariantList loadSub(const int & nGroupID);
 
 
 signals:
-    void tmbphotoesChanged();
+    void thumbphotoesChanged();
 
 private:
     QString get_folder(int nGroupID) const;
@@ -27,7 +28,7 @@ private:
     int     nCurPhotoID_ = 0;
 
     QVariantList listThumb_;
-    QVariantMap  mapDetail_;
+    //QVariantMap  mapDetail_;
 
 };
 

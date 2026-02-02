@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS T_Customers_FacePhoto (
 );
 
 --7,
+CREATE TABLE T_FacePhoto_DrawInfo_Template(
+  IX INTEGER PRIMARY KEY AUTOINCREMENT
+  , Photo_DirType TEXT                          -- _L,_R,_M
+  , Info TEXT                                     -- json for the photo draw included draw type(circle/rectangle/line/Selection Box),points array,picture size,line weight
+  , EditTime DATETIME
+);
+
+--8,
 CREATE TABLE IF NOT EXISTS T_FacePhoto_DrawInfo ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , FacePhoto_IX INTEGER   -- -1 for default DrawInfo like Left/Right Selection Box
@@ -92,7 +100,7 @@ CREATE TABLE IF NOT EXISTS T_FacePhoto_DrawInfo (
   , EditTime DATETIME
 );
 
---8,
+--9,
 CREATE TABLE IF NOT EXISTS T_FacePhoto_AnalyseInfo ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , FacePhoto_IX INTEGER
@@ -102,7 +110,7 @@ CREATE TABLE IF NOT EXISTS T_FacePhoto_AnalyseInfo (
   , EditTime DATETIME
 );
 
---9,
+--10,
 CREATE TABLE IF NOT EXISTS T_FacePhoto_Map ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Photo_CapType    TEXT     -- RGB/UV/PL/NPL/GRAY/RED/BROWN/WHOLE
@@ -110,7 +118,7 @@ CREATE TABLE IF NOT EXISTS T_FacePhoto_Map (
   , Report_Type      INTEGER  -- 1:RGB-Pore;2:UV-Acne;3:PL-DeepSpots;4:NPL-SurfaceSpot;5:GRAY-Wrinkle;6:RED-Sensitivity;7:BROWN-DarkSpot;8:WHOLE-Moisture
 );
 
---10,
+--11,
 CREATE TABLE IF NOT EXISTS T_Report_Template ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Report_Type  INTEGER   -- 1:RGB-Pore;2:UV-Acne;3:PL-DeepSpots;4:NPL-SurfaceSpot;5:GRAY-Wrinkle;6:RED-Sensitivity;7:BROWN-DarkSpot;8:WHOLE-Moisture;100:Total
@@ -118,14 +126,14 @@ CREATE TABLE IF NOT EXISTS T_Report_Template (
   , MEMO TEXT
 );
 
---11,
+--12,
 CREATE TABLE IF NOT EXISTS T_Report_Offerings_Template ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Report_IX    INTEGER
   , Offering_IX  INTEGER
 );
 
---12,
+--13,
 CREATE TABLE IF NOT EXISTS T_Report_Main ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Report_Type  INTEGER   -- 1:RGB-Pore;2:UV-Acne;3:PL-DeepSpots;4:NPL-SurfaceSpot;5:GRAY-Wrinkle;6:RED-Sensitivity;7:BROWN-DarkSpot;8:WHOLE-Moisture;100:Total
@@ -134,12 +142,13 @@ CREATE TABLE IF NOT EXISTS T_Report_Main (
   , EditTime DATETIME
 );
 
---13,
+--14,
 CREATE TABLE IF NOT EXISTS T_Report_Offering ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Report_IX  INTEGER
   , Offering_IX  INTEGER
 );
+
 
 insert into T_VersionInfo(IX,VERSION,[COMMENT]) values (1,100,'第一个被管理的版本，希望能够被以后的版本兼容');
 insert into "T_CameraConfig"(IX,"Camera","Series","ConfigType","ConfigText","ConfigValue","OrderID") values (1,'G7',1,'wb','Daylight',1,44);
@@ -399,3 +408,6 @@ insert into "T_CameraConfig"(IX,"Camera","Series","ConfigType","ConfigText","Con
 insert into "T_CameraConfig"(IX,"Camera","Series","ConfigType","ConfigText","ConfigValue","OrderID") values (255,'CanonEOS',4,'exposuretime','1/1600',141,404);
 
 insert into "T_CaptureSetting"(IX,"Series","ImageSize","ImageQuality",RGB_ISO,"RGB_ExposureTime","RGB_Aperture",RGB_WB,UV_ISO,"UV_ExposureTime","UV_Aperture",UV_WB,PL_ISO,"PL_ExposureTime","PL_Aperture",PL_WB,NPL_ISO,"NPL_ExposureTime","NPL_Aperture",NPL_WB,"Gender") values (1,4,0,3,85,93,36,1,93,117,37,2,85,93,36,1,88,112,53,2,1);
+
+INSERT INTO T_FacePhoto_DrawInfo_Template (Photo_DirType,Info,EditTime) VALUES ('_L','{"width": 768, "height": 1024, "version": "1", "points": [{"x": 328.0, "y": 445.0}, {"x": 288.0, "y": 415.0}, {"x": 265.0, "y": 369.0}, {"x": 192.0, "y": 354.0}, {"x": 179.0, "y": 527.0}, {"x": 191.0, "y": 614.0}, {"x": 277.0, "y": 711.0}, {"x": 389.0, "y": 691.0}, {"x": 515.0, "y": 557.0}, {"x": 613.0, "y": 557.0}, {"x": 562.0, "y": 420.0}, {"x": 464.0, "y": 463.0}, {"x": 402.0, "y": 459.0}], "color": "#ff0000", "type":"smooth_curve", "weight": 3}',CURRENT_TIMESTAMP);
+INSERT INTO T_FacePhoto_DrawInfo_Template (Photo_DirType,Info,EditTime) VALUES ('_R','{"width": 768, "height": 1024, "version": "1", "points": [{"x": 280.0, "y": 497.0}, {"x": 218.0, "y": 479.0}, {"x": 156.0, "y": 439.0}, {"x": 117.0, "y": 536.0}, {"x": 208.0, "y": 575.0}, {"x": 298.0, "y": 692.0}, {"x": 380.0, "y": 770.0}, {"x": 519.0, "y": 747.0}, {"x": 593.0, "y": 643.0}, {"x": 537.0, "y": 427.0}, {"x": 529.0, "y": 350.0}, {"x": 452.0, "y": 375.0}, {"x": 453.0, "y": 420.0}], "color": "#ff0000", "type":"smooth_curve", "weight": 3}',CURRENT_TIMESTAMP);

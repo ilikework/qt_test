@@ -5,6 +5,7 @@
 #include <QUrl>
 #include <QImage>
 #include "AppDb.h"
+#include "MM_Const_Define.h"
 
 CustomerManager::CustomerManager(QObject *parent)
     : QObject{parent}
@@ -114,8 +115,8 @@ QString CustomerManager::saveCustomerPhoto(const QString &sourcePath, const QStr
     }
 
     // 3. 准备目标目录
-    QString relativeDir = QString("customers/%1").arg(customerId);
-    QString targetDir = QCoreApplication::applicationDirPath() + "/" + relativeDir;
+    QString relativeDir = SLASH + QString(DIR_CUSTOMERS) + SLASH + customerId;
+    QString targetDir = QCoreApplication::applicationDirPath() +  relativeDir;
     QDir().mkpath(targetDir);
 
     // 4. 图片缩放处理

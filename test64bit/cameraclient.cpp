@@ -745,9 +745,9 @@ QVariantList  CameraClient::settings()
 QString CameraClient::get_save_folder() const
 {
     return QCoreApplication::applicationDirPath()
-            + DIR_CUSTOMERS
-            + "/" +CustomerID_
-            + "/" +QString("%1").arg(GroupID_, 2, 10, QChar('0'));
+            + SLASH + DIR_CUSTOMERS
+            + SLASH +CustomerID_
+            + SLASH +QString("%1").arg(GroupID_, 2, 10, QChar('0'));
 }
 
 QVariantList  CameraClient::left_pics() const

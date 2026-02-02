@@ -17,65 +17,39 @@ Item {
     property string customerID : ""
     property int curIndex:-1
     property var groups:[]
-    ListModel {
-        id: mainphotoes
-    }
-    ListModel {
-        id: subphotoes
-    }
-    //property var mainphotoes: []
-    //property var subphotoes:[]
+    // ListModel {
+    //     id: mainphotoes
+    // }
+    // ListModel {
+    //     id: subphotoes
+    // }
+    property var mainphotoes:  analyseModule.thumbphotoes
+    property var subphotoes:[]
 
     Component.onCompleted:
     {
         console.log("Component.onCompleted start")
-        if(customerID==="0000001")
-        {
-            curIndex =0
-            groups = ["01"]
-        }
-        else
-        {
-            curIndex =0
-            groups = ["01","02"]
+        analyseModule.init(customerID);
 
-        }
+        loadsubphotoes(0)
 
-        mainphotoes.clear()
-        for(var i=0;i<groups.length;i++)
-            mainphotoes.append({photoL:`customers/${customerID}/${customerID}_${groups[i]}_01_L.jpg`,
-                              photoR:`customers/${customerID}/${customerID}_${groups[i]}_01_R.jpg`})
-        //console.log("mainphotoes size =", mainphotoes.length)
-        //console.log(JSON.stringify(mainphotoes))
-        //console.log("curIndex =", curIndex)
-
-        loadsubphotoes(curIndex)
-
-        console.log("Qt.runtimeVersion =", Qt.runtimeVersion)
-        let win = customerDetail.Window.window    // 如果拿不到，就用 Qt.application.screens[0]
-        console.log("Item版: devicePixelRatio =",
-                    Qt.application.screens[0].devicePixelRatio,
-                    "pixelDensity =", Qt.application.screens[0].pixelDensity)
-
-        //thumbRow.update()
-        console.log("Component.onCompleted end")
 
     }
 
     function loadsubphotoes(index)
     {
-        subphotoes.clear()
 
-        if(index>=0)
+        subphotoes = analyseModule.loadSub(mainphotoes[index].GROUPID)
+        if(subphotoes.length>0)
         {
-            for(var i=1;i<=8;i++)
-            {
-                var sub = String(i).padStart(2, "0")
-                subphotoes.append({ photoL:`customers/${customerID}/${customerID}_${groups[index]}_${sub}_L.jpg`,
-                                    photoR:`customers/${customerID}/${customerID}_${groups[index]}_${sub}_R.jpg`})
-            }
+            // 先让列表渲染，下一帧再加载主编辑区域
+            Qt.callLater(() => {
+                leftMain.source = subphotoes[0].photoL;
+                leftMain.init(subphotoes[0].IXL,"_L");
+                rightMain.source = subphotoes[0].photoR;
+                rightMain.init(subphotoes[0].IXR,"_R");
+            })
         }
-
     }
 
 
@@ -89,7 +63,6 @@ Item {
         border.color: "#444"
         border.width: 1
         anchors.top: parent.top
-
         property int expandedIndex: -1   // ⭐ 当前展开的缩略图编号
 
         RowLayout
@@ -105,6 +78,7 @@ Item {
             }
             // ⭐ 中间区域占满宽度
             Item {
+
                 Layout.fillWidth: true     // 重点
                 height: parent.height
 
@@ -115,9 +89,13 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
 
+                    property int rowWidth: 188*2+2
+                    property int pageSize: 0
+                    property int currentPage: 1
+
                     Repeater {
                         id: mainThumbList
-                        model: mainphotoes
+                        model: mainphotoes.slice((thumbRow.currentPage-1)*thumbRow.pageSize, thumbRow.currentPage*thumbRow.pageSize)
                         delegate: Rectangle {
                             width: 188; height: 128; radius: 4
                             color: index === curIndex ? "#2a2a2e" : "#333"
@@ -132,12 +110,18 @@ Item {
                                 Image {
                                     width: 90; height: 120
                                     fillMode: Image.PreserveAspectFit
-                                    source: photoL
+                                    source: modelData.photoL
+                                    sourceSize.width: 90
+                                    sourceSize.height: 120
+                                    asynchronous: true
                                 }
                                 Image {
                                     width: 90; height: 120
                                     fillMode: Image.PreserveAspectFit
-                                    source: photoR
+                                    source: modelData.photoR
+                                    sourceSize.width: 90
+                                    sourceSize.height: 120
+                                    asynchronous: true
                                 }
                             }
 
@@ -154,12 +138,14 @@ Item {
 
                                     thumbBar.expandedIndex =
                                             (thumbBar.expandedIndex === index ? -1 : index)
-
-                                    showgroupimgs.visible =
-                                            thumbBar.expandedIndex === index
                                 }
                             }
                         }
+                    }
+                    onWidthChanged:
+                    {
+                        console.log("onWidthChanged in")
+                        pageSize = Math.floor(thumbRow.width / thumbRow.rowWidth)
                     }
                 }
             }
@@ -169,76 +155,6 @@ Item {
                 source: "./images/right_icon.svg"
             }
         }
-    }
-    Rectangle
-    {
-        id:showgroupimgs
-        width: 100 *16
-        height: thumbBar.height
-        y : thumbBar.y + thumbBar.height
-        color: "white"
-        z :1
-        visible: false //thumbBar.expandedIndex === index
-        RowLayout
-        {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 8
-
-            Repeater
-            {
-                model: subphotoes
-                delegate: Rectangle
-                {
-                    width: 188; height: 128; radius: 4
-                    color: index === 0 ? "#2a2a2e" : "#333"
-                    border.color: index === 0 ? "#ffb300" : "#444"
-                    border.width: 4
-                    Row
-                    {
-                        leftPadding: 4
-                        topPadding:  4
-                        Image
-                        {
-                            id:subThumbImgL
-                            width:90
-                            height:120
-                            source: photoL
-                            fillMode: Image.PreserveAspectFit
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                        Image
-                        {
-                            id:subThumbImgR
-                            width:90
-                            height:120
-                            source: photoR
-                            fillMode: Image.PreserveAspectFit
-                            Layout.alignment: Qt.AlignVCenter
-                            anchors.leftMargin: 8
-                        }
-                    }
-                    MouseArea
-                    {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked:
-                        {
-                            mainphotoes.set(thumbBar.expandedIndex,{photoL:photoL,photoR:photoR})
-                            mainphotoesChanged()
-                            console.log("已替换 index:", thumbBar.expandedIndex,
-                                        "photoL:", modelData.photoL,
-                                        "photoR:", modelData.photoR)
-                            showgroupimgs.visible = false
-                            thumbBar.expandedIndex = -1
-                        }
-                    }
-
-
-                }
-            }
-        }
-
     }
 
     /* ==== 主内容布局区域 ==== */
@@ -322,31 +238,6 @@ Item {
                             btnCamera.checked = false
                         }
                     }
-                    /* ==== 测量按钮及子菜单 ==== */
-                    CheckButton {
-                        id: btnMeasure
-                        text: "测量"
-                        onClicked: measureMenu.visible = checked
-                    }
-
-                    Column {
-                        id: measureMenu
-                        visible: false
-                        spacing: 2
-						width: parent.width
-                        opacity: visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 250 } }
-                        Behavior on visible { PropertyAnimation { duration: 250 } }
-
-                        MyButton2 {
-                            text: "直线测量"
-                            onClicked: console.log("直线测量模式")
-                        }
-                        MyButton2 {
-                            text: "3点圆形测量"
-                            onClicked: console.log("3点圆形测量模式")
-                        }
-                    }
 
                     CheckButton {
                         checked: false
@@ -400,28 +291,145 @@ Item {
 			//width: parent.width - leftBar.width; height: parent.height - thumbBar.height
 
             /* 0: 主画面 */
-            Row {
+            RowLayout {
+                //anchors.fill: parent
+                anchors.margins: 10
                 spacing: 20
-                //anchors.centerIn: parent
-                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Rectangle {
-                    width: viewStack.width/2 -10; height: viewStack.height -10
-                    radius: 8; color: "#222"; border.color: "#ffb300"
-                    Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoL : ""}
+
+                // ==========================================================
+                // 左侧编辑区域：包含两个平分宽度且保持 3:4 比例的容器
+                // ==========================================================
+                RowLayout {
+                    id: editorsContainer
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 20
+
+                    // 左图片容器
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8; color: "#222"; border.color: "#ffb300"
+                        clip: true
+
+                        Item {
+                            anchors.centerIn: parent
+                            //anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
+                            width: Math.min(parent.width, parent.height * 3 / 4)
+                            height: width * 4 / 3
+                            MMImageEditor {
+                                id: leftMain
+                                anchors.fill: parent
+                                anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
+                                //source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoL : ""
+                            }
+                        }
+                    }
+
+                    // 右图片容器
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8; color: "#222"; border.color: "#ffb300"
+                        clip: true
+
+                        Item {
+                            anchors.centerIn: parent
+                            width: Math.min(parent.width, parent.height * 3 / 4)
+                            height: width * 4 / 3
+
+                            MMImageEditor {
+                                id: rightMain
+                                anchors.fill: parent
+                                anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
+                                //source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoR : ""
+                            }
+                        }
+                    }
                 }
+
+                // ==========================================================
+                // 右侧侧边栏：固定宽度
+                // ==========================================================
                 Rectangle {
-                    width: viewStack.width/2 -10; height: viewStack.height -10
-                    radius: 8; color: "#222"; border.color: "#ffb300"
-                    Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoR : "" }
+                    id: sideBar
+                    Layout.preferredWidth: 210
+                    Layout.fillHeight: true
+                    color: "#1e1e1e"
+                    radius: 8
+                    border.color: "#333"
+
+                    // ListView 部分保持不变...
+                    ListView {
+                        id: subListView
+                        anchors.fill: parent
+                        anchors.margins: 5
+                        model: subphotoes
+                        clip: true
+                        spacing: 10
+
+                        delegate: Rectangle {
+                            width: 195
+                            height: 135
+                            radius: 6
+                            // 增加选中效果：如果当前主图正是这张，则高亮
+                            color: "#2a2a2e"
+                            border.color: (leftMain.source === modelData.photoL) ? "#ffb300" : "#444"
+                            border.width: (leftMain.source === modelData.photoL) ? 2 : 1
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Row {
+                                    spacing: 4
+                                    Image {
+                                        width: 90; height: 120
+                                        source: modelData.photoL
+                                        fillMode: Image.PreserveAspectFit
+                                        sourceSize.width: 90
+                                        sourceSize.height: 120
+                                        asynchronous: true
+                                        // 优化：平滑缩放
+                                        //mipmap: true
+
+                                    }
+                                    Image {
+                                        width: 90; height: 120
+                                        source: modelData.photoR
+                                        fillMode: Image.PreserveAspectFit
+                                        sourceSize.width: 90
+                                        sourceSize.height: 120
+                                        asynchronous: true
+                                        //mipmap: true
+                                    }
+                                }
+                            } // Column
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                onEntered: parent.border.color = "#888"
+                                onExited: if(leftMain.source !== modelData.photoL) parent.border.color = "#444"
+
+                                onClicked: {
+                                    // 强制触发 UI 刷新（如果模型没自动发信号）
+                                    leftMain.source = modelData.photoL
+                                    leftMain.init(modelData.IXL,"_L")
+                                    rightMain.source = modelData.photoR
+                                    rightMain.init(modelData.IXR,"_R")
+                                }
+                            } // MouseArea
+                        }
+                    }
                 }
             }
 
             /* 1: 3D */
             Item {
                 id: parentItem
-                anchors.centerIn: parent
+                //anchors.centerIn: parent
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 width: 800
                 height: 600
 

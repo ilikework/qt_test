@@ -1,7 +1,8 @@
 #ifndef MM_CONST_DEFINE_H
 #define MM_CONST_DEFINE_H
 
-#define DIR_CUSTOMERS "/customers"
+#define SLASH "/"
+#define DIR_CUSTOMERS "customers"
 
 #define JPG ".jpg"
 
@@ -15,6 +16,9 @@
 #define MM_RED "RED"
 #define MM_BROWN "BROWN"
 #define MM_WHOLE "WHOLE"
+
+static const char* DB_FILENAME = "MMFace_.db";
+
 
 
 #endif // MM_CONST_DEFINE_H

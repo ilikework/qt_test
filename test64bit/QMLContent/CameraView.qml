@@ -8,7 +8,8 @@ Item   {
     id: cameraRoot
     width: 1920
     height: 1080
-    anchors.centerIn: parent
+    //anchors.centerIn: parent
+    Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
     property string customerID : ""
 
     signal requestShowMain()   // 请求返回主画面

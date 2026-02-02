@@ -7,6 +7,8 @@
 #include "cameraclient.h"
 #include "CustomerManager.h"
 #include "AnalyseManager.h"
+#include "BackupManager.h"
+#include "ImageEditor.h"
 
 int main(int argc, char *argv[])
 {
@@ -26,8 +28,13 @@ int main(int argc, char *argv[])
     AnalyseManager analyseModule;
     engine.rootContext()->setContextProperty("analyseModule", &analyseModule);
 
+    BackupManager backupMgr;
+    engine.rootContext()->setContextProperty("backupManager", &backupMgr);
+
     // 注入全局“应用根路径”
     engine.rootContext()->setContextProperty("applicationDirPath", QCoreApplication::applicationDirPath());
+
+    qmlRegisterType<ImageEditor>("MyCustomComponents", 1, 0, "ImageEditor");
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit,
                      &client, &CameraClient::closeCamera);

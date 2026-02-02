@@ -5,11 +5,6 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
 
@@ -39,6 +34,11 @@ qt_add_executable(apptest64bit
     CustomerManager.h CustomerManager.cpp
     AnalyseManager.h AnalyseManager.cpp
     MM_Const_Define.h
+    BackupManager.h BackupManager.cpp
+    BaseDrawingItem.h BaseDrawingItem.cpp
+    ImageEditor.h ImageEditor.cpp
+    QMLContent/components/ModeIcon.qml
+    #QMLContent/MMImageEditor.qml
     #QMLContent/customerAnalyse3.qml
 )
 
@@ -49,10 +49,14 @@ file(GLOB_RECURSE QML_SOURCES
 
 qt_add_qml_module(apptest64bit_module
     URI test64bit
+    # URI MyCustomComponents
+    # VERSION 1.0
     # URI Custom3D
     QML_FILES
         Main.qml
         ${QML_SOURCES}
+    #SOURCES
+    #        ImageEditor.h ImageEditor.cpp # 让 CMake 自动为这些类生成 QML 注册代码
 )
 
 
@@ -66,6 +70,20 @@ target_include_directories(apptest64bit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lib
 
 # --- リンク設定 ---
 # 実行ファイルに両方のモジュールターゲットと必要なQtライブラリをリンク
+# target_link_libraries(apptest64bit
+#     PRIVATE
+#     Qt6::Core
+#     Qt6::Sql
+#     Qt6::Gui
+#     Qt6::Quick
+#     Qt6::Charts
+#     Qt6::Quick3D
+#     apptest64bit_module
+#     # 使用绝对路径直接链接 lib
+#     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
+# )
+# target_link_libraries(apptest64bit PRIVATE Qt6::Core)
+# target_link_libraries(apptest64bit PRIVATE Qt6::GuiPrivate)
 target_link_libraries(apptest64bit
     PRIVATE
     Qt6::Core
@@ -74,11 +92,15 @@ target_link_libraries(apptest64bit
     Qt6::Quick
     Qt6::Charts
     Qt6::Quick3D
-    apptest64bit_module
-    # 使用绝对路径直接链接 lib
+    Qt6::GuiPrivate
+    apptest64bit_module  # 链接生成的模块
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
 )
-target_link_libraries(apptest64bit PRIVATE Qt6::Core)
+
+# target_link_libraries(apptest64bit_module
+#     PRIVATE
+#     Qt6::Core Qt6::Gui Qt6::Quick
+# )
 
 include(GNUInstallDirs)
 install(DIRECTORY ${QT_QML_DIR}/QtQuick3D
