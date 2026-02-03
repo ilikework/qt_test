@@ -11,6 +11,9 @@ Item {
     BackupAndRestore{
         id : bkrs
     }
+    PreRecordDialog {
+        id: preRecordDlg
+    }
     Rectangle {
         anchors.fill: parent
         color: "#0b0b0b"
@@ -55,6 +58,18 @@ Item {
             onClicked: {
                 bkrs.modality = Qt.WindowModal
                 bkrs.show()
+            }
+        }
+        LogoButton {
+            width: 100
+            height: 100
+            id: preRecordButton
+            source: "./images/prerecord_icon.svg"
+            ToolTip.text: "预录"
+            onClicked: {
+                preRecordDlg.modality = Qt.WindowModal
+                preRecordDlg.loadData()
+                preRecordDlg.show()
             }
         }
         LogoButton {

@@ -35,6 +35,7 @@ qt_add_executable(apptest64bit
     AnalyseManager.h AnalyseManager.cpp
     MM_Const_Define.h
     BackupManager.h BackupManager.cpp
+    PreRecordManager.h PreRecordManager.cpp
     BaseDrawingItem.h BaseDrawingItem.cpp
     ImageEditor.h ImageEditor.cpp
     QMLContent/components/ModeIcon.qml

@@ -8,6 +8,7 @@
 #include "CustomerManager.h"
 #include "AnalyseManager.h"
 #include "BackupManager.h"
+#include "PreRecordManager.h"
 #include "ImageEditor.h"
 
 int main(int argc, char *argv[])
@@ -30,6 +31,9 @@ int main(int argc, char *argv[])
 
     BackupManager backupMgr;
     engine.rootContext()->setContextProperty("backupManager", &backupMgr);
+
+    PreRecordManager preRecordMgr;
+    engine.rootContext()->setContextProperty("preRecordManager", &preRecordMgr);
 
     // 注入全局“应用根路径”
     engine.rootContext()->setContextProperty("applicationDirPath", QCoreApplication::applicationDirPath());

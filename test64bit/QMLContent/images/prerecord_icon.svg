@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 106 123" xml:space="preserve">
+<style type="text/css"><![CDATA[
+	.st0{fill-rule:evenodd;clip-rule:evenodd;fill:white;}
+]]></style>
+<g>
+	<!-- �cb -->
+	<path class="st0" d="M27 0h52c10 0 18 9 19 19l7 62c0 4 1 8 1 12 0 3 0 5 1 8-1 4-1 7-1 10H13c-4 0-7-2-9-4-4-4-4-7-4-12 0-2 0-5 0-7 0-6 0-10 1-15l7-65C9 9 17 0 27 0z"/>
+	<!-- h� -->
+	<path class="st0" d="M32 32h42v6H32z"/>
+	<path class="st0" d="M32 46h42v6H32z"/>
+	<path class="st0" d="M32 60h32v6H32z"/>
+	<path class="st0" d="M32 74h38v6H32z"/>
+	<!-- �/U6&� -->
+	<circle class="st0" cx="72" cy="67" r="8"/>
+</g>
+</svg>
