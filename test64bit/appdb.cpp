@@ -787,3 +787,101 @@ QString AppDb::getTemplateInfo(const QString &dirType)
     }
     return "";
 }
+
+QString AppDb::getReportTemplateMemo(int reportType, int reportLevel)
+{
+    QVector<QVariantMap> rows = select(
+        "SELECT MEMO FROM T_Report_Template WHERE Report_Type = ? AND Report_LEVEL = ? LIMIT 1",
+        { reportType, reportLevel });
+    if (rows.isEmpty()) return QString();
+    QVariant v = rows.at(0).value("MEMO");
+    return v.isNull() ? QString() : v.toString();
+}
+
+bool AppDb::setReportTemplateMemo(int reportType, int reportLevel, const QString &memo)
+{
+    if (!m_db.isOpen()) { m_lastError = "DB not open"; return false; }
+    QVector<QVariantMap> rows = select(
+        "SELECT IX FROM T_Report_Template WHERE Report_Type = ? AND Report_LEVEL = ? LIMIT 1",
+        { reportType, reportLevel });
+    if (rows.isEmpty()) {
+        return exec("INSERT INTO T_Report_Template (Report_Type, Report_LEVEL, MEMO) VALUES (?, ?, ?)",
+                   { reportType, reportLevel, memo });
+    }
+    int ix = rows.at(0).value("IX").toInt();
+    return exec("UPDATE T_Report_Template SET MEMO = ? WHERE IX = ?", { memo, ix });
+}
+
+QVector<QVariantMap> AppDb::getOfferingsTemplateList()
+{
+    exec("CREATE TABLE IF NOT EXISTS T_Offerings_Template (IX INTEGER PRIMARY KEY AUTOINCREMENT, Offering_Name TEXT, Offering_PhotoPath TEXT, Offering_Price TEXT, Offering_Usage TEXT)");
+    QVector<QVariantMap> rows = select("SELECT IX, Offering_Name, Offering_PhotoPath, Offering_Price, Offering_Usage FROM T_Offerings_Template ORDER BY IX ASC");
+    for (QVariantMap &m : rows) {
+        if (m.contains("Offering_Name")) { m["name"] = m.take("Offering_Name"); }
+        if (m.contains("Offering_PhotoPath")) { m["photoPath"] = m.take("Offering_PhotoPath"); }
+        if (m.contains("Offering_Price")) { m["price"] = m.take("Offering_Price"); }
+        if (m.contains("Offering_Usage")) { m["usage"] = m.take("Offering_Usage"); }
+    }
+    return rows;
+}
+
+int AppDb::insertOfferingsTemplate(const QString &name, const QString &photoPath, const QString &price, const QString &usage)
+{
+    if (!m_db.isOpen()) { m_lastError = "DB not open"; return -1; }
+    QSqlQuery q(m_db);
+    if (!q.prepare("INSERT INTO T_Offerings_Template (Offering_Name, Offering_PhotoPath, Offering_Price, Offering_Usage) VALUES (?, ?, ?, ?)")) return -1;
+    q.addBindValue(name);
+    q.addBindValue(photoPath);
+    q.addBindValue(price);
+    q.addBindValue(usage);
+    if (!q.exec()) { m_lastError = q.lastError().text(); return -1; }
+    return q.lastInsertId().toInt();
+}
+
+bool AppDb::updateOfferingsTemplate(int ix, const QString &name, const QString &photoPath, const QString &price, const QString &usage)
+{
+    return exec("UPDATE T_Offerings_Template SET Offering_Name = ?, Offering_PhotoPath = ?, Offering_Price = ?, Offering_Usage = ? WHERE IX = ?",
+                { name, photoPath, price, usage, ix });
+}
+
+bool AppDb::deleteOfferingsTemplate(int ix)
+{
+    return exec("DELETE FROM T_Offerings_Template WHERE IX = ?", { ix });
+}
+
+int AppDb::getReportTemplateIx(int reportType, int reportLevel)
+{
+    QVector<QVariantMap> rows = select(
+        "SELECT IX FROM T_Report_Template WHERE Report_Type = ? AND Report_LEVEL = ? LIMIT 1",
+        { reportType, reportLevel });
+    if (!rows.isEmpty())
+        return rows.at(0).value("IX").toInt();
+    if (!m_db.isOpen()) { m_lastError = "DB not open"; return -1; }
+    QSqlQuery q(m_db);
+    if (!q.prepare("INSERT INTO T_Report_Template (Report_Type, Report_LEVEL, MEMO) VALUES (?, ?, '')")) return -1;
+    q.addBindValue(reportType);
+    q.addBindValue(reportLevel);
+    if (!q.exec()) { m_lastError = q.lastError().text(); return -1; }
+    return q.lastInsertId().toInt();
+}
+
+QVector<int> AppDb::getOfferingIxsForReportIx(int reportIx)
+{
+    QVector<int> out;
+    QVector<QVariantMap> rows = select("SELECT Offering_IX FROM T_Report_Offerings_Template WHERE Report_IX = ? ORDER BY IX ASC", { reportIx });
+    for (const QVariantMap &m : rows)
+        out.append(m.value("Offering_IX").toInt());
+    return out;
+}
+
+bool AppDb::setOfferingsForReportIx(int reportIx, const QVector<int> &offeringIxs)
+{
+    if (!exec("DELETE FROM T_Report_Offerings_Template WHERE Report_IX = ?", { reportIx }))
+        return false;
+    for (int oix : offeringIxs) {
+        if (oix <= 0) continue;
+        if (!exec("INSERT INTO T_Report_Offerings_Template (Report_IX, Offering_IX) VALUES (?, ?)", { reportIx, oix }))
+            return false;
+    }
+    return true;
+}

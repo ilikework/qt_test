@@ -17,11 +17,22 @@ Window {
     ]
     property var productList: []
 
+    // 好/中/差：好≤30% 中 30–70% 差>70%（供后续自动分析归类用）
     function loadData() {
         var suggestions = preRecordManager.getReportSuggestions()
         suggestionModel.clear()
         for (var s = 0; s < 9; s++) {
-            suggestionModel.append({ label: reportLabels[s], text: (suggestions[s] !== undefined ? suggestions[s] : "") })
+            var item = suggestions[s]
+            if (item && typeof item === "object") {
+                suggestionModel.append({
+                    label: reportLabels[s],
+                    good: item.good || "",
+                    medium: item.medium || "",
+                    bad: item.bad || ""
+                })
+            } else {
+                suggestionModel.append({ label: reportLabels[s], good: "", medium: "", bad: "" })
+            }
         }
         productList = preRecordManager.getProducts()
         if (!productList || !Array.isArray(productList)) productList = []
@@ -29,6 +40,7 @@ Window {
         for (var i = 0; i < productList.length; i++) {
             var p = productList[i]
             productsModel.append({
+                IX: p.IX || 0,
                 name: p.name || "",
                 photoPath: p.photoPath || "",
                 price: p.price || "",
@@ -39,19 +51,23 @@ Window {
 
     function collectSuggestions() {
         var list = []
-        for (var i = 0; i < suggestionModel.count; i++)
-            list.push(suggestionModel.get(i).text || "")
+        for (var i = 0; i < suggestionModel.count; i++) {
+            var r = suggestionModel.get(i)
+            list.push({ good: r.good || "", medium: r.medium || "", bad: r.bad || "" })
+        }
         return list
     }
 
     function collectProducts() {
         var list = []
         for (var k = 0; k < productsModel.count; k++) {
+            var r = productsModel.get(k)
             list.push({
-                name: productsModel.get(k).name,
-                photoPath: productsModel.get(k).photoPath,
-                price: productsModel.get(k).price,
-                usage: productsModel.get(k).usage
+                IX: r.IX || 0,
+                name: r.name,
+                photoPath: r.photoPath,
+                price: r.price,
+                usage: r.usage
             })
         }
         return list
@@ -146,24 +162,58 @@ Window {
                                 Layout.fillWidth: true
                                 spacing: 4
                                 Text {
-                                    text: model.label
+                                    text: model.label + "（好≤30% / 中 30–70% / 差>70%）"
                                     color: "#b0b0b0"
                                     font.pixelSize: 14
                                 }
-                                TextArea {
-                                    id: suggestionArea
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 56
-                                    placeholderText: "输入该分量报告的建议文字..."
-                                    text: model.text
-                                    font.pixelSize: 14
-                                    color: "#eee"
-                                    background: Rectangle {
-                                        color: "#2c2c2c"
-                                        border.color: "#555"
-                                        radius: 4
+                                    spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: "好"; color: "#7ec0ff"; font.pixelSize: 12 }
+                                        TextArea {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 52
+                                            placeholderText: "建议文字（好）"
+                                            text: model.good
+                                            font.pixelSize: 13
+                                            color: "#eee"
+                                            background: Rectangle { color: "#2c2c2c"; border.color: "#555"; radius: 4 }
+                                            onTextChanged: suggestionModel.setProperty(index, "good", text)
+                                        }
                                     }
-                                    onTextChanged: suggestionModel.setProperty(index, "text", text)
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: "中"; color: "#b0b0b0"; font.pixelSize: 12 }
+                                        TextArea {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 52
+                                            placeholderText: "建议文字（中）"
+                                            text: model.medium
+                                            font.pixelSize: 13
+                                            color: "#eee"
+                                            background: Rectangle { color: "#2c2c2c"; border.color: "#555"; radius: 4 }
+                                            onTextChanged: suggestionModel.setProperty(index, "medium", text)
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: "差"; color: "#cc6666"; font.pixelSize: 12 }
+                                        TextArea {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 52
+                                            placeholderText: "建议文字（差）"
+                                            text: model.bad
+                                            font.pixelSize: 13
+                                            color: "#eee"
+                                            background: Rectangle { color: "#2c2c2c"; border.color: "#555"; radius: 4 }
+                                            onTextChanged: suggestionModel.setProperty(index, "bad", text)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -185,7 +235,7 @@ Window {
                         }
                         contentItem: Text { text: parent.text; color: "white"; font: parent.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         onClicked: {
-                            productsModel.append({ name: "", photoPath: "", price: "", usage: "" })
+                            productsModel.append({ IX: 0, name: "", photoPath: "", price: "", usage: "" })
                         }
                     }
                     ScrollView {

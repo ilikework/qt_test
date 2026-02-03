@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS T_Customers_FacePhoto (
 );
 
 --7,
-CREATE TABLE T_FacePhoto_DrawInfo_Template(
+CREATE TABLE IF NOT EXISTS T_FacePhoto_DrawInfo_Template(
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Photo_DirType TEXT                          -- _L,_R,_M
   , Info TEXT                                     -- json for the photo draw included draw type(circle/rectangle/line/Selection Box),points array,picture size,line weight
@@ -124,6 +124,15 @@ CREATE TABLE IF NOT EXISTS T_Report_Template (
   , Report_Type  INTEGER   -- 1:RGB-Pore;2:UV-Acne;3:PL-DeepSpots;4:NPL-SurfaceSpot;5:GRAY-Wrinkle;6:RED-Sensitivity;7:BROWN-DarkSpot;8:WHOLE-Moisture;100:Total
   , Report_LEVEL INTEGER   -- 10:Bad,20:Normal,30:Good
   , MEMO TEXT
+);
+
+-- 产品/服务（预录用，与 T_Report_Template 风格一致）
+CREATE TABLE IF NOT EXISTS T_Offerings_Template (
+  IX INTEGER PRIMARY KEY AUTOINCREMENT
+  , Offering_Name TEXT
+  , Offering_PhotoPath TEXT
+  , Offering_Price TEXT
+  , Offering_Usage TEXT
 );
 
 --12,
