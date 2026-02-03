@@ -150,7 +150,7 @@ Window {
                 ScrollView {
                     anchors.fill: parent
                     clip: true
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeededAlways }
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                     contentWidth: availableWidth
 
                     ColumnLayout {
@@ -242,7 +242,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeededAlways }
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                         ListView {
                             id: productListView
                             model: ListModel { id: productsModel }
