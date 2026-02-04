@@ -119,6 +119,11 @@ add_custom_command(TARGET apptest64bit POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.dll"
         $<TARGET_FILE_DIR:apptest64bit>
 )
+add_custom_command(TARGET apptest64bit POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/libs/opencv_world343.dll"
+        $<TARGET_FILE_DIR:apptest64bit>
+)
 
 add_custom_command(
     TARGET apptest64bit_module POST_BUILD

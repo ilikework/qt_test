@@ -68,7 +68,6 @@ Item {
             ToolTip.text: "预录"
             onClicked: {
                 preRecordDlg.modality = Qt.WindowModal
-                preRecordDlg.loadData()
                 preRecordDlg.show()
             }
         }

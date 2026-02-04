@@ -10,9 +10,12 @@ Window {
     height: 600
     flags: Qt.FramelessWindowHint
     property int baseFontSize: 20
+    // Optional: set from parent (e.g. C++ backupManager). When null, Connections is no-op.
+    property var backupManager: null
 
     Connections {
         target: backupManager
+        enabled: backupManager !== null
 
         function onFinished(success, message) {
             // 弹出提示框或 console.log

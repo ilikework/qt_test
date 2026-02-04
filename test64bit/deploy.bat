@@ -14,5 +14,7 @@ windeployqt ^
 
 copy D:\MagicMirror\git\qt_test\test64bit\build\Desktop_Qt_6_7_3_MSVC2022_64bit-Release\apptest64bit.exe D:\MagicMirror\git\qt_test\test64bit\deploy 
 xcopy D:\MagicMirror\git\qt_test\test64bit\QMLContent D:\MagicMirror\git\qt_test\test64bit\deploy\QMLContent  /E /I /Y
+REM 64-bit OpenCV (release)
+copy /Y "%~dp0libs\opencv_world343.dll" "%~dp0deploy\"
 
 popd
