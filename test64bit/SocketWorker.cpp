@@ -35,13 +35,26 @@ bool startProcess(const wchar_t* exePath)
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
 
+    // By default do not set creation flags (show console).
+    // In Release builds we suppress the child console window.
+#ifdef NDEBUG
+    // Request hidden window for console processes
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    // Use CREATE_NO_WINDOW to suppress the console window when starting
+    // a console-mode child process.
+    DWORD creationFlags = CREATE_NO_WINDOW;
+#else
+    DWORD creationFlags = 0;
+#endif
+
     BOOL ok = CreateProcessW(
         exePath,
         nullptr,
         nullptr,
         nullptr,
         FALSE,
-        0,
+        creationFlags,
         nullptr,
         nullptr,
         &si,

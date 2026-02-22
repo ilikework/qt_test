@@ -56,6 +56,17 @@ PreRecordManager::PreRecordManager(QObject *parent)
 {
 }
 
+void PreRecordManager::syncWithDatabase()
+{
+    // 1. 重新加载所有报告建议
+    // getReportSuggestions() 每次都从数据库读取，所以调用它并赋值给成员变量即可
+    m_reportSuggestions = getReportSuggestions();
+
+    // 2. 重新加载所有产品/服务模板
+    // getProducts() 每次都从数据库读取，所以调用它并赋值给成员变量即可
+    m_products = getProducts();
+}
+
 QVariantList PreRecordManager::getReportSuggestions() const
 {
     QVariantList out;
@@ -112,7 +123,7 @@ bool PreRecordManager::saveProducts(const QVariantList &list)
         int ix = row.value("IX").toInt();
         QString name = row.value("name").toString();
         QString photoPath = row.value("photoPath").toString().trimmed();
-        QString price = row.value("price").toString();
+        double price = row.value("price").toDouble();
         QString usage = row.value("usage").toString();
 
         QString dbPhotoPath = photoPath;
@@ -172,22 +183,4 @@ bool PreRecordManager::setReportOfferings(int reportIndex, int tier, const QVari
         if (i > 0) ixs.append(i);
     }
     return AppDb::instance().setOfferingsForReportIx(reportIx, ixs);
-}
-
-bool PreRecordManager::save()
-{
-    AppDb &db = AppDb::instance();
-    while (m_reportSuggestions.size() < 9) {
-        QVariantMap m;
-        m["good"] = m["medium"] = m["bad"] = QString();
-        m_reportSuggestions.append(m);
-    }
-    for (int i = 0; i < 9; ++i) {
-        int rt = reportTypeByIndex(i);
-        QVariantMap m = m_reportSuggestions.at(i).toMap();
-        if (!db.setReportTemplateMemo(rt, 30, m.value("good").toString())) return false;
-        if (!db.setReportTemplateMemo(rt, 20, m.value("medium").toString())) return false;
-        if (!db.setReportTemplateMemo(rt, 10, m.value("bad").toString())) return false;
-    }
-    return saveProducts(m_products);
 }

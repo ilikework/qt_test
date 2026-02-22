@@ -41,6 +41,7 @@ qt_add_executable(apptest64bit
     QMLContent/components/ModeIcon.qml
     #QMLContent/MMImageEditor.qml
     #QMLContent/customerAnalyse3.qml
+
 )
 
 file(GLOB_RECURSE QML_SOURCES

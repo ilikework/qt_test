@@ -143,10 +143,6 @@ Item {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                console.log(`viewStack top is ${viewStack.top} width is ${viewStack.width} : height is ${viewStack.height}`);
-                                console.log(`totalPage width is ${totalPage.width} : height is ${totalPage.height}`);
-                                console.log(`photoArea width is ${photoArea.width} : height is ${photoArea.height}`);
-                                console.log(`chart width is ${chart.width} : height is ${chart.height}`);
                                 tabButtons.selectedIndex = index
                                 if(index===8)
                                 {
@@ -287,7 +283,6 @@ Item {
                                     s8.append(i, resDatas[7].res[i]);
                                 }
                                 axisX.max = resDate.length;
-                                console.log("updateChart end count is ",resDate.length)
                             }
                               // X 轴：分类轴
                             CategoryAxis
@@ -351,12 +346,10 @@ Item {
                                 for(var  i=0;i<resDate.length;i++)
                                 {
                                     axisBarX.append(resDate[i],i)
-                                    console.log("updatebar resDate[i] is ",resDate[i])
                                 }
 
                                 barSeries.append(resDatas[tabButtons.selectedIndex].name,resDatas[tabButtons.selectedIndex].res)
                                 axisBarX.max = resDate.length
-                                console.log("updatebar name is ",resDatas[tabButtons.selectedIndex].name)
                             }
 
                            // X 轴：分类轴
@@ -432,10 +425,6 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked:
                                 {
-                                    console.log(`photoArea x:${photoArea.x},y:${photoArea.y},photoArea.width:${photoArea.width},photoArea.height:${photoArea.width}`)
-                                    //console.log(`chartRow x:${chartRow.x},y:${chartRow.y},chartRow.width:${chartRow.width},chartRow.height:${chartRow.width}`)
-                                    console.log(modelData.text,modelData.index)
-
                                     if(index===4)
                                     {
                                         loadPage("logo.qml",{})

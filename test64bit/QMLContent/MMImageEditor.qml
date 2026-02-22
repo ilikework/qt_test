@@ -89,6 +89,16 @@ Item {
         return { x: h, y: k, r: r };
     }
 
+    // 当 mode 变化时，确保 C++ 端的编辑标记与 UI 同步
+    onCurrentModeChanged: {
+        if (root.currentMode === MMImageEditor.EditMode.EditSmooth) {
+            internalEditor.setAllItemsEditMode(true);
+        } else {
+            internalEditor.setAllItemsEditMode(false);
+            internalEditor.clearAllEditStates();
+        }
+    }
+
 
     // --- 1. 静态感应区 ---
     // 放在底层，不随工具栏移动，避免因为 UI 元素移动导致的 containsMouse 状态震荡
@@ -110,17 +120,18 @@ Item {
         id: headerContainer
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        width: 400
-        height: 100 // 感应高度
+        width: 532
+        height: 60 // 感应高度
         z: 999
 
-        // 静态感应逻辑
+        // 静态感应逻辑（仅用于检测鼠标悬停并显示手形光标，不拦截点击）
         MouseArea {
             id: staticSensor
             anchors.fill: parent
             hoverEnabled: true
-            // 拦截所有进入此区域的点击，防止点在按钮间隙时画线
-            onPressed: (mouse) => mouse.accepted = true
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.NoButton
+            z: 1000
         }
 
         Rectangle {
@@ -175,14 +186,15 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                     }
+                    // (cursor handled by staticSensor at header level)
                 }
 
                 ToolBtn { mode: MMImageEditor.EditMode.View; btnLabel: "平移" }
                 ToolBtn { mode: MMImageEditor.EditMode.Line; btnLabel: "测量" }
                 ToolBtn { mode: MMImageEditor.EditMode.Circle; btnLabel: "画圆" }
                 ToolBtn { mode: MMImageEditor.EditMode.Eraser; btnLabel: "橡皮擦" }
-                ToolBtn { mode: MMImageEditor.EditMode.ShowSmooth; btnLabel: "显示轮廓" ; onClicked: internalEditor.shapesVisible = true }
-                ToolBtn { id: editBtn;  mode: MMImageEditor.EditMode.EditSmooth; btnLabel: "精修轮廓"; onClicked:  internalEditor.setAllItemsEditMode(true) }
+                ToolBtn { mode: MMImageEditor.EditMode.ShowSmooth; btnLabel: "显示轮廓" }
+                ToolBtn { id: editBtn;  mode: MMImageEditor.EditMode.EditSmooth; btnLabel: "精修轮廓" }
                 // 重置按钮：点击后进入 None 模式（不显示图形）
                 ToolBtn { mode: MMImageEditor.EditMode.None; btnLabel: "隐藏" }
             }
@@ -282,7 +294,7 @@ Item {
 
                 cursorShape: {
                     if (root.currentMode === MMImageEditor.EditMode.View) return Qt.OpenHandCursor;
-                    if (root.currentMode === MMImageEditor.EditMode.Eraser) return Qt.PointingHandCursor;
+                    if (root.currentMode === MMImageEditor.EditMode.Eraser) return Qt.BlankCursor; // hide system cursor, show custom image
                     return Qt.CrossCursor;
                 }
 
@@ -355,6 +367,20 @@ Item {
                         root.selectedPointIdx = -1;
                     }
                 }
+            }
+
+            // Custom eraser cursor image (follows mouse when in Eraser mode)
+            Image {
+                id: eraserCursor
+                visible: root.currentMode === MMImageEditor.EditMode.Eraser && interactionArea.containsMouse
+                source: Qt.resolvedUrl("images/eraser_cursor.svg")
+                width: 56; height: 56
+                z: 2000
+                // position relative to interactionArea (interactionArea.mouseX/Y are local)
+                x: interactionArea.mouseX - width/2
+                y: interactionArea.mouseY - height/2
+                smooth: true
+                opacity: visible ? 1 : 0
             }
         }
     }

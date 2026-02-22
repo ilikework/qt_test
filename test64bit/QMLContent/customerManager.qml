@@ -33,7 +33,6 @@ Item {
         // 1. 优先使用用户上传的照片
         if (photo && photo !== "") {
 
-            console.log("file:///" + applicationDirPath + "/" + photo);
             return "file:///" + applicationDirPath + "/" + photo+ "?v=" + version;
         }
 
@@ -87,7 +86,6 @@ Item {
 
     function getRealIndex() {
         if (customerListView.currentIndex < 0) {
-            console.log("未选择任何客户")
             return -1;
         }
 
@@ -338,7 +336,6 @@ Item {
                 }
                 onHeightChanged:
                 {
-                    console.log("onHeightChanged in")
                     pageSize = Math.floor(customerListView.height / rowHeight)
                 }
             }
@@ -435,7 +432,7 @@ Item {
             TextButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
-                text: "进入详情"
+                text: "进入分析"
                 enabled: customerListView.currentIndex !== -1
                 onClicked:
                 {
@@ -443,7 +440,7 @@ Item {
                     if(realIndex<0) return
 
                     let customerId = customers[realIndex].id
-                    console.log("进入详情 customerId =", customerId)
+                    console.log("进入分析 customerId =", customerId)
 
                     loadPage("customerAnalyse.qml", {
                         customerID: customerId
@@ -458,7 +455,6 @@ Item {
 
                 onClicked:
                 {
-                    console.log("回到Home")
                     loadPage("logo.qml",{})
                 }
             }
@@ -473,7 +469,6 @@ Item {
             id: customerDialog
 
             onAccepted: function(customer) {
-                console.log("保存:", customer.name );
                 //customerListView[customerListView.currentIndex].customerphoto.source =""
                 customerListView.currentIndex = -1;
                 // 2. 调用 C++ 的方法将对象传回

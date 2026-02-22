@@ -127,11 +127,12 @@ CREATE TABLE IF NOT EXISTS T_Report_Template (
 );
 
 -- 产品/服务（预录用，与 T_Report_Template 风格一致）
+-- Offering_Price 为数值型（REAL）
 CREATE TABLE IF NOT EXISTS T_Offerings_Template (
   IX INTEGER PRIMARY KEY AUTOINCREMENT
   , Offering_Name TEXT
   , Offering_PhotoPath TEXT
-  , Offering_Price TEXT
+  , Offering_Price REAL
   , Offering_Usage TEXT
 );
 

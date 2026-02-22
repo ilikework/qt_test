@@ -4,14 +4,15 @@ import QtQuick.Dialogs
 import QtQuick.Controls.Basic
 import "components"
 
-Window {
+Window { // 给主窗口添加一个ID
+    id: backupRestoreWindow
     //visible: true
     width: 500
     height: 600
     flags: Qt.FramelessWindowHint
     property int baseFontSize: 20
     // Optional: set from parent (e.g. C++ backupManager). When null, Connections is no-op.
-    property var backupManager: null
+    //property var backupManager: null
 
     Connections {
         target: backupManager
@@ -19,11 +20,13 @@ Window {
 
         function onFinished(success, message) {
             // 弹出提示框或 console.log
-            console.log(message)
-            statusText.text = message
             if (success) {
-                progressBar.visualFocus = true
+                progressBar.value = 1.0
             }
+            statusText.text = message;
+
+            messageDialog.boxMessage = message;
+            messageDialog.open();
         }
 
         function onBackupProgress(progress) {
@@ -199,7 +202,6 @@ Window {
             TextButton { text: "开始"; width: 80
                 onClicked: {
                     if (pathField.text === "") {
-                        console.log("请先选择路径")
                         return
                     }
 
@@ -252,6 +254,16 @@ Window {
         }
         onAccepted: {
             pathField.text = selectedFile
+        }
+    }
+
+    MessageBox {
+        id: messageDialog
+        transientParent: backupRestoreWindow // 消息框的父窗口设置为BackupAndRestore.qml的主窗口
+        boxTitle: "操作完成"
+        onConfirmed: {
+            // 用户点击“确定”后关闭窗口
+            backupRestoreWindow.close() // 调用主窗口的close()方法
         }
     }
 }

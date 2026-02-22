@@ -13,10 +13,10 @@ Item   {
     property string customerID : ""
 
     signal requestShowMain()   // 请求返回主画面
+    signal photoSaved()      // 照片保存成功信号
 
     Connections {
         target: camClient
-        function onLog(msg) { console.log("[client]", msg) }
     }
 
     property var settings: camClient.settings
@@ -248,11 +248,11 @@ Item   {
                                 anchors.fill: parent
                                 onClicked:
                                 {
-                                    console.log(modelData.text, " clicked")
                                     switch (modelData.key)
                                     {
                                        case "save":
                                            camClient.save()
+                                           cameraRoot.photoSaved()
                                            cameraRoot.requestShowMain()
                                            break
                                        case "cancel":
@@ -262,7 +262,6 @@ Item   {
 
                                        case "preview":
                                            //cameraRoot.startPreview()
-                                            console.log("clicked preview, camClient=", camClient)
                                            camClient.startPreview()
                                            break
 

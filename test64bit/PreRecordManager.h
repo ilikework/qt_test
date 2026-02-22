@@ -2,12 +2,16 @@
 
 #include <QObject>
 #include <QVariantList>
+#include <QVariantMap>
 
 class PreRecordManager : public QObject
 {
     Q_OBJECT
 public:
     explicit PreRecordManager(QObject *parent = nullptr);
+
+    // 同步：从数据库重新加载所有数据到内存缓存
+    Q_INVOKABLE void syncWithDatabase();
 
     // 分量报告建议：从 T_Report_Template 读取，9 项与 reportLabels 对应，每项 { label, goodMemo, mediumMemo, badMemo }
     // reportIndex 0..8，tier 0=好 1=中 2=差 -> Report_LEVEL 30/20/10
@@ -22,8 +26,6 @@ public:
     // 报告关联的产品：reportIndex 0..8，tier 0/1/2；offeringIxs 为 T_Offerings_Template 的 IX 列表
     Q_INVOKABLE QVariantList getReportOfferings(int reportIndex, int tier) const;
     Q_INVOKABLE bool setReportOfferings(int reportIndex, int tier, const QVariantList &offeringIxs);
-
-    Q_INVOKABLE bool save();
 
 private:
     static int reportTypeByIndex(int index);   // 0..7 -> 1..8, 8 -> 100

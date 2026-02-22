@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24">
+  <!-- Simple eraser icon: slanted rectangle with a small shadow -->
+  <g fill="none" stroke="none">
+    <path d="M3 17.25L10.75 9.5 14.5 13.25 6.75 21H3v-3.75z" fill="#ffffff" opacity="0.95"/>
+    <path d="M10.75 9.5L14.5 13.25 20.5 7.25 16.75 3.5 10.75 9.5z" fill="#f0f0f0" stroke="#999999" stroke-width="0.5"/>
+    <path d="M4.5 19.5L7 22l2.5-2.5" stroke="#cccccc" stroke-width="0.6" stroke-linecap="round"/>
+  </g>
+</svg>

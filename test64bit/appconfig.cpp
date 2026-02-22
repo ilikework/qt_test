@@ -142,7 +142,6 @@ int AppConfig::AfterRGBShootInterval() const
         ret = m_root.value("AfterRGBShootInterval").toInt();
     }
 
-    qDebug() << "AfterRGBShootInterval ret=" << ret;
     return ret;
 }
 
@@ -156,7 +155,6 @@ int AppConfig::BeforeUVShootInterval() const
         ret = m_root.value("BeforeUVShootInterval").toInt();
     }
 
-    qDebug() << "BeforeUVShootInterval ret=" << ret;
     return ret;
 }
 
@@ -169,7 +167,6 @@ int AppConfig::AfterUVShootInterval() const
     {
         ret = m_root.value("AfterUVShootInterval").toInt();
     }
-    qDebug() << "AfterUVShootInterval ret=" << ret;
 
     return ret;
 }
@@ -184,7 +181,6 @@ int AppConfig::BeforePLShootInterval() const
         ret = m_root.value("BeforePLShootInterval").toInt();
     }
 
-    qDebug() << "BeforePLShootInterval ret=" << ret;
     return ret;
 }
 
@@ -198,7 +194,6 @@ int AppConfig::AfterPLShootInterval() const
         ret = m_root.value("AfterPLShootInterval").toInt();
     }
 
-    qDebug() << "AfterPLShootInterval ret=" << ret;
     return ret;
 }
 
@@ -212,7 +207,6 @@ int AppConfig::BeforeNPLShootInterval() const
         ret = m_root.value("BeforeNPLShootInterval").toInt();
     }
 
-    qDebug() << "BeforeNPLShootInterval ret=" << ret;
     return ret;
 }
 
@@ -226,7 +220,6 @@ int AppConfig::AfterNPLShootInterval() const
         ret = m_root.value("AfterNPLShootInterval").toInt();
     }
 
-    qDebug() << "AfterNPLShootInterval ret=" << ret;
     return ret;
 }
 
@@ -240,7 +233,6 @@ QString AppConfig::GrayCreateFrom() const
         ret = m_root.value("GrayCreateFrom").toString();
     }
 
-    qDebug() << "GrayCreateFrom ret=" << ret;
     return ret;
 }
 
@@ -254,7 +246,6 @@ QString AppConfig::RedCreateFrom() const
         ret = m_root.value("RedCreateFrom").toString();
     }
 
-    qDebug() << "RedCreateFrom ret=" << ret;
     return ret;
 
 }
@@ -269,7 +260,6 @@ QString AppConfig::BrownCreateFrom() const
         ret = m_root.value("BrownCreateFrom").toString();
     }
 
-    qDebug() << "BrownCreateFrom ret=" << ret;
     return ret;
 
 }
@@ -284,7 +274,6 @@ QString AppConfig::WholeCreateFrom() const
         ret = m_root.value("WholeCreateFrom").toString();
     }
 
-    qDebug() << "WholeCreateFrom ret=" << ret;
     return ret;
 
 }

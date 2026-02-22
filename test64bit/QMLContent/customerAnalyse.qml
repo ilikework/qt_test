@@ -28,8 +28,8 @@ Item {
 
     Component.onCompleted:
     {
-        console.log("Component.onCompleted start")
         analyseModule.init(customerID);
+        curIndex = 0;
 
         loadsubphotoes(0)
 
@@ -144,7 +144,6 @@ Item {
                     }
                     onWidthChanged:
                     {
-                        console.log("onWidthChanged in")
                         pageSize = Math.floor(thumbRow.width / thumbRow.rowWidth)
                     }
                 }
@@ -262,7 +261,6 @@ Item {
                         text: "报告"
                         onClicked:
                         {
-                            console.log("进入报告", customerID)
                             loadPage("customerReport.qml", { customerID: customerID })
 
                         }
@@ -273,7 +271,6 @@ Item {
                         text: "回到Home"
                         onClicked:
                         {
-                            console.log("回到Home")
                             loadPage("logo.qml",{})
                         }
                     }
@@ -498,7 +495,6 @@ Item {
 
                         // 状态变化时调用
                         onStatusChanged: {
-                            console.log("RuntimeLoader status =", status, "error:", errorString)
 
                             if (status === RuntimeLoader.Success) {
                                 // 缩放整个导入的模型
@@ -511,14 +507,12 @@ Item {
 
                         // 递归函数：从某个 node 往下找所有有 materials 属性的对象
                         function applyMaterialRecursively(node) {
-                            console.log( node)
                             if (!node)
                                 return
 
                             // 注意：这里不要在 QML 静态代码里写 materials:
                             // 而是运行时检查有没有这个属性
                             if ("materials" in node) {
-                                console.log("found Model-like node, set materials:", node)
                                 node.materials = [ skinMat ]
                             }
 
@@ -556,7 +550,6 @@ Item {
                     }
 
                     Component.onCompleted: {
-                        console.log("View3D size =", width, height)
                     }
                 }
             }
@@ -566,7 +559,16 @@ Item {
                 customerID : customerDetail.customerID
                 onRequestShowMain: {
                     viewStack.currentIndex = 0   // 切回主画面
-                }}
+                    btnMain.checked = true
+                    btnCamera.checked = false
+                }
+                onPhotoSaved: {
+                    // 照片保存成功，重新加载缩略图
+                    analyseModule.init(customerID)
+                    curIndex = 0;
+                    loadsubphotoes(curIndex)
+                }
+            }
 
             /* 3: 九画面 */
             Rectangle { color: "#18181b"; Label { anchors.centerIn: parent; text: "九画面" } }

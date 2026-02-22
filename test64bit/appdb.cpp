@@ -612,6 +612,7 @@ bool AppDb::findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &p
                     FROM
                       T_Customers_FacePhoto
                     WHERE Cust_ID = :id
+                    ORDER BY Group_ID DESC
                     )";
     q.prepare(sql);
     q.bindValue(":id",CustomID);
@@ -814,7 +815,28 @@ bool AppDb::setReportTemplateMemo(int reportType, int reportLevel, const QString
 
 QVector<QVariantMap> AppDb::getOfferingsTemplateList()
 {
-    exec("CREATE TABLE IF NOT EXISTS T_Offerings_Template (IX INTEGER PRIMARY KEY AUTOINCREMENT, Offering_Name TEXT, Offering_PhotoPath TEXT, Offering_Price TEXT, Offering_Usage TEXT)");
+    const char* createSql = "CREATE TABLE IF NOT EXISTS T_Offerings_Template (IX INTEGER PRIMARY KEY AUTOINCREMENT, Offering_Name TEXT, Offering_PhotoPath TEXT, Offering_Price REAL, Offering_Usage TEXT)";
+    exec(createSql);
+
+    // 迁移：若表中 Offering_Price 为 TEXT，则删表重建（按需求清空旧数据）
+    if (m_db.isOpen()) {
+        QSqlQuery q(m_db);
+        if (q.exec("PRAGMA table_info(T_Offerings_Template)")) {
+            bool dropAndRecreate = false;
+            while (q.next()) {
+                // PRAGMA table_info 列顺序: cid=0, name=1, type=2
+                if (q.value(1).toString() == "Offering_Price" && q.value(2).toString().toLower() == "text") {
+                    dropAndRecreate = true;
+                    break;
+                }
+            }
+            if (dropAndRecreate) {
+                exec("DROP TABLE IF EXISTS T_Offerings_Template");
+                exec(createSql);
+            }
+        }
+    }
+
     QVector<QVariantMap> rows = select("SELECT IX, Offering_Name, Offering_PhotoPath, Offering_Price, Offering_Usage FROM T_Offerings_Template ORDER BY IX ASC");
     for (QVariantMap &m : rows) {
         if (m.contains("Offering_Name")) { m["name"] = m.take("Offering_Name"); }
@@ -825,7 +847,7 @@ QVector<QVariantMap> AppDb::getOfferingsTemplateList()
     return rows;
 }
 
-int AppDb::insertOfferingsTemplate(const QString &name, const QString &photoPath, const QString &price, const QString &usage)
+int AppDb::insertOfferingsTemplate(const QString &name, const QString &photoPath, double price, const QString &usage)
 {
     if (!m_db.isOpen()) { m_lastError = "DB not open"; return -1; }
     QSqlQuery q(m_db);
@@ -838,7 +860,7 @@ int AppDb::insertOfferingsTemplate(const QString &name, const QString &photoPath
     return q.lastInsertId().toInt();
 }
 
-bool AppDb::updateOfferingsTemplate(int ix, const QString &name, const QString &photoPath, const QString &price, const QString &usage)
+bool AppDb::updateOfferingsTemplate(int ix, const QString &name, const QString &photoPath, double price, const QString &usage)
 {
     return exec("UPDATE T_Offerings_Template SET Offering_Name = ?, Offering_PhotoPath = ?, Offering_Price = ?, Offering_Usage = ? WHERE IX = ?",
                 { name, photoPath, price, usage, ix });

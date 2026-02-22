@@ -18,7 +18,6 @@ ApplicationWindow {
                 dlg.show()
             }
         } else if (c.status === Component.Error) {
-                    console.error("Error loading PreRecordDialog:", c.errorString())
                 }
             })
         } else if (c.status === Component.Ready) {

@@ -18,8 +18,6 @@ Window {
         source: "logo.qml"
 
         onLoaded: {
-            console.log("onLoaded:", item)
-
             // if (loadParams && item) {
             //     for (var key in loadParams) {
             //         console.log("assign:", key, "=", loadParams[key])
@@ -36,7 +34,6 @@ Window {
         target: pageLoader.item
 
         function onLoadPage(page, params) {
-            console.log("onLoadPage", page, params)
             root.loadParams = params || {}   // 保存参数
             pageLoader.setSource(page, params)
             //pageLoader.source = page         // 加载新页面

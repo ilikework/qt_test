@@ -25,6 +25,8 @@ Window {
     property var selectedOfferings: []
 
     ListModel { id: productsModel }
+    /// 暴露给子组件（如 OfferingPickerDialog）：子组件里 host.productsModel 取不到 id，需用 host 上的属性
+    property alias hostProductsModel: productsModel
     ListModel { id: reportModel }
 
     function ensureSelectedOfferings() {
@@ -38,33 +40,6 @@ Window {
     function reportGoodMemo(i) { return (reportModel.count > i) ? reportModel.get(i).goodMemo : "" }
     function reportMediumMemo(i) { return (reportModel.count > i) ? reportModel.get(i).mediumMemo : "" }
     function reportBadMemo(i) { return (reportModel.count > i) ? reportModel.get(i).badMemo : "" }
-    function isProductSelected(reportIdx, tier, productIdx) {
-        ensureSelectedOfferings()
-        if (reportIdx < 0 || reportIdx >= selectedOfferings.length) return false
-        var row = selectedOfferings[reportIdx]
-        if (!row || tier < 0 || tier > 2) return false
-        var arr = row[tier]
-        return arr && arr.indexOf(productIdx) >= 0
-    }
-    function toggleProductSelected(reportIdx, tier, productIdx) {
-        ensureSelectedOfferings()
-        if (reportIdx < 0 || reportIdx >= selectedOfferings.length || tier < 0 || tier > 2) return
-        var next = []
-        for (var r = 0; r < selectedOfferings.length; r++) {
-            var row = selectedOfferings[r]
-            next[r] = [
-                (row && row[0] ? row[0].slice() : []),
-                (row && row[1] ? row[1].slice() : []),
-                (row && row[2] ? row[2].slice() : [])
-            ]
-        }
-        var arr = next[reportIdx][tier]
-        var i = arr.indexOf(productIdx)
-        if (i >= 0) arr.splice(i, 1)
-        else arr.push(productIdx)
-        selectedOfferings = next
-        syncReportOfferingsToDb()
-    }
     function removeProductSelected(reportIdx, tier, productIdx) {
         ensureSelectedOfferings()
         if (reportIdx < 0 || reportIdx >= selectedOfferings.length || tier < 0 || tier > 2) return
@@ -81,7 +56,7 @@ Window {
         var i = arr.indexOf(productIdx)
         if (i >= 0) arr.splice(i, 1)
         selectedOfferings = next
-        syncReportOfferingsToDb()
+        preRecordDirty = true
     }
     function getSelectedProductName(reportIdx, tier, slotIndex) {
         ensureSelectedOfferings()
@@ -100,22 +75,51 @@ Window {
         return arr[slotIndex]
     }
 
+    /// 设置某报告某档的已选产品（indices 为 productsModel 的索引）。markDirty：是否记为未保存（true=用户点确定，false=打开 picker 时从 DB 初始化）
+    function setSelectedOfferingsForReport(rIdx, tIdx, indices, markDirty) {
+        ensureSelectedOfferings()
+        if (rIdx < 0 || rIdx >= selectedOfferings.length || tIdx < 0 || tIdx > 2) return
+        var next = []
+        for (var r = 0; r < selectedOfferings.length; r++) {
+            var row = selectedOfferings[r]
+            next[r] = [
+                (row && row[0] ? row[0].slice() : []),
+                (row && row[1] ? row[1].slice() : []),
+                (row && row[2] ? row[2].slice() : [])
+            ]
+        }
+        next[rIdx][tIdx] = (indices && indices.slice) ? indices.slice() : (indices || [])
+        selectedOfferings = next
+        if (markDirty) preRecordDirty = true
+    }
+
     function openProductPicker(rIdx, tIdx) {
         offeringPickerDialog.openFor(rIdx, tIdx)
     }
 
     property bool _usePreRecordManager: typeof preRecordManager !== "undefined"
+    /// 暴露给子组件用，避免子组件内 preRecordManager 绑定自引用导致 binding loop
+    property var productsManager: typeof preRecordManager !== "undefined" ? preRecordManager : null
+    /// 是否有未保存的修改（产品/报告建议/报告关联产品）；无修改时保存按钮仅关闭，不写库
+    property bool preRecordDirty: false
+    /// 为 true 时报告建议 onTextChanged 不置 dirty（避免首次加载时绑定更新触发保存确认）
+    property bool _suppressDirtyFromLoad: false
 
     function buildProductsList() {
         var list = []
         for (var i = 0; i < productsModel.count; i++) {
             var p = productsModel.get(i)
+            var priceVal = p.price
+            var priceNum = (priceVal !== undefined && priceVal !== null && priceVal !== "")
+                ? (typeof priceVal === "number" ? priceVal : Number(priceVal))
+                : 0
+            if (isNaN(priceNum) || priceNum < 0) priceNum = 0
             list.push({
                 IX: p.IX || 0,
-                name: p.name || "",
-                price: p.price || "",
-                usage: p.usage || "",
-                photoPath: p.photoPath || ""
+                name: (p.name !== undefined && p.name !== null) ? String(p.name) : "",
+                price: priceNum,
+                usage: (p.usage !== undefined && p.usage !== null) ? String(p.usage) : "",
+                photoPath: (p.photoPath !== undefined && p.photoPath !== null) ? String(p.photoPath) : ""
             })
         }
         return list
@@ -123,6 +127,8 @@ Window {
 
     function loadFromPreRecordManager() {
         if (!_usePreRecordManager) return
+        _suppressDirtyFromLoad = true
+        preRecordDirty = false
         var products = preRecordManager.getProducts()
         productsModel.clear()
         for (var i = 0; i < products.length; i++)
@@ -148,56 +154,81 @@ Window {
             }
         }
         selectedOfferings = selectedOfferings
+        Qt.callLater(function() { _suppressDirtyFromLoad = false })
     }
 
-    function reloadProductsOnly() {
-        if (!_usePreRecordManager) return
-        var products = preRecordManager.getProducts()
-        productsModel.clear()
-        for (var i = 0; i < products.length; i++)
-            productsModel.append(products[i])
+    function isPriceValid(text) {
+        if (text === null || text === undefined) return false
+        var s = String(text).trim()
+        if (s === "") return true
+        var n = Number(s)
+        return !isNaN(n) && n >= 0
     }
 
-    function saveProductsToDb() {
-        if (!_usePreRecordManager) return
+    /// 保存前校验：产品名称不能为空。返回 { ok: bool, emptyAt: number? }
+    function checkProductNamesNonEmpty() {
+        for (var i = 0; i < productsModel.count; i++) {
+            var name = String(productsModel.get(i).name || "").trim()
+            if (name === "") return { ok: false, emptyAt: i }
+        }
+        return { ok: true, emptyAt: -1 }
+    }
+    /// 保存前校验：每条产品必须填写价格（可为 0，不可为空）。返回 { ok: bool, emptyAt: number? }
+    function checkProductPricesFilled() {
+        for (var i = 0; i < productsModel.count; i++) {
+            var p = productsModel.get(i).price
+            if (p === undefined || p === null || p === "") return { ok: false, emptyAt: i }
+            var s = String(p).trim()
+            if (s === "") return { ok: false, emptyAt: i }
+            var n = Number(s)
+            if (isNaN(n) || n < 0) return { ok: false, emptyAt: i }
+        }
+        return { ok: true, emptyAt: -1 }
+    }
+    /// 保存前校验：产品名称不能重复（非空名称）。返回 { ok: bool, duplicateName: string? }
+    function checkProductNamesUnique() {
+        var seen = {}
+        for (var i = 0; i < productsModel.count; i++) {
+            var name = String(productsModel.get(i).name || "").trim()
+            if (name === "") continue
+            if (seen[name]) return { ok: false, duplicateName: name }
+            seen[name] = true
+        }
+        return { ok: true, duplicateName: null }
+    }
+
+    /// 统一保存到数据库：产品名称非空+不重复校验 → 保存产品 → 保存各报告 memo → 保存各报告关联产品（T_Report_Offerings_Template）
+    function doSaveToDb() {
+        if (!_usePreRecordManager) return true
+        var emptyCheck = checkProductNamesNonEmpty()
+        if (!emptyCheck.ok) {
+            saveErrorDialog.boxMessage = "请填写产品名称（第 " + (emptyCheck.emptyAt + 1) + " 条名称为空）"
+            saveErrorDialog.open()
+            return false
+        }
+        var namesCheck = checkProductNamesUnique()
+        if (!namesCheck.ok) {
+            saveErrorDialog.boxMessage = "产品名称不能重复：「" + (namesCheck.duplicateName || "") + "」"
+            saveErrorDialog.open()
+            return false
+        }
+        var priceCheck = checkProductPricesFilled()
+        if (!priceCheck.ok) {
+            saveErrorDialog.boxMessage = "请填写价格（第 " + (priceCheck.emptyAt + 1) + " 条价格为空，0 为有效值）"
+            saveErrorDialog.open()
+            return false
+        }
         ensureSelectedOfferings()
-        var savedIxs = []
+        if (!preRecordManager.saveProducts(buildProductsList())) return false
+        preRecordDirty = false
         for (var r = 0; r < 9; r++) {
-            savedIxs[r] = [[], [], []]
-            for (var t = 0; t < 3; t++) {
-                var arr = selectedOfferings[r] && selectedOfferings[r][t] ? selectedOfferings[r][t] : []
-                for (var k = 0; k < arr.length; k++) {
-                    var idx = arr[k]
-                    if (idx >= 0 && idx < productsModel.count) {
-                        var ix = productsModel.get(idx).IX
-                        if (ix) savedIxs[r][t].push(ix)
-                    }
-                }
+            if (r < reportModel.count) {
+                var rec = reportModel.get(r)
+                preRecordManager.setReportMemo(r, 0, rec.goodMemo || "")
+                preRecordManager.setReportMemo(r, 1, rec.mediumMemo || "")
+                preRecordManager.setReportMemo(r, 2, rec.badMemo || "")
             }
         }
-        if (!preRecordManager.saveProducts(buildProductsList())) return
-        reloadProductsOnly()
-        for (var r = 0; r < 9; r++) {
-            for (var t = 0; t < 3; t++) {
-                var indices = []
-                for (var k = 0; k < savedIxs[r][t].length; k++) {
-                    var ix = savedIxs[r][t][k]
-                    for (var j = 0; j < productsModel.count; j++) {
-                        if (productsModel.get(j).IX === ix) {
-                            indices.push(j)
-                            break
-                        }
-                    }
-                }
-                selectedOfferings[r][t] = indices
-            }
-        }
-        selectedOfferings = selectedOfferings
-    }
-
-    function syncReportOfferingsToDb() {
-        if (!_usePreRecordManager) return
-        if (!preRecordManager.saveProducts(buildProductsList())) return
         for (var r = 0; r < 9; r++) {
             for (var t = 0; t < 3; t++) {
                 var arr = selectedOfferings[r] && selectedOfferings[r][t] ? selectedOfferings[r][t] : []
@@ -212,6 +243,7 @@ Window {
                 preRecordManager.setReportOfferings(r, t, ixs)
             }
         }
+        return true
     }
 
     onVisibleChanged: {
@@ -292,7 +324,11 @@ Window {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: tabRow.currentIndex = 1
+                    onClicked: {
+                        if (tabRow.currentIndex === 1) return
+                        if (!preRecordDirty) { tabRow.currentIndex = 1; return }
+                        savePromptDialog.open()
+                    }
                 }
             }
         }
@@ -322,9 +358,9 @@ Window {
                         Layout.alignment: Qt.AlignRight
                         text: "添加"
                         onClicked: {
-                                                        productsModel.append({ name: "", price: "", usage: "", photoPath: "" })
-                                                        saveProductsToDb()
-                                                    }
+                            productsModel.append({ name: "", price: "", usage: "", photoPath: "" })
+                            preRecordDirty = true
+                        }
                     }
                     ScrollView {
                         Layout.fillWidth: true
@@ -397,28 +433,56 @@ Window {
                                                     border.color: "#555"
                                                 }
                                                 onTextChanged: {
-                                                    if (index >= 0 && index < productsModel.count && String(model.name) !== text) {
+                                                    if (typeof index !== "undefined" && index >= 0 && index < productsModel.count && String(model.name) !== text) {
                                                         productsModel.setProperty(index, "name", text)
-                                                        saveProductsToDb()
+                                                        preRecordDirty = true
+                                                    }
+                                                }
+                                                onEditingFinished: {
+                                                    if (typeof index !== "undefined" && index >= 0 && index < productsModel.count && String(model.name) !== text) {
+                                                        productsModel.setProperty(index, "name", text)
+                                                        preRecordDirty = true
                                                     }
                                                 }
                                             }
                                             TextField {
+                                                id: priceField
                                                 Layout.fillWidth: true
-                                                placeholderText: "价格"
-                                                text: model.price
+                                                placeholderText: "价格（必填，数字≥0，可为0）"
+                                                text: (typeof model.price === "number") ? model.price : (model.price !== undefined && model.price !== null && model.price !== "" ? String(model.price) : "")
                                                 font.pixelSize: 14
                                                 color: "#ffffff"
                                                 placeholderTextColor: "#888"
+                                                validator: DoubleValidator { bottom: 0; decimals: 2; locale: "C" }
                                                 background: Rectangle {
-                                                    color: "#333"
+                                                    color: priceField.activeFocus && !isPriceValid(priceField.text) ? "#442222" : "#333"
                                                     radius: 4
-                                                    border.color: "#555"
+                                                    border.color: priceField.activeFocus && !isPriceValid(priceField.text) ? "#aa5555" : "#555"
                                                 }
                                                 onTextChanged: {
-                                                    if (index >= 0 && index < productsModel.count && String(model.price) !== text) {
-                                                        productsModel.setProperty(index, "price", text)
-                                                        saveProductsToDb()
+                                                    if (typeof index === "undefined" || index < 0 || index >= productsModel.count) return
+                                                    var t = text.trim()
+                                                    if (t === "") {
+                                                        productsModel.setProperty(index, "price", "")
+                                                        preRecordDirty = true
+                                                        return
+                                                    }
+                                                    if (isPriceValid(t)) {
+                                                        var num = Number(t)
+                                                        var cur = model.price
+                                                        var curNum = (typeof cur === "number") ? cur : (cur === "" || cur === undefined || cur === null ? NaN : Number(cur))
+                                                        if (curNum !== num) {
+                                                            productsModel.setProperty(index, "price", num)
+                                                            preRecordDirty = true
+                                                        }
+                                                    }
+                                                }
+                                                onEditingFinished: {
+                                                    if (typeof index === "undefined" || index < 0 || index >= productsModel.count) return
+                                                    var t = text.trim()
+                                                    if (!isPriceValid(t) && t !== "") {
+                                                        var prev = productsModel.get(index).price
+                                                        productsModel.setProperty(index, "price", prev !== undefined && prev !== null && prev !== "" ? prev : "")
                                                     }
                                                 }
                                             }
@@ -436,9 +500,15 @@ Window {
                                                     border.color: "#555"
                                                 }
                                                 onTextChanged: {
-                                                    if (index >= 0 && index < productsModel.count) {
+                                                    if (typeof index !== "undefined" && index >= 0 && index < productsModel.count && String(model.usage || "") !== text) {
                                                         productsModel.setProperty(index, "usage", text)
-                                                        saveProductsToDb()
+                                                        preRecordDirty = true
+                                                    }
+                                                }
+                                                onEditingFinished: {
+                                                    if (typeof index !== "undefined" && index >= 0 && index < productsModel.count && String(model.usage || "") !== text) {
+                                                        productsModel.setProperty(index, "usage", text)
+                                                        preRecordDirty = true
                                                     }
                                                 }
                                             }
@@ -451,7 +521,7 @@ Window {
                                             onClicked: {
                                                 if (index >= 0 && index < productsModel.count) {
                                                     productsModel.remove(index)
-                                                    saveProductsToDb()
+                                                    preRecordDirty = true
                                                 }
                                             }
                                         }
@@ -558,7 +628,7 @@ Window {
                                                     onTextChanged: {
                                                         if (reportIdx < reportModel.count) {
                                                             reportModel.setProperty(reportIdx, "goodMemo", text)
-                                                            if (_usePreRecordManager) preRecordManager.setReportMemo(reportIdx, 0, text)
+                                                            if (!_suppressDirtyFromLoad) preRecordDirty = true
                                                         }
                                                     }
                                                 }
@@ -598,21 +668,32 @@ Window {
                                                             model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][0] ? selectedOfferings[parent.parent.rIdx][0].length : 0
                                                             delegate: Row {
                                                                 spacing: 2
-                                                                property int rIdx: parent.parent.parent.rIdx
+                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
                                                                 Rectangle {
-                                                                    width: (children[0] ? children[0].implicitWidth : 0) + 28
-                                                                    height: 24
+                                                                    width: 120
+                                                                    height: 22
                                                                     radius: 4
                                                                     color: "#3a3a3a"
                                                                     border.color: "#555"
-                                                                    Text { text: getSelectedProductName(rIdx, 0, index); color: "#ffffff"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 5 }
+                                                                    Text {
+                                                                        text: getSelectedProductName(rIdx, 0, index)
+                                                                        color: "#ffffff"
+                                                                        font.pixelSize: 12
+                                                                        anchors.verticalCenter: parent.verticalCenter
+                                                                        anchors.left: parent.left
+                                                                        anchors.right: parent.right
+                                                                        anchors.leftMargin: 6
+                                                                        anchors.rightMargin: 20
+                                                                        elide: Text.ElideRight
+                                                                    }
                                                                     TextButton {
-                                                                        width: 24
-                                                                        height: 24
+                                                                        width: 16
+                                                                        height: 16
                                                                         anchors.right: parent.right
                                                                         anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 2
+                                                                        anchors.rightMargin: 3
                                                                         text: "×"
+                                                                        font.pixelSize: 11
                                                                         onClicked: removeProductSelected(rIdx, 0, getSelectedProductIx(rIdx, 0, index))
                                                                     }
                                                                 }
@@ -639,7 +720,7 @@ Window {
                                                     onTextChanged: {
                                                         if (reportIdx < reportModel.count) {
                                                             reportModel.setProperty(reportIdx, "mediumMemo", text)
-                                                            if (_usePreRecordManager) preRecordManager.setReportMemo(reportIdx, 1, text)
+                                                            if (!_suppressDirtyFromLoad) preRecordDirty = true
                                                         }
                                                     }
                                                 }
@@ -679,21 +760,32 @@ Window {
                                                             model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][1] ? selectedOfferings[parent.parent.rIdx][1].length : 0
                                                             delegate: Row {
                                                                 spacing: 2
-                                                                property int rIdx: parent.parent.parent.rIdx
+                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
                                                                 Rectangle {
-                                                                    width: (children[0] ? children[0].implicitWidth : 0) + 28
-                                                                    height: 24
+                                                                    width: 120
+                                                                    height: 22
                                                                     radius: 4
                                                                     color: "#3a3a3a"
                                                                     border.color: "#555"
-                                                                    Text { text: getSelectedProductName(rIdx, 1, index); color: "#ffffff"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 5 }
+                                                                    Text {
+                                                                        text: getSelectedProductName(rIdx, 1, index)
+                                                                        color: "#ffffff"
+                                                                        font.pixelSize: 12
+                                                                        anchors.verticalCenter: parent.verticalCenter
+                                                                        anchors.left: parent.left
+                                                                        anchors.right: parent.right
+                                                                        anchors.leftMargin: 6
+                                                                        anchors.rightMargin: 20
+                                                                        elide: Text.ElideRight
+                                                                    }
                                                                     TextButton {
-                                                                        width: 24
-                                                                        height: 24
+                                                                        width: 16
+                                                                        height: 16
                                                                         anchors.right: parent.right
                                                                         anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 2
+                                                                        anchors.rightMargin: 3
                                                                         text: "×"
+                                                                        font.pixelSize: 11
                                                                         onClicked: removeProductSelected(rIdx, 1, getSelectedProductIx(rIdx, 1, index))
                                                                     }
                                                                 }
@@ -720,7 +812,7 @@ Window {
                                                     onTextChanged: {
                                                         if (reportIdx < reportModel.count) {
                                                             reportModel.setProperty(reportIdx, "badMemo", text)
-                                                            if (_usePreRecordManager) preRecordManager.setReportMemo(reportIdx, 2, text)
+                                                            if (!_suppressDirtyFromLoad) preRecordDirty = true
                                                         }
                                                     }
                                                 }
@@ -760,21 +852,32 @@ Window {
                                                             model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][2] ? selectedOfferings[parent.parent.rIdx][2].length : 0
                                                             delegate: Row {
                                                                 spacing: 2
-                                                                property int rIdx: parent.parent.parent.rIdx
+                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
                                                                 Rectangle {
-                                                                    width: (children[0] ? children[0].implicitWidth : 0) + 28
-                                                                    height: 24
+                                                                    width: 120
+                                                                    height: 22
                                                                     radius: 4
                                                                     color: "#3a3a3a"
                                                                     border.color: "#555"
-                                                                    Text { text: getSelectedProductName(rIdx, 2, index); color: "#ffffff"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 5 }
+                                                                    Text {
+                                                                        text: getSelectedProductName(rIdx, 2, index)
+                                                                        color: "#ffffff"
+                                                                        font.pixelSize: 12
+                                                                        anchors.verticalCenter: parent.verticalCenter
+                                                                        anchors.left: parent.left
+                                                                        anchors.right: parent.right
+                                                                        anchors.leftMargin: 6
+                                                                        anchors.rightMargin: 20
+                                                                        elide: Text.ElideRight
+                                                                    }
                                                                     TextButton {
-                                                                        width: 24
-                                                                        height: 24
+                                                                        width: 16
+                                                                        height: 16
                                                                         anchors.right: parent.right
                                                                         anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 2
+                                                                        anchors.rightMargin: 3
                                                                         text: "×"
+                                                                        font.pixelSize: 11
                                                                         onClicked: removeProductSelected(rIdx, 2, getSelectedProductIx(rIdx, 2, index))
                                                                     }
                                                                 }
@@ -789,7 +892,7 @@ Window {
                             }
                         }
                     }
-                }
+        }
             }
         }
 
@@ -803,7 +906,10 @@ Window {
                 text: "保存"
                 width: 90
                 height: 40
-                onClicked: close()
+                onClicked: {
+                    if (!preRecordDirty) { close(); return }
+                    if (doSaveToDb()) close()
+                }
             }
             TextButton {
                 text: "返回"
@@ -818,6 +924,7 @@ Window {
         id: offeringPickerDialog
         host: preRecordWin
         transientParent: preRecordWin
+        preRecordManager: preRecordWin.productsManager
     }
 
     FileDialog {
@@ -831,8 +938,34 @@ Window {
                 var path = selectedFile.toString()
                 if (path.indexOf("file:///") === 0) path = path.substring(8)
                 productsModel.setProperty(currentIndex, "photoPath", path)
-                saveProductsToDb()
+                preRecordDirty = true
             }
+        }
+    }
+
+    MessageBox {
+        id: saveErrorDialog
+        transientParent: preRecordWin
+        boxTitle: "保存失败"
+        boxMessage: ""
+    }
+
+    Dialog {
+        id: savePromptDialog
+        title: "保存到数据库"
+        modal: true
+        anchors.centerIn: parent
+        width: 320
+        contentItem: Item {
+            width: 280
+            height: 40
+            Text { text: "是否保存当前修改到数据库？"; color: "#fff"; wrapMode: Text.WordWrap; anchors.fill: parent }
+        }
+        background: Rectangle { color: "#2c2c2c"; border.color: "#555"; radius: 8 }
+        footer: Row {
+            spacing: 12
+            TextButton { text: "保存"; onClicked: { if (doSaveToDb()) tabRow.currentIndex = 1; savePromptDialog.close() } }
+            TextButton { text: "不保存"; onClicked: { tabRow.currentIndex = 1; savePromptDialog.close() } }
         }
     }
 }

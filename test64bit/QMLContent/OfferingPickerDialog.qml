@@ -18,12 +18,16 @@ Window {
 
     // 由调用方设置后 show()
     property var host: null
+    /// 若设置，打开时从此 manager 的 getProducts() 拉取 T_Offerings_Template 数据并填入 host，确保列表来自数据库
+    property var preRecordManager: null
     property int reportIdx: -1
     property int tier: -1
-    property var productsModel: host ? host.productsModel : null
+    property var productsModel: host ? host.hostProductsModel : null
 
     ListModel { id: filteredProductsModel }
     property string productFilterText: ""
+    /// 弹窗内本地勾选状态，仅点「确定」时写回 host，避免选择时立刻出现在报告预录
+    property var pendingSelection: []
 
     function rebuildFilteredProducts() {
         filteredProductsModel.clear()
@@ -32,29 +36,52 @@ Window {
         for (var i = 0; i < productsModel.count; i++) {
             var p = productsModel.get(i)
             var name = (p.name || "").toLowerCase()
+            var priceVal = p.price
+            var priceStr = (priceVal !== undefined && priceVal !== null) ? (typeof priceVal === "number" ? String(priceVal) : String(priceVal)) : ""
             if (!filter || name.indexOf(filter) >= 0)
-                filteredProductsModel.append({ productIndex: i, name: p.name || "未命名", price: p.price || "" })
+                filteredProductsModel.append({ productIndex: i, name: p.name || "未命名", price: priceStr })
         }
     }
 
     function isSelected(productIndex) {
-        if (!host || reportIdx < 0 || tier < 0 || tier > 2) return false
-        return host.isProductSelected(reportIdx, tier, productIndex)
+        return pendingSelection.indexOf(productIndex) >= 0
     }
 
     function toggleSelected(productIndex) {
-        if (!host || reportIdx < 0 || tier < 0 || tier > 2) return
-        host.toggleProductSelected(reportIdx, tier, productIndex)
+        var i = pendingSelection.indexOf(productIndex)
+        var next = pendingSelection.slice()
+        if (i >= 0) next.splice(i, 1)
+        else next.push(productIndex)
+        next.sort(function(a,b) { return a - b })
+        pendingSelection = next
     }
 
     function openFor(rIdx, tIdx) {
-        if (host) {
-            reportIdx = rIdx
-            tier = tIdx
-            productFilterText = ""
-            rebuildFilteredProducts()
-            show()
+        if (!host) return
+        reportIdx = rIdx
+        tier = tIdx
+        productFilterText = ""
+
+        // 1) 确保 host 的产品列表是最新的。
+        //    注意：loadFromPreRecordManager 会加载所有数据，包括产品和报告关联。
+        //    这可以确保在打开选择器之前，host 的数据是最新的。
+        //    如果 host 已经有未保存的修改，则不应执行此操作。
+        //    PreRecordDialog 的逻辑是 onVisibleChanged 时加载，这里不再需要重复加载。
+
+        // 2) 从 host (PreRecordDialog) 的暂存数据中初始化勾选状态
+        var indices = []
+        if (host && host.selectedOfferings && Array.isArray(host.selectedOfferings) &&
+            reportIdx >= 0 && reportIdx < host.selectedOfferings.length &&
+            tier >= 0 && tier < 3) {
+            var selections = host.selectedOfferings[reportIdx][tier]
+            if (selections && Array.isArray(selections)) {
+                indices = selections
+            }
         }
+
+        pendingSelection = indices.slice ? indices.slice() : indices
+        rebuildFilteredProducts()
+        show()
     }
 
     onProductsModelChanged: rebuildFilteredProducts()
@@ -233,7 +260,11 @@ Window {
                     text: "确定"
                     implicitWidth: 80
                     implicitHeight: 36
-                    onClicked: offeringPickerWin.close()
+                    onClicked: {
+                        if (host && typeof host.setSelectedOfferingsForReport === "function")
+                            host.setSelectedOfferingsForReport(reportIdx, tier, pendingSelection.slice(), true)
+                        offeringPickerWin.close()
+                    }
                 }
             }
         }

@@ -137,8 +137,8 @@ public:
 
     // 预录：T_Offerings_Template 产品/服务目录
     QVector<QVariantMap> getOfferingsTemplateList();
-    int insertOfferingsTemplate(const QString &name, const QString &photoPath, const QString &price, const QString &usage);
-    bool updateOfferingsTemplate(int ix, const QString &name, const QString &photoPath, const QString &price, const QString &usage);
+    int insertOfferingsTemplate(const QString &name, const QString &photoPath, double price, const QString &usage);
+    bool updateOfferingsTemplate(int ix, const QString &name, const QString &photoPath, double price, const QString &usage);
     bool deleteOfferingsTemplate(int ix);
 
     // 预录：T_Report_Offerings_Template，Report_IX -> 多个 Offering_IX（一个报告模板可关联多个产品/服务）

@@ -293,6 +293,7 @@ void CameraClient::save()
     right_pics_.clear();
     emit left_picsChanged();
     emit right_picsChanged();
+    GroupID_ =0;
 }
 
 void CameraClient::cancel()
@@ -451,8 +452,6 @@ void CameraClient::onDisconnected() {
 }
 
 void CameraClient::onErrorOccurred(const QString& err) {
-    qWarning() << "[CameraClient][SocketError]" << err;
-
     //emit socketError(err);
 
     //emit connectedChanged();
