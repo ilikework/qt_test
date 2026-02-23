@@ -4,10 +4,10 @@ setlocal
 
 REM --- 配置 ---
 SET "PROJECT_ROOT=%~dp0"
-SET "BUILD_DIR=%PROJECT_ROOT%build\Desktop_Qt_6_7_3_MSVC2022_64bit-Release"
+SET "BUILD_DIR=%PROJECT_ROOT%build\Desktop_Qt_6_10_2_MSVC2022_64bit-Release"
 REM 部署目录：当前目录(test64bit)的上一级目录下的 deploy
 SET "DEPLOY_DIR=%PROJECT_ROOT%..\deploy"
-SET "QT_BIN_DIR=C:\Qt\6.7.3\msvc2022_64\bin"
+SET "QT_BIN_DIR=C:\Qt\6.10.2\msvc2022_64\bin"
 SET "APP_EXE_NAME=apptest64bit.exe"
 
 REM 使用 UTF-8 编码，与文件编码保持一致，避免中文输出乱码
@@ -21,7 +21,7 @@ mkdir "%DEPLOY_DIR%"
 echo Created clean deployment directory.
 echo.
 
-REM --- 2. 运行 windeployqt 收集 Qt 依赖（含 QML 模块，否则部署后运行会黑屏）---
+REM --- 2. 运行 windeployqt 收集 Qt 依赖 ---
 echo Running windeployqt to gather Qt dependencies...
 "%QT_BIN_DIR%\windeployqt.exe" ^
   --release ^

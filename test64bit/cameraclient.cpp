@@ -78,6 +78,9 @@ CameraClient::CameraClient(CameraImageProvider* provider, QObject* parent)
 
 CameraClient::~CameraClient()
 {
+    // 在析构时确保向 Camera Server 发送退出指令
+    closeCamera();
+
     if (exitInProgress_.load(std::memory_order_acquire) &&
         !exitDone_.load(std::memory_order_acquire))
     {

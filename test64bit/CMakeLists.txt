@@ -38,27 +38,20 @@ qt_add_executable(apptest64bit
     PreRecordManager.h PreRecordManager.cpp
     BaseDrawingItem.h BaseDrawingItem.cpp
     ImageEditor.h ImageEditor.cpp
-    QMLContent/components/ModeIcon.qml
-    #QMLContent/MMImageEditor.qml
-    #QMLContent/customerAnalyse3.qml
-
+    MM3DManager.h MM3DManager.cpp
 )
 
-file(GLOB_RECURSE QML_SOURCES
-    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-    QMLContent/*.qml
+# --- Gather all QML and resource files from the QMLContent directory ---
+file(GLOB_RECURSE QML_RESOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/*"
 )
 
-qt_add_qml_module(apptest64bit_module
-    URI test64bit
-    # URI MyCustomComponents
-    # VERSION 1.0
-    # URI Custom3D
-    QML_FILES
-        Main.qml
-        ${QML_SOURCES}
-    #SOURCES
-    #        ImageEditor.h ImageEditor.cpp # 让 CMake 自动为这些类生成 QML 注册代码
+# --- 将 QMLContent 目录下的所有文件作为资源编译进程序 ---
+# 使用 BASE 和 PREFIX 可以自动处理子目录结构
+qt_add_resources(apptest64bit "qml_resources"
+    BASE ${CMAKE_CURRENT_SOURCE_DIR}/QMLContent
+    PREFIX "/"
+    FILES ${QML_RESOURCE_FILES}
 )
 
 
@@ -66,6 +59,12 @@ qt_add_qml_module(apptest64bit_module
 set_target_properties(apptest64bit PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
+
+# --- 编译选项 ---
+# 禁用 C4828 警告，该警告在将二进制文件（如图片）作为资源编译时由 MSVC 产生
+if(MSVC)
+    target_compile_options(apptest64bit PRIVATE /wd4828)
+endif()
 
 # --- 1. 指定头文件搜索路径 (为了能找到 dllProc.h) ---
 target_include_directories(apptest64bit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/libs")
@@ -94,8 +93,6 @@ target_link_libraries(apptest64bit
     Qt6::Quick
     Qt6::Charts
     Qt6::Quick3D
-    Qt6::GuiPrivate
-    apptest64bit_module  # 链接生成的模块
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
 )
 
@@ -105,10 +102,6 @@ target_link_libraries(apptest64bit
 # )
 
 include(GNUInstallDirs)
-install(DIRECTORY ${QT_QML_DIR}/QtQuick3D
-        DESTINATION qml/QtQuick3D)
-install(DIRECTORY ${QT_QML_DIR}/QtQuick3D/AssetUtils
-        DESTINATION qml/QtQuick3D/AssetUtils)
 install(TARGETS apptest64bit
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -124,11 +117,4 @@ add_custom_command(TARGET apptest64bit POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/libs/opencv_world343.dll"
         $<TARGET_FILE_DIR:apptest64bit>
-)
-
-add_custom_command(
-    TARGET apptest64bit_module POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent"
-            "${CMAKE_CURRENT_BINARY_DIR}/QMLContent"
 )

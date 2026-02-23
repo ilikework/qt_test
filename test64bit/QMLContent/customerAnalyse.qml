@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick3D 6.7
 import QtQuick3D.Helpers
 import QtQuick3D.AssetUtils
+import com.magicmirror.components // Import the C++ registered QML types
 
 import "components"
 
@@ -25,6 +26,7 @@ Item {
     // }
     property var mainphotoes:  analyseModule.thumbphotoes
     property var subphotoes:[]
+    property int currentGroupID: 0
 
     Component.onCompleted:
     {
@@ -38,16 +40,16 @@ Item {
 
     function loadsubphotoes(index)
     {
-
+        currentGroupID = mainphotoes[index].GROUPID
         subphotoes = analyseModule.loadSub(mainphotoes[index].GROUPID)
         if(subphotoes.length>0)
         {
-            // 先让列表渲染，下一帧再加载主编辑区域
+            // Let the list render first, then load the main editing area in the next frame
             Qt.callLater(() => {
-                leftMain.source = subphotoes[0].photoL;
-                leftMain.init(subphotoes[0].IXL,"_L");
-                rightMain.source = subphotoes[0].photoR;
-                rightMain.init(subphotoes[0].IXR,"_R");
+                leftMain.source = subphotoes[0].photoL; // Assuming photoL is a URL or path
+                leftMain.init(subphotoes[0].IXL, "_L");
+                rightMain.source = subphotoes[0].photoR; // Assuming photoR is a URL or path
+                rightMain.init(subphotoes[0].IXR, "_R");
             })
         }
     }
@@ -314,7 +316,7 @@ Item {
                             //anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
                             width: Math.min(parent.width, parent.height * 3 / 4)
                             height: width * 4 / 3
-                            MMImageEditor {
+                            MMImageEditor { // Changed from MMImageEditor to ImageEditor
                                 id: leftMain
                                 anchors.fill: parent
                                 anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
@@ -335,7 +337,7 @@ Item {
                             width: Math.min(parent.width, parent.height * 3 / 4)
                             height: width * 4 / 3
 
-                            MMImageEditor {
+                            MMImageEditor { // Changed from MMImageEditor to ImageEditor
                                 id: rightMain
                                 anchors.fill: parent
                                 anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
@@ -422,136 +424,14 @@ Item {
                 }
             }
 
-            /* 1: 3D */
-            Item {
-                id: parentItem
-                //anchors.centerIn: parent
-                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                width: 800
-                height: 600
-
-                View3D {
-                    id: view3d
-                    anchors.fill: parentItem
-                    camera: camera
-
-                    environment: ExtendedSceneEnvironment {
-                        antialiasingMode: SceneEnvironment.MSAA
-                        antialiasingQuality: SceneEnvironment.High
-                        backgroundMode: SceneEnvironment.Color
-                        clearColor: "#202020"
-                    }
-
-                    PerspectiveCamera {
-                        id: camera
-                        position: Qt.vector3d(0, 0, 2)
-                        clipNear: 0.1
-                        clipFar: 1000
-                    }
-
-                    DirectionalLight {
-                        id: sunLight
-                        eulerRotation: Qt.vector3d(-30, 0, 0)
-                        color: "white"
-                        //brightness: 50
-                    }
-
-                    Node { id: originNode; position: Qt.vector3d(0,0,0) }
-
-                    // ★ 我们自己的皮肤贴图（可控 mipmap & clamp）★
-                    Texture {
-                        id: skinTex
-                        source:  btn3D.checked ? "./customers/0000001/0000001_33_MResult_2-0000001_41_texture.jpg":"./customers/0000001/0000001_33_MResult_2-0000001_44_texture.jpg"
-
-
-                        generateMipmaps: false
-                        minFilter: Texture.Linear
-                        mipFilter: Texture.None
-                        magFilter: Texture.Linear
-
-                        // clamp 与否都行，主要是禁止 mipmap
-                        tilingModeHorizontal: Texture.ClampToEdge
-                        tilingModeVertical: Texture.ClampToEdge
-
-                    }
-
-                    // ★ 我们自己的材质，绑定上面的 texture ★
-                    PrincipledMaterial {
-                        id: skinMat
-                        baseColor: "white"
-                        roughness: 1.0
-                        metalness: 0.0
-                        specularAmount: 0.0
-
-                        baseColorMap: skinTex
-                    }
-
-                    // 3. RuntimeLoader 只负责 load，不要在声明里写 materials:
-                    RuntimeLoader {
-                        id: importNode
-                        parent: originNode
-                        //source: btn3D.checked ? "./customers/0000001/0000001_33_MResult_2-0000001_41.obj":"./customers/0000001/0000001_33_MResult_2-0000001_44.obj"
-                        source: "./customers/0000001/0000001_33_MResult_2-0000001_41.obj"
-
-                        // 状态变化时调用
-                        onStatusChanged: {
-
-                            if (status === RuntimeLoader.Success) {
-                                // 缩放整个导入的模型
-                                importNode.scale = Qt.vector3d(1, 1, 1)
-
-                                // 给所有子 Model 换材质
-                                applyMaterialRecursively(importNode)
-                            }
-                        }
-
-                        // 递归函数：从某个 node 往下找所有有 materials 属性的对象
-                        function applyMaterialRecursively(node) {
-                            if (!node)
-                                return
-
-                            // 注意：这里不要在 QML 静态代码里写 materials:
-                            // 而是运行时检查有没有这个属性
-                            if ("materials" in node) {
-                                node.materials = [ skinMat ]
-                            }
-
-                            var kids = node.children
-                            for (var i = 0; i < kids.length; ++i) {
-                                applyMaterialRecursively(kids[i])
-                            }
-                        }
-                    }
-
-                    // 旋转灯光（和原来一样）
-                    Node {
-                        id: lightPivot
-                        position: Qt.vector3d(0,0,0)
-
-                        DirectionalLight {
-                            id: rotatingLight
-                            eulerRotation: Qt.vector3d(-45,0,0)
-                            color: "white"
-                            //brightness: 40
-                        }
-
-                        NumberAnimation on eulerRotation.y {
-                            from: 0
-                            to: 360
-                            duration: 10000
-                            loops: Animation.Infinite
-                            running: true
-                        }
-                    }
-
-                    OrbitCameraController {
-                        camera: camera
-                        origin: originNode
-                    }
-
-                    Component.onCompleted: {
-                    }
-                }
+            /* 1: 全3D人脸 / 3D模型 — 由 MM3DViewer 负责 3D 显示、侧边栏、自动按 Group 生成 obj、贴图从列表选 */
+            MM3DViewer {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                subphotoes: customerDetail.subphotoes
+                customerID: customerDetail.customerID
+                groupID: customerDetail.currentGroupID
+                is3DViewActive: viewStack.currentIndex === 1
             }
 
             /* 2: 拍摄 */
@@ -574,5 +454,4 @@ Item {
             Rectangle { color: "#18181b"; Label { anchors.centerIn: parent; text: "九画面" } }
         }
     }
-
 }

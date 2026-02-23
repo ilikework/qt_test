@@ -278,3 +278,13 @@ QString AppConfig::WholeCreateFrom() const
 
 }
 
+QString AppConfig::FaceReconExePath() const
+{
+    if (m_root.contains("FaceReconExePath")) {
+        QString p = m_root.value("FaceReconExePath").toString();
+        if (!p.isEmpty())
+            return p;
+    }
+    return QString("D:/3D/FaceReconCPU/FaceReconCPU.exe");
+}
+

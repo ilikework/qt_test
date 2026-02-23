@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
-import MyCustomComponents 1.0
+import com.magicmirror.components
 import "components"
 
 Item {

@@ -1,6 +1,8 @@
 #include "SocketWorker.h"
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QTcpSocket>
 #include <windows.h>
 #include <tlhelp32.h>
 #include <QThread>

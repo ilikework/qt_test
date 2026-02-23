@@ -23,7 +23,7 @@ public:
     QString RedCreateFrom() const;
     QString BrownCreateFrom() const;
     QString WholeCreateFrom() const;
-
+    QString FaceReconExePath() const;
 
     bool save();   // 写回 MMFace_.json
     bool reload(); // 重新读

@@ -416,7 +416,8 @@ Item {
                                 anchors.centerIn: parent
                                 width: 50
                                 height: 50
-                                source: modelData.icon
+                                // 从 qrc 加载时需用 resolvedUrl 相对当前 QML 所在目录解析；图标文件需放在 QMLContent 下（与 customerReport.qml 同目录或子目录如 images/）
+                                source: Qt.resolvedUrl(modelData.icon)
                                 fillMode: Image.PreserveAspectFit
                             }
 
