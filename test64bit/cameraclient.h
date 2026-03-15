@@ -104,6 +104,10 @@ signals:
 
     void fatalError(const QString& msg);
     void log(const QString& msg);
+    /// open 命令返回后发出，ok 为是否 result==OK
+    void openFinished(bool ok, const QString& msg);
+    /// 预览打开失败（open NG 或 startpreview NG）时发出，供界面提示
+    void previewOpenFailed(const QString& msg);
 
 
 private slots:
@@ -113,6 +117,8 @@ private slots:
     void onErrorOccurred(const QString& err);
 
 private:
+    static bool isOpenResultOk(const QJsonObject& resp);
+    void startPreviewInternal();
     void applyCaptureSettingToCamera(const CaptureSetting &s) ;
     bool sendMessage(quint16 msgType, quint32 requestId, const QByteArray& payload);
     void onFrameImageDecoded(const QImage& img);
@@ -132,6 +138,8 @@ private:
     QByteArray rxBuf_;
     bool connected_ = false;
     bool previewOn_ = false;
+    bool cameraOpenOk_ = false;
+    bool pendingStartPreview_ = false;
     //QStringList isos_, exposuretimes_, apertures_, wbs_, imageSizes_, imageQualities_;
 
     int frameToken_ = 0; // 每次新帧 ++，QML 用它刷新 source

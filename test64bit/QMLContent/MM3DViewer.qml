@@ -22,6 +22,7 @@ Item {
 
     property string objSource: ""
     property string textureSource: ""
+    property string generationErrorMessage: ""
 
     function ensureObjGenerated() {
         if (!customerID || groupID <= 0) return
@@ -41,21 +42,51 @@ Item {
         root.textureSource = base + defaultTexName
     }
 
+    function normalizedPath(p) {
+        if (!p) return ""
+        return String(p).replace(/\\/g, "/").replace(/\/+$/, "")
+    }
+
     onIs3DViewActiveChanged: {
         if (is3DViewActive)
+            Qt.callLater(ensureObjGenerated)
+    }
+
+    onGroupIDChanged: {
+        root.objSource = ""
+        root.textureSource = ""
+        root.generationErrorMessage = ""
+        if (root.is3DViewActive)
             Qt.callLater(ensureObjGenerated)
     }
 
     Connections {
         target: mm3dManager
         function onFinished(success, outputDir) {
-            if (success && outputDir) {
-                root.objSource = ""
-                root.textureSource = ""
-                Qt.callLater(function() { root.applyObjAndTexturePaths() })
-            }
+            console.log("[MM3D] onFinished success:", success, "outputDir:", outputDir)
+            if (success)
+                root.generationErrorMessage = ""
+            if (!success || !outputDir) return
+            var outNorm = root.normalizedPath(outputDir)
+            var groupNorm = root.normalizedPath(root.groupDir)
+            if (outNorm !== groupNorm) return
+            root.objSource = ""
+            root.textureSource = ""
+            reloadTimer.start()
         }
-        function onErrorMessage(msg) { console.warn("MM3D:", msg) }
+        function onErrorMessage(msg) {
+            console.warn("MM3D:", msg)
+            root.generationErrorMessage = msg || "3D生成失败"
+        }
+    }
+
+    Timer {
+        id: reloadTimer
+        interval: 250
+        repeat: false
+        onTriggered: {
+            root.applyObjAndTexturePaths()
+        }
     }
 
     RowLayout {
@@ -169,6 +200,19 @@ Item {
                     anchors.verticalCenterOffset: 30
                     text: "正在生成 3D 模型…"
                     color: "white"
+                }
+            }
+
+            Rectangle {
+                anchors.fill: viewArea
+                color: "#1a0a0a"
+                visible: root.generationErrorMessage !== ""
+                Text {
+                    anchors.centerIn: parent
+                    text: root.generationErrorMessage
+                    color: "#e04040"
+                    font.pixelSize: 32
+                    font.bold: true
                 }
             }
         }

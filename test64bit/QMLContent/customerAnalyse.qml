@@ -66,6 +66,9 @@ Item {
         border.width: 1
         anchors.top: parent.top
         property int expandedIndex: -1   // ⭐ 当前展开的缩略图编号
+        property int thumbCurrentPage: 1
+        property int thumbPageSize: 0
+        property int thumbTotalPages: thumbPageSize > 0 ? Math.max(1, Math.ceil(mainphotoes.length / thumbPageSize)) : 1
 
         RowLayout
         {
@@ -77,6 +80,12 @@ Item {
                 Layout.preferredWidth:60
                 Layout.preferredHeight:120
                 source: "./images/left_icon.svg"
+                enabled: thumbBar.thumbCurrentPage > 1
+                opacity: enabled ? 1 : 0.4
+                onClicked: {
+                    if (thumbBar.thumbCurrentPage > 1)
+                        thumbBar.thumbCurrentPage--
+                }
             }
             // ⭐ 中间区域占满宽度
             Item {
@@ -91,17 +100,17 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
 
-                    property int rowWidth: 188*2+2
-                    property int pageSize: 0
-                    property int currentPage: 1
+                    readonly property int delegateWidth: 188
+                    property int rowWidth: delegateWidth + spacing
 
                     Repeater {
                         id: mainThumbList
-                        model: mainphotoes.slice((thumbRow.currentPage-1)*thumbRow.pageSize, thumbRow.currentPage*thumbRow.pageSize)
+                        model: mainphotoes.slice((thumbBar.thumbCurrentPage-1)*thumbBar.thumbPageSize, thumbBar.thumbCurrentPage*thumbBar.thumbPageSize)
                         delegate: Rectangle {
                             width: 188; height: 128; radius: 4
-                            color: index === curIndex ? "#2a2a2e" : "#333"
-                            border.color: index === curIndex ? "#ffb300" : "#444"
+                            property int globalIndex: (thumbBar.thumbCurrentPage - 1) * thumbBar.thumbPageSize + index
+                            color: globalIndex === curIndex ? "#2a2a2e" : "#333"
+                            border.color: globalIndex === curIndex ? "#ffb300" : "#444"
                             border.width: 4
 
                             Row {
@@ -131,22 +140,18 @@ Item {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if(curIndex!=index)
-                                    {
-                                        curIndex = index
+                                    if (curIndex !== globalIndex) {
+                                        curIndex = globalIndex
                                         loadsubphotoes(curIndex)
                                         return
                                     }
-
-                                    thumbBar.expandedIndex =
-                                            (thumbBar.expandedIndex === index ? -1 : index)
+                                    thumbBar.expandedIndex = (thumbBar.expandedIndex === globalIndex ? -1 : globalIndex)
                                 }
                             }
                         }
                     }
-                    onWidthChanged:
-                    {
-                        pageSize = Math.floor(thumbRow.width / thumbRow.rowWidth)
+                    onWidthChanged: {
+                        thumbBar.thumbPageSize = Math.floor(thumbRow.width / thumbRow.rowWidth)
                     }
                 }
             }
@@ -154,6 +159,12 @@ Item {
                 Layout.preferredWidth:60
                 Layout.preferredHeight:120
                 source: "./images/right_icon.svg"
+                enabled: thumbBar.thumbCurrentPage < thumbBar.thumbTotalPages
+                opacity: enabled ? 1 : 0.4
+                onClicked: {
+                    if (thumbBar.thumbCurrentPage < thumbBar.thumbTotalPages)
+                        thumbBar.thumbCurrentPage++
+                }
             }
         }
     }
@@ -173,7 +184,26 @@ Item {
             width: 240
             color: "#232325"
             Layout.fillHeight: true
-            //padding: 20
+
+            // 拍摄页时遮住左侧栏，只允许通过右侧 4 个按钮（预览/拍摄/保存/取消）操作，避免切页导致预览逻辑混乱
+            Rectangle {
+                anchors.fill: parent
+                visible: viewStack.currentIndex === 2
+                color: "#80000000"
+                z: 1
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    onReleased: function(mouse) { mouse.accepted = true }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "请使用右侧「取消」或「保存」\n退出拍摄"
+                    color: "#aaa"
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
 
             ScrollView {
                 width: parent.width
@@ -266,6 +296,11 @@ Item {
                             loadPage("customerReport.qml", { customerID: customerID })
 
                         }
+                    }
+                    CheckButton {
+                        checked: false
+                        text: "回到 用户一览"
+                        onClicked: loadPage("customerManager.qml", {})
                     }
                     CheckButton {
                         checked: false
@@ -435,8 +470,9 @@ Item {
             }
 
             /* 2: 拍摄 */
-            CameraView{
-                customerID : customerDetail.customerID
+            CameraView {
+                customerID: customerDetail.customerID
+                isCameraViewActive: viewStack.currentIndex === 2
                 onRequestShowMain: {
                     viewStack.currentIndex = 0   // 切回主画面
                     btnMain.checked = true

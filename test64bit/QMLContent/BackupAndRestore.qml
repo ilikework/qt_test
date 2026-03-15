@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Controls.Basic
+import QtCore
 import "components"
 
 Window { // 给主窗口添加一个ID
@@ -13,6 +14,17 @@ Window { // 给主窗口添加一个ID
     property int baseFontSize: 20
     // Optional: set from parent (e.g. C++ backupManager). When null, Connections is no-op.
     //property var backupManager: null
+
+    /** 每次进入本窗口时调用，清空上次的路径、结果、进度等 */
+    function resetState() {
+        pathField.text = ""
+        statusText.text = ""
+        progressBar.value = 0
+        backupRadio.checked = true
+        // 不设置 saveFileDialog.currentFile，设为空会触发 QML 警告 "Cannot set as a selected file because it doesn't exist"
+    }
+
+    onVisibleChanged: if (visible) resetState()
 
     Connections {
         target: backupManager
@@ -37,7 +49,7 @@ Window { // 给主窗口添加一个ID
 
         function onRestoreProgress(progress) {
             progressBar.value = progress
-
+            if (backupManager && backupManager.indeterminatePhase) return
             if (progress < 0.4) {
                 statusText.text = "正在校验备份包..."
             } else if (progress >= 0.4 && progress < 0.6) {
@@ -47,6 +59,10 @@ Window { // 给主窗口添加一个ID
             } else {
                 statusText.text = "正在重新连接数据库..."
             }
+        }
+        function onIndeterminatePhaseChanged() {
+            if (backupManager && backupManager.indeterminatePhase)
+                statusText.text = "正在压缩/解压，请稍候…"
         }
     }
 
@@ -139,12 +155,11 @@ Window { // 给主窗口添加一个ID
                     if (backupRadio.checked) {
                         saveFileDialog.fileMode = FileDialog.SaveFile
                         saveFileDialog.title = "选择备份保存位置"
-                        saveFileDialog.openWithDefaultName() // 调用之前写的带日期的函数
+                        saveFileDialog.openWithDefaultName()
                     } else {
                         saveFileDialog.fileMode = FileDialog.OpenFile
                         saveFileDialog.title = "选择备份文件进行恢复"
-                        saveFileDialog.currentFile = "" // 清空默认名
-                        saveFileDialog.open()
+                        saveFileDialog.openForRestore()  // 恢复时对话框内不预填文件名
                     }
                 }
             }
@@ -159,8 +174,8 @@ Window { // 给主窗口添加一个ID
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 8
 
-            // 只有在有进度或有消息时才显示，初始隐藏
-            visible: progressBar.value > 0 || statusText.text !== ""
+            // 有进度、有状态文字、或处于“无法取得进度”的压缩/解压阶段时显示
+            visible: progressBar.value > 0 || statusText.text !== "" || (backupManager && backupManager.indeterminatePhase)
 
             Text {
                 id: statusText
@@ -174,8 +189,9 @@ Window { // 给主窗口添加一个ID
                 id: progressBar
                 width: parent.width
                 value: 0.0
+                // 压缩/解压时 C++ 每秒推进一点，这里只按数值显示
+                indeterminate: false
 
-                // 这里的 background 和 contentItem 保持你之前的自定义样式即可
                 background: Rectangle {
                     implicitHeight: 6
                     color: "#444444"
@@ -239,17 +255,20 @@ Window { // 给主窗口添加一个ID
         fileMode: FileDialog.SaveFile
         nameFilters: ["Backup files (*.zip)"]
 
-        // 动态设置默认文件名
+        // 备份时：在 FileDialog 内给出默认文件名（文档目录 + MMFaceBackup_yyyyMMdd.zip），不预填页面上的 pathField
         function openWithDefaultName() {
-            let date = new Date()
-            let year = date.getFullYear()
-            let month = ("0" + (date.getMonth() + 1)).slice(-2)
-            let day = ("0" + date.getDate()).slice(-2)
-            let dateStr = year + month + day
-
-            // 设置默认选中的文件（包含路径和文件名）
-            // 注意：建议给一个默认目录，或者留空让系统决定
-            currentFile = "file:///MMFaceBackup_" + dateStr + ".zip"
+            var docUrl = StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+            var date = new Date()
+            var dateStr = date.getFullYear() + ("0" + (date.getMonth() + 1)).slice(-2) + ("0" + date.getDate()).slice(-2)
+            var defaultName = "MMFaceBackup_" + dateStr + ".zip"
+            currentFolder = docUrl
+            currentFile = docUrl + "/" + defaultName
+            open()
+        }
+        // 恢复时：只打开到文档目录，对话框内的文件名编辑框不预填（与备份不同）
+        function openForRestore() {
+            currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+            currentFile = currentFolder  // 选中的是目录，文件名编辑框为空
             open()
         }
         onAccepted: {

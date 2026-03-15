@@ -121,25 +121,52 @@ void CameraClient::startup()
 
 }
 
+bool CameraClient::isOpenResultOk(const QJsonObject& resp) {
+    const QString r = resp.value("result").toString().trimmed().toUpper();
+    return (r == "OK");
+}
+
 void CameraClient::openCamera() {
     if (!connected()) { emit log("Not connected."); return; }
     QJsonObject obj;
     obj["cmd"] = "open";
     obj["series"] = AppConfig::instance().CameraSeries();
 
-    sendCommandRequest(obj);
+    sendCommandRequest2(obj, [this](const QJsonObject& resp) {
+        bool ok = isOpenResultOk(resp);
+        cameraOpenOk_ = ok;
+        emit log(ok ? "open OK" : "open NG");
+        emit openFinished(ok, ok ? QString() : QStringLiteral("相机打开失败，请检查连接"));
+        if (pendingStartPreview_) {
+            pendingStartPreview_ = false;
+            if (ok) {
+                startPreviewInternal();
+            }
+            // open 失败不再弹红字，未连接时界面已有「请连接相机」，连上后直接进预览即可
+        }
+    });
 }
 
 void CameraClient::startPreview() {
     if (!connected()) { emit log("Not connected."); return; }
+    if (cameraOpenOk_) {
+        startPreviewInternal();
+        return;
+    }
+    pendingStartPreview_ = true;
+    openCamera();
+}
 
-    auto* flow = new StartPreviewFlow(this,this);
-    connect(flow, &StartPreviewFlow::finished, this, [this](bool ok, const QString& msg){
+void CameraClient::startPreviewInternal() {
+    if (!connected()) return;
+    auto* flow = new StartPreviewFlow(this, this);
+    connect(flow, &StartPreviewFlow::finished, this, [this](bool ok, const QString& msg) {
         emit log(msg);
-        if(ok)
-        {
+        if (ok) {
             previewOn_ = true;
             emit previewOnChanged();
+        } else {
+            emit previewOpenFailed(msg.isEmpty() ? QStringLiteral("预览打开失败") : msg);
         }
     });
     flow->start();
@@ -443,15 +470,18 @@ quint32 CameraClient::sendCommandRequest(const QJsonObject& obj)
 
 void CameraClient::onConnected() {
     emit log("Connected.");
-    //emit connectedChanged();
-    // 程序启动连接成功后，自动 open camera
-    connected_ =true;
-    openCamera();
+    connected_ = true;
+    emit connectedChanged();
+    // 不再在此处自动 open；仅当用户进入拍摄页/点「预览」时再发 open，且 open 返回 OK 后才发 startpreview
 }
 
 void CameraClient::onDisconnected() {
     emit log("Disconnected.");
     rxBuf_.clear();
+    connected_ = false;
+    cameraOpenOk_ = false;
+    pendingStartPreview_ = false;
+    emit connectedChanged();
 }
 
 void CameraClient::onErrorOccurred(const QString& err) {

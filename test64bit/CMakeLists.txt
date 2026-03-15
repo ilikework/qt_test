@@ -39,6 +39,7 @@ qt_add_executable(apptest64bit
     BaseDrawingItem.h BaseDrawingItem.cpp
     ImageEditor.h ImageEditor.cpp
     MM3DManager.h MM3DManager.cpp
+    MMLogger.h MMLogger.cpp
 )
 
 # --- Gather all QML and resource files from the QMLContent directory ---

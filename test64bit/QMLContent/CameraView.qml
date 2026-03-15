@@ -8,9 +8,15 @@ Item   {
     id: cameraRoot
     width: 1920
     height: 1080
-    //anchors.centerIn: parent
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
     property string customerID : ""
+    property bool isCameraViewActive: false
+    property string statusMessage: ""
+
+    function showStatusMessage(msg) {
+        statusMessage = msg
+        // 不再定时清除，一直显示直到离开拍摄页
+    }
 
     signal requestShowMain()   // 请求返回主画面
     signal photoSaved()      // 照片保存成功信号
@@ -18,6 +24,31 @@ Item   {
     Connections {
         target: camClient
     }
+
+    // 进入拍摄页时：若已连接相机则直接进入预录（开预览）；未连接则显示“请连接相机”，用户连上后点「预览」即可
+    onIsCameraViewActiveChanged: {
+        if (isCameraViewActive && camClient.connected)
+            camClient.startPreview()
+        if (!isCameraViewActive)
+            statusMessage = ""
+    }
+    Connections {
+        target: camClient
+        function onConnectedChanged() {
+            if (isCameraViewActive && camClient.connected)
+                camClient.startPreview()
+        }
+        function onPreviewOnChanged() {
+            if (camClient.previewOn)
+                cameraRoot.statusMessage = ""
+        }
+        // open 失败不再设 statusMessage，让提示层统一显示「请点击预览」，不抢「请连接相机」的展示
+        function onPreviewOpenFailed(msg) {
+            if (msg)
+                cameraRoot.showStatusMessage(msg)
+        }
+    }
+
 
     property var settings: camClient.settings
     property var isos: camClient.isos
@@ -99,12 +130,54 @@ Item   {
                 anchors.fill: parent
                 anchors.centerIn: parent
                 fillMode: Image.PreserveAspectFit
+                visible: camClient.connected && camClient.previewOn
                 source: camClient.previewOn
                         ? ("image://camera/frame?" + camClient.frameToken)
-                        : ""                  // stop 时置空
+                        : ""
             }
 
+            // 提示层：只要没有预览就显示，避免被 open 失败的红字抢掉
+            Rectangle {
+                id: messageOverlay
+                anchors.fill: parent
+                color: cameraRoot.statusMessage !== "" ? "#1a0a0a" : "#1a1a1a"
+                visible: !camClient.previewOn
 
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 16
+
+                    // 未连上相机程序（socket 未连接）：程序会自动启动 exe 再连，理论上应能连上，若不能则提示联系客服
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "未能连接相机程序，请联系客服。"
+                        color: "#e04040"
+                        font.pixelSize: 32
+                        font.bold: true
+                        visible: !camClient.connected
+                    }
+
+                    // 已连上程序但未开预览：请连接相机硬件后点预览，红色
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "请连接相机后，点击下方「预览」按钮打开预览"
+                        color: "#e04040"
+                        font.pixelSize: 28
+                        font.bold: true
+                        visible: camClient.connected && !camClient.previewOn && cameraRoot.statusMessage === ""
+                    }
+
+                    // 仅 startpreview 失败时显示红字（open 失败不再设 statusMessage）
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: cameraRoot.statusMessage
+                        color: "#e04040"
+                        font.pixelSize: 32
+                        font.bold: true
+                        visible: cameraRoot.statusMessage !== ""
+                    }
+                }
+            }
         }
 
         // ============================
@@ -234,7 +307,8 @@ Item   {
                             width: 120
                             height: 120
                             radius: 60
-                            color: "#ccc"
+                            color: modelData.key === "preview" && !camClient.connected ? "#666" : "#ccc"
+                            opacity: modelData.key === "preview" && !camClient.connected ? 0.8 : 1
 
                             Text {
                                 anchors.centerIn: parent
@@ -246,29 +320,29 @@ Item   {
                             MouseArea {
                                 cursorShape: Qt.PointingHandCursor
                                 anchors.fill: parent
-                                onClicked:
-                                {
-                                    switch (modelData.key)
-                                    {
-                                       case "save":
-                                           camClient.save()
-                                           cameraRoot.photoSaved()
-                                           cameraRoot.requestShowMain()
-                                           break
-                                       case "cancel":
-                                           camClient.cancel()
-                                           cameraRoot.requestShowMain()
-                                           break
-
-                                       case "preview":
-                                           //cameraRoot.startPreview()
-                                           camClient.startPreview()
-                                           break
-
-                                       case "shoot":
-                                           camClient.capture()
-                                           break
-                                   }
+                                onClicked: {
+                                    switch (modelData.key) {
+                                    case "save":
+                                        camClient.save()
+                                        cameraRoot.photoSaved()
+                                        cameraRoot.requestShowMain()
+                                        break
+                                    case "cancel":
+                                        camClient.cancel()
+                                        cameraRoot.requestShowMain()
+                                        break
+                                    case "preview":
+                                        if (camClient.connected) {
+                                            cameraRoot.statusMessage = ""
+                                            camClient.startPreview()
+                                        } else {
+                                            cameraRoot.showStatusMessage("请先连接相机")
+                                        }
+                                        break
+                                    case "shoot":
+                                        camClient.capture()
+                                        break
+                                    }
                                 }
                             }
                         }
