@@ -7,8 +7,9 @@
 
 /**
  * 通过管道调用 FaceReconCPU.exe 生成 3D 人脸 obj 与贴图。
- * 协议：子进程先输出 "init\r\n"，主进程发送 "type fileIn1 fileTexture1 fileIn2 fileTexture2 outputPath\r\n"，
- * 再读一行，首字符 '1' 表示成功；最后发送 "exit\r\n"。
+ * 协议：子进程输出 "init" 即表示就绪；主进程直接发送 "xxxx.json\r\n"（JSON 文件绝对路径）；
+ * 再读一行，'1' 表示成功；最后发送 "exit\r\n"。
+ * JSON 由 QML 构造（如 8 对图：左/右贴图数组），格式：{"model": N, "info": [左图obj, 左图贴图数组, 右图obj, 右图贴图数组, 输出目录]}。
  */
 class MM3DManager : public QObject
 {
@@ -23,10 +24,8 @@ public:
     void setExePath(const QString &path);
     bool running() const { return running_; }
 
-    /// 参数为本地文件路径。outputDir 为 exe 输出目录；exe 按输入图命名产出，如 01_L.jpg+01_R.jpg → 01_L-01_R.obj、01_L-01_R_texture.jpg。
-    Q_INVOKABLE void runFaceRecon(const QString &fileIn1, const QString &fileTexture1,
-                                   const QString &fileIn2, const QString &fileTexture2,
-                                   const QString &outputDir, int type);
+    /// jsonContent 为 QML 构造的完整 JSON 字符串（含 model、info）；C++ 仅写入文件并调 exe。
+    Q_INVOKABLE void runFaceRecon(const QString &jsonContent);
 
     Q_INVOKABLE bool fileExists(const QString &localPath) const;
 

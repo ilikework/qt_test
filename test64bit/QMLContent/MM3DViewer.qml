@@ -18,11 +18,16 @@ Item {
     readonly property string groupIdStr: groupID < 10 ? ("0" + groupID) : String(groupID)
     readonly property string groupDir: applicationDirPath + "/customers/" + customerID + "/" + groupIdStr
     readonly property string defaultObjName: "01_L-01_R.obj"
-    readonly property string defaultTexName: "01_L-01_R_texture.jpg"
+
+    /// 当前选中的贴图对应 subphotoes 的索引，默认第一组
+    property int selectedTextureIndex: 0
 
     property string objSource: ""
     property string textureSource: ""
     property string generationErrorMessage: ""
+
+    /// true = 无人操作，obj 左右摆动；false = 用户正在操作，停止摆动
+    property bool swingIdle: true
 
     function ensureObjGenerated() {
         if (!customerID || groupID <= 0) return
@@ -31,20 +36,57 @@ Item {
             applyObjAndTexturePaths()
             return
         }
-        var left01 = groupDir + "/01_L.jpg"
-        var right01 = groupDir + "/01_R.jpg"
-        mm3dManager.runFaceRecon(left01, left01, right01, right01, groupDir, 0)
+        var json = buildFaceReconJson()
+        if (!json) {
+            generationErrorMessage = "无可用左右图数据，无法生成 3D"
+            return
+        }
+        mm3dManager.runFaceRecon(json)
+    }
+
+    /// 根据 subphotoes[index] 的左右图路径得到贴图文件名：{左图名}-{右图名}.png
+    function getTextureFileName(index) {
+        if (!subphotoes || index < 0 || index >= subphotoes.length) return ""
+        var leftPath = String(subphotoes[index].photoL || "")
+        var rightPath = String(subphotoes[index].photoR || "")
+        leftPath = leftPath.replace(/^file:\/\/\//, "").replace(/\\/g, "/")
+        rightPath = rightPath.replace(/^file:\/\/\//, "").replace(/\\/g, "/")
+        var leftName = leftPath.split("/").pop().replace(/\.[^.]*$/, "")
+        var rightName = rightPath.split("/").pop().replace(/\.[^.]*$/, "")
+        if (!leftName || !rightName) return ""
+        return leftName + "-" + rightName + ".png"
     }
 
     function applyObjAndTexturePaths() {
         var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
         root.objSource = base + defaultObjName
-        root.textureSource = base + defaultTexName
+        var idx = selectedTextureIndex
+        if (idx < 0 || idx >= (subphotoes ? subphotoes.length : 0)) idx = 0
+        var texName = getTextureFileName(idx)
+        root.textureSource = texName ? (base + texName) : ""
     }
 
     function normalizedPath(p) {
         if (!p) return ""
-        return String(p).replace(/\\/g, "/").replace(/\/+$/, "")
+        return String(p).replace(/^file:\/\/\//, "").replace(/\\/g, "/").replace(/\/+$/, "")
+    }
+
+    /// 从 subphotoes（8 对）构建 FaceRecon 所需 JSON：model + info[左图obj, 左图贴图数组, 右图obj, 右图贴图数组, 输出目录]
+    function buildFaceReconJson() {
+        if (!subphotoes || subphotoes.length === 0) return ""
+        var leftPaths = []
+        var rightPaths = []
+        for (var i = 0; i < subphotoes.length; i++) {
+            leftPaths.push(normalizedPath(subphotoes[i].photoL || ""))
+            rightPaths.push(normalizedPath(subphotoes[i].photoR || ""))
+        }
+        if (leftPaths[0] === "" || rightPaths[0] === "") return ""
+        var outDir = normalizedPath(groupDir)
+        var obj = {
+            "model": 5,
+            "info": [ leftPaths[0], leftPaths, rightPaths[0], rightPaths, outDir ]
+        }
+        return JSON.stringify(obj)
     }
 
     onIs3DViewActiveChanged: {
@@ -56,8 +98,17 @@ Item {
         root.objSource = ""
         root.textureSource = ""
         root.generationErrorMessage = ""
+        root.selectedTextureIndex = 0
         if (root.is3DViewActive)
             Qt.callLater(ensureObjGenerated)
+    }
+
+    onSelectedTextureIndexChanged: {
+        if (root.objSource && root.textureSource) {
+            var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
+            var texName = getTextureFileName(selectedTextureIndex)
+            if (texName) root.textureSource = base + texName
+        }
     }
 
     Connections {
@@ -87,6 +138,14 @@ Item {
         onTriggered: {
             root.applyObjAndTexturePaths()
         }
+    }
+
+    /// 30 秒无操作后恢复 obj 左右摆动
+    Timer {
+        id: idleTimer
+        interval: 30000
+        repeat: false
+        onTriggered: root.swingIdle = true
     }
 
     RowLayout {
@@ -166,6 +225,29 @@ Item {
                     }
                 }
 
+                /// 人脸中心轴左右 ±90° 摆动，有 obj 且 30 秒无操作时运行
+                SequentialAnimation {
+                    id: swingAnimation
+                    running: root.swingIdle && !!root.objSource
+                    loops: Animation.Infinite
+                    NumberAnimation {
+                        target: importNode
+                        property: "eulerRotation.y"
+                        from: -90
+                        to: 90
+                        duration: 4000
+                        easing.type: Easing.InOutSine
+                    }
+                    NumberAnimation {
+                        target: importNode
+                        property: "eulerRotation.y"
+                        from: 90
+                        to: -90
+                        duration: 4000
+                        easing.type: Easing.InOutSine
+                    }
+                }
+
                 Node {
                     id: lightPivot
                     position: Qt.vector3d(0, 0, 0)
@@ -186,9 +268,34 @@ Item {
                 OrbitCameraController {
                     camera: camera
                     origin: originNode
+                    xInvert: true
+                    yInvert: false
                 }
             }
 
+            /// 仅在 View3D 内按下鼠标后才停止摆动并重置 30 秒无操作计时，避免只移入/移动就停
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                propagateComposedEvents: true
+                hoverEnabled: true
+                onPressed: function(mouse) {
+                    root.swingIdle = false
+                    idleTimer.restart()
+                    mouse.accepted = false
+                }
+                onPositionChanged: function(mouse) {
+                    if (mouse.buttons !== 0) {
+                        root.swingIdle = false
+                        idleTimer.restart()
+                    }
+                    mouse.accepted = false
+                }
+                onReleased: function(mouse) {
+                    idleTimer.restart()
+                    mouse.accepted = false
+                }
+            }
 
             Rectangle {
                 anchors.fill: viewArea
@@ -227,54 +334,68 @@ Item {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
-                Text {
-                    width: parent.width - 16
-                    text: "当前 Group 下 3D 自动生成（01_L-01_R.obj）"
-                    color: "#888"
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
-                ListView {
-                    id: subListView3D
-                    width: parent.width - 16
+                anchors.margins: 2
+                spacing: 2
+
+                Item {
+                    width: parent.width - 2
                     height: parent.height - 30
-                    model: root.subphotoes
-                    clip: true
-                    spacing: 10
+                    anchors.horizontalCenter: parent.horizontalCenter
 
-                    delegate: Rectangle {
-                        width: subListView3D.width - 4
-                        height: 135
-                        radius: 6
-                        color: "#2a2a2e"
-                        border.color: "#444"
-                        border.width: 1
+                    ListView {
+                        id: subListView3D
+                        anchors.fill: parent
+                        anchors.leftMargin: 2
+                        anchors.rightMargin: 2
+                        anchors.topMargin: 2
+                        anchors.bottomMargin: 2
+                        model: root.subphotoes
+                        clip: true
+                        spacing: 10
 
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Image {
-                                width: 90
-                                height: 120
-                                source: modelData.photoL
-                                fillMode: Image.PreserveAspectFit
-                                sourceSize.width: 90
-                                sourceSize.height: 120
-                                asynchronous: true
+                        delegate: Rectangle {
+                            width: 200
+                            height: 148
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            radius: 6
+                            property bool hovered: false
+                            color: root.selectedTextureIndex === index ? "#3a3a4e" : "#2a2a2e"
+                            border.color: hovered ? "#888" : (root.selectedTextureIndex === index ? "#ffb300" : "#444")
+                            border.width: root.selectedTextureIndex === index ? 2 : 1
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Image {
+                                    width: 90
+                                    height: 120
+                                    source: modelData.photoL
+                                    fillMode: Image.PreserveAspectFit
+                                    sourceSize.width: 90
+                                    sourceSize.height: 120
+                                    asynchronous: true
+                                }
+                                Image {
+                                    width: 90
+                                    height: 120
+                                    source: modelData.photoR
+                                    fillMode: Image.PreserveAspectFit
+                                    sourceSize.width: 90
+                                    sourceSize.height: 120
+                                    asynchronous: true
+                                }
                             }
-                            Image {
-                                width: 90
-                                height: 120
-                                source: modelData.photoR
-                                fillMode: Image.PreserveAspectFit
-                                sourceSize.width: 90
-                                sourceSize.height: 120
-                                asynchronous: true
-                            }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onEntered: parent.hovered = true
+                            onExited: parent.hovered = false
+                            onClicked: root.selectedTextureIndex = index
                         }
                     }
+                }
                 }
             }
         }

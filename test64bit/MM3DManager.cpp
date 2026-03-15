@@ -3,6 +3,10 @@
 #include "MMLogger.h"
 #include <QFileInfo>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
 
 MM3DManager::MM3DManager(QObject *parent)
     : QObject{parent}
@@ -33,12 +37,41 @@ bool MM3DManager::fileExists(const QString &localPath) const
     return QFileInfo::exists(localPath);
 }
 
-void MM3DManager::runFaceRecon(const QString &fileIn1, const QString &fileTexture1,
-                               const QString &fileIn2, const QString &fileTexture2,
-                               const QString &outputDir, int type)
+static QString normalizedPath(const QString &p)
+{
+    QString s = p.trimmed();
+    return s.replace(QLatin1Char('\\'), QLatin1Char('/'));
+}
+
+void MM3DManager::runFaceRecon(const QString &jsonContent)
 {
     if (running_) {
         emit errorMessage("FaceRecon is already running.");
+        return;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonContent.toUtf8(), &parseError);
+    if (doc.isNull() || !doc.isObject()) {
+        LOG(QString("[MM3DManager] Invalid JSON: %1").arg(parseError.errorString()));
+        emit errorMessage("Invalid JSON: " + parseError.errorString());
+        emit finished(false, QString());
+        return;
+    }
+
+    QJsonObject root = doc.object();
+    QJsonArray info = root.value(QStringLiteral("info")).toArray();
+    if (info.size() < 5) {
+        LOG("[MM3DManager] JSON info must have at least 5 elements");
+        emit errorMessage("JSON info must have at least 5 elements (leftObj, leftTex[], rightObj, rightTex[], outputDir)");
+        emit finished(false, QString());
+        return;
+    }
+
+    QString outputDir = info.at(4).toString().trimmed().replace(QLatin1Char('\\'), QLatin1Char('/'));
+    if (outputDir.isEmpty()) {
+        emit errorMessage("Output dir (info[4]) is empty");
+        emit finished(false, QString());
         return;
     }
 
@@ -61,18 +94,27 @@ void MM3DManager::runFaceRecon(const QString &fileIn1, const QString &fileTextur
         }
     }
 
-    // 与 VC 一致：type + 空格 + 5 个参数 + \r\n。exe 按输入图命名产出，如 01_L-01_R.obj、01_L-01_R_texture.jpg
-    QString cmd = QString::number(type) + " " + fileIn1 + " " + fileTexture1 + " "
-                  + fileIn2 + " " + fileTexture2 + " " + outputDir + "\r\n";
+    QString jsonPath = outDir.absoluteFilePath(QStringLiteral("face_recon_cmd.json"));
+    QFile jsonFile(jsonPath);
+    if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        LOG(QString("[MM3DManager] Cannot write JSON: %1").arg(jsonPath));
+        emit errorMessage("Cannot write command JSON: " + jsonPath);
+        emit finished(false, QString());
+        return;
+    }
+    jsonFile.write(doc.toJson(QJsonDocument::Compact));
+    jsonFile.close();
+
+    QString jsonAbsPath = normalizedPath(QFileInfo(jsonPath).absoluteFilePath());
 
     stdoutBuffer_.clear();
-    pendingCommand_ = cmd;
+    pendingCommand_ = jsonAbsPath;
     lastOutputDir_ = outputDir;
     state_ = WaitingInit;
     setRunning(true);
 
     process_.setWorkingDirectory(workDir);
-    LOG(QString("[MM3DManager] start exe, workDir: %1 cmd: %2").arg(workDir, cmd.trimmed()));
+    LOG(QString("[MM3DManager] start exe, workDir: %1 json: %2").arg(workDir, jsonAbsPath));
     process_.start(exePath_, QStringList(), QProcess::ReadWrite);
     if (!process_.waitForStarted(5000)) {
         setRunning(false);
@@ -95,10 +137,10 @@ void MM3DManager::onReadyReadStandardOutput()
 
     if (state_ == WaitingInit) {
         if (stdoutBuffer_.contains("init\r\n") || stdoutBuffer_.contains("init\n")) {
-            LOG("[MM3DManager] got init, send command");
+            QString toSend = pendingCommand_ + QLatin1String("\r\n");
+            LOG(QString("[MM3DManager] send to FaceReconCPU.exe: \"%1\" (path + \\r\\n)").arg(pendingCommand_));
             state_ = WaitingResult;
-            sendCommand(pendingCommand_);
-            // 丢掉 "init\r\n" 这一行，否则下面会误把 init 当结果行解析
+            sendCommand(toSend);
             int firstNewline = stdoutBuffer_.indexOf('\n');
             if (firstNewline >= 0)
                 stdoutBuffer_.remove(0, firstNewline + 1);
