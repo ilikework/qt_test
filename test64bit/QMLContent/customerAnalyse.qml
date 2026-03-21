@@ -225,7 +225,6 @@ Item {
                         {
                             viewStack.currentIndex = 0
                             btn3D.checked = false
-                            btn3DModule.checked = false
                             btn9face.checked = false
                             btnCamera.checked = false
                         }
@@ -233,25 +232,11 @@ Item {
                     CheckButton
                     {
                         id:btn3D
-                        text: "全3D人脸"
+                        text: "3D人脸"
                         onClicked:
                         {
                             viewStack.currentIndex = 1
                             btnMain.checked = false
-                            btn3DModule.checked = false
-                            btn9face.checked = false
-                            btnCamera.checked = false
-                        }
-                    }
-                    CheckButton
-                    {
-                        id:btn3DModule
-                        text: "3D模型"
-                        onClicked:
-                        {
-                            viewStack.currentIndex = 1
-                            btnMain.checked = false
-                            btn3D.checked = false
                             btn9face.checked = false
                             btnCamera.checked = false
                         }
@@ -265,7 +250,6 @@ Item {
                             viewStack.currentIndex = 3
                             btnMain.checked = false
                             btn3D.checked = false
-                            btn3DModule.checked = false
                             btnCamera.checked = false
                         }
                     }
@@ -284,7 +268,6 @@ Item {
                             viewStack.currentIndex = 2
                             btnMain.checked = false
                             btn3D.checked = false
-                            btn3DModule.checked = false
                             btn9face.checked = false
                         }
                     }

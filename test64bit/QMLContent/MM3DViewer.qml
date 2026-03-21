@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick3D 6.7
 import QtQuick3D.Helpers
 import QtQuick3D.AssetUtils
+import "components"
 
 // 3D 人脸/模型：每个 Group 用 01_L.jpg+01_R.jpg 生成，exe 产出 01_L-01_R.obj、01_L-01_R_texture.jpg，贴图用 exe 默认。
 // 切换到全3D人脸时若该 Group 尚无 obj 则自动生成。
@@ -22,12 +23,27 @@ Item {
     /// 当前选中的贴图对应 subphotoes 的索引，默认第一组
     property int selectedTextureIndex: 0
 
+    /// 变脸模式：左侧图与右侧图可分别选择，贴图按比例合成
+    property bool morphMode: false
+    /// 变脸模式下选中的“左半脸”贴图索引
+    property int selectedLeftIndex: 0
+    /// 变脸模式下选中的“右半脸”贴图索引
+    property int selectedRightIndex: 0
+    /// 变脸模式下左右合成比例 0~1：0=全右贴图，1=全左贴图
+    property real morphLeftRatio: 0.5
+
     property string objSource: ""
     property string textureSource: ""
     property string generationErrorMessage: ""
 
+    readonly property string leftTextureSource: (morphMode && subphotoes && selectedLeftIndex >= 0 && selectedLeftIndex < subphotoes.length) ? ("file:///" + groupDir.replace(/\\/g, "/") + "/" + getTextureFileName(selectedLeftIndex)) : ""
+    readonly property string rightTextureSource: (morphMode && subphotoes && selectedRightIndex >= 0 && selectedRightIndex < subphotoes.length) ? ("file:///" + groupDir.replace(/\\/g, "/") + "/" + getTextureFileName(selectedRightIndex)) : ""
+
     /// true = 无人操作，obj 左右摆动；false = 用户正在操作，停止摆动
     property bool swingIdle: true
+
+    /// true = 使用同级目录 01_L-01_R_relief.png 作为贴图（3D模型按钮）
+    property bool reliefTextureMode: false
 
     function ensureObjGenerated() {
         if (!customerID || groupID <= 0) return
@@ -60,6 +76,10 @@ Item {
     function applyObjAndTexturePaths() {
         var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
         root.objSource = base + defaultObjName
+        if (root.reliefTextureMode) {
+            root.textureSource = base + "01_L-01_R_relief.png"
+            return
+        }
         var idx = selectedTextureIndex
         if (idx < 0 || idx >= (subphotoes ? subphotoes.length : 0)) idx = 0
         var texName = getTextureFileName(idx)
@@ -99,15 +119,41 @@ Item {
         root.textureSource = ""
         root.generationErrorMessage = ""
         root.selectedTextureIndex = 0
+        root.selectedLeftIndex = 0
+        root.selectedRightIndex = 0
+        root.reliefTextureMode = false
         if (root.is3DViewActive)
             Qt.callLater(ensureObjGenerated)
     }
 
+    onMorphModeChanged: {
+        console.log("[MM3D] morphMode changed:", morphMode)
+        if (morphMode) {
+            if (reliefTextureMode)
+                reliefTextureMode = false
+            selectedLeftIndex = selectedTextureIndex
+            selectedRightIndex = selectedTextureIndex
+        }
+        console.log("[MM3D] morphMode on → leftTextureSource:", leftTextureSource, "rightTextureSource:", rightTextureSource, "fallback textureSource:", textureSource)
+    }
+
     onSelectedTextureIndexChanged: {
+        if (root.reliefTextureMode) return
         if (root.objSource && root.textureSource) {
             var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
             var texName = getTextureFileName(selectedTextureIndex)
             if (texName) root.textureSource = base + texName
+        }
+    }
+
+    onReliefTextureModeChanged: {
+        if (!root.objSource) return
+        var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
+        if (reliefTextureMode)
+            root.textureSource = base + "01_L-01_R_relief.png"
+        else {
+            var texName = getTextureFileName(selectedTextureIndex)
+            root.textureSource = texName ? (base + texName) : ""
         }
     }
 
@@ -185,9 +231,33 @@ Item {
 
                 Node { id: originNode; position: Qt.vector3d(0, 0, 0) }
 
+                // === 贴图链路：Texture.source(图片路径) → Material.baseColorMap/自定义采样 → 模型.materials = [Material] ===
+                // 普通模式：skinTex.source=textureSource，skinMat 用 skinTex，applyMaterialRecursively 把 skinMat 赋给 importNode
+                // 变脸模式：morphTexLeft/Right.source=left/rightTextureSource，morphMat 用 shader 采样这两张图，同上赋给 importNode
                 Texture {
                     id: skinTex
                     source: root.textureSource || "."
+                    generateMipmaps: false
+                    minFilter: Texture.Linear
+                    mipFilter: Texture.None
+                    magFilter: Texture.Linear
+                    tilingModeHorizontal: Texture.ClampToEdge
+                    tilingModeVertical: Texture.ClampToEdge
+                }
+
+                Texture {
+                    id: morphTexLeft
+                    source: root.morphMode ? (root.leftTextureSource || root.textureSource || ".") : "."
+                    generateMipmaps: false
+                    minFilter: Texture.Linear
+                    mipFilter: Texture.None
+                    magFilter: Texture.Linear
+                    tilingModeHorizontal: Texture.ClampToEdge
+                    tilingModeVertical: Texture.ClampToEdge
+                }
+                Texture {
+                    id: morphTexRight
+                    source: root.morphMode ? (root.rightTextureSource || root.textureSource || ".") : "."
                     generateMipmaps: false
                     minFilter: Texture.Linear
                     mipFilter: Texture.None
@@ -205,12 +275,27 @@ Item {
                     baseColorMap: skinTex
                 }
 
+                // 变脸贴图在这里：morphTexLeft / morphTexRight 的 source 指向图片路径，morphMat 用 shader 采样后画到模型上
+                CustomMaterial {
+                    id: morphMat
+                    // Shaded 模式：只自定义 BASE_COLOR，光照由引擎计算，色调与普通 skinMat 一致
+                    fragmentShader: "qrc:/morph_blend.frag"
+                    property TextureInput leftTex: TextureInput {
+                        texture: morphTexLeft
+                    }
+                    property TextureInput rightTex: TextureInput {
+                        texture: morphTexRight
+                    }
+                    property real uLeftRatio: root.morphLeftRatio
+                }
+
                 RuntimeLoader {
                     id: importNode
                     parent: originNode
                     source: root.objSource || ""
 
                     onStatusChanged: {
+                        console.log("[MM3D] RuntimeLoader status:", status, "objSource:", root.objSource, "textureSource:", root.textureSource)
                         if (status === RuntimeLoader.Success) {
                             importNode.scale = Qt.vector3d(1, 1, 1)
                             applyMaterialRecursively(importNode)
@@ -219,9 +304,28 @@ Item {
 
                     function applyMaterialRecursively(node) {
                         if (!node) return
-                        if ("materials" in node) node.materials = [ skinMat ]
+                        if ("materials" in node) {
+                            var mat = root.morphMode ? morphMat : skinMat
+                            node.materials = [ mat ]
+                            console.log("[MM3D] applyMaterialRecursively: set materials to", root.morphMode ? "morphMat (变脸双贴图)" : "skinMat (单贴图)", "morphMode=", root.morphMode)
+                        }
                         var kids = node.children
                         for (var i = 0; i < kids.length; ++i) applyMaterialRecursively(kids[i])
+                    }
+                }
+
+                Connections {
+                    target: root
+                    function onMorphModeChanged() {
+                        console.log("[MM3D] morph shader vert URL:", Qt.resolvedUrl("morph_blend.vert"), "frag URL:", Qt.resolvedUrl("morph_blend.frag"))
+                        if (importNode.status === RuntimeLoader.Success)
+                            importNode.applyMaterialRecursively(importNode)
+                    }
+                    function onSwingIdleChanged() {
+                        if (!root.swingIdle) {
+                            originNode.eulerRotation = Qt.vector3d(0, 0, 0)
+                            importNode.eulerRotation = Qt.vector3d(0, 0, 0)
+                        }
                     }
                 }
 
@@ -270,6 +374,29 @@ Item {
                     origin: originNode
                     xInvert: true
                     yInvert: false
+                }
+            }
+
+            /// 变脸模式：左右贴图合成比例滑块，往左=左占比变小(0%)，往右=左占比变大(100%)
+            Column {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 8
+                visible: root.morphMode
+                spacing: 4
+                Label {
+                    text: "左/右贴图比例：左 " + Math.round(root.morphLeftRatio * 100) + "% · 右 " + Math.round((1 - root.morphLeftRatio) * 100) + "%"
+                    color: "#ccc"
+                    font.pixelSize: 12
+                }
+                Slider {
+                    width: parent.width - 16
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    from: 0
+                    to: 1
+                    value: root.morphLeftRatio
+                    onMoved: root.morphLeftRatio = value
                 }
             }
 
@@ -334,12 +461,40 @@ Item {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 2
-                spacing: 2
+                anchors.margins: 4
+                spacing: 4
+
+                Item {
+                    width: parent.width
+                    height: 40
+                    CheckButton {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.morphMode ? "退出变脸" : "变脸"
+                        checked: root.morphMode
+                        onClicked: root.morphMode = !root.morphMode
+                    }
+                }
+
+                Item {
+                    width: parent.width
+                    height: 40
+                    CheckButton {
+                        id: reliefBtn
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.reliefTextureMode ? "退出模型" : "3D模型"
+                        checked: root.reliefTextureMode
+                        onClicked: root.reliefTextureMode = !root.reliefTextureMode
+                    }
+                    Binding {
+                        target: reliefBtn
+                        property: "checked"
+                        value: root.reliefTextureMode
+                    }
+                }
 
                 Item {
                     width: parent.width - 2
-                    height: parent.height - 30
+                    height: parent.height - 98
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     ListView {
@@ -351,50 +506,81 @@ Item {
                         anchors.bottomMargin: 2
                         model: root.subphotoes
                         clip: true
-                        spacing: 10
+                        spacing: 2
 
                         delegate: Rectangle {
-                            width: 200
-                            height: 148
+                            width: 190
+                            height: 128
                             anchors.horizontalCenter: parent.horizontalCenter
                             radius: 6
                             property bool hovered: false
-                            color: root.selectedTextureIndex === index ? "#3a3a4e" : "#2a2a2e"
-                            border.color: hovered ? "#888" : (root.selectedTextureIndex === index ? "#ffb300" : "#444")
-                            border.width: root.selectedTextureIndex === index ? 2 : 1
+                            color: (!root.morphMode && root.selectedTextureIndex === index) ? "#3a3a4e" : "#2a2a2e"
+                            border.color: hovered ? "#888" : (!root.morphMode && root.selectedTextureIndex === index ? "#ffb300" : "#444")
+                            border.width: (!root.morphMode && root.selectedTextureIndex === index) ? 2 : 1
 
                             Row {
                                 anchors.centerIn: parent
-                                spacing: 4
-                                Image {
-                                    width: 90
-                                    height: 120
-                                    source: modelData.photoL
-                                    fillMode: Image.PreserveAspectFit
-                                    sourceSize.width: 90
-                                    sourceSize.height: 120
-                                    asynchronous: true
+                                spacing: 2
+                                Rectangle {
+                                    width: 92
+                                    height: 122
+                                    radius: 4
+                                    color: "transparent"
+                                    border.color: root.morphMode && root.selectedLeftIndex === index ? "#ffb300" : "transparent"
+                                    border.width: root.morphMode && root.selectedLeftIndex === index ? 2 : 0
+                                    Image {
+                                        anchors.centerIn: parent
+                                        width: 90
+                                        height: 120
+                                        source: modelData.photoL
+                                        fillMode: Image.PreserveAspectFit
+                                        sourceSize.width: 90
+                                        sourceSize.height: 120
+                                        asynchronous: true
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        visible: root.morphMode
+                                        onClicked: root.selectedLeftIndex = index
+                                    }
                                 }
-                                Image {
-                                    width: 90
-                                    height: 120
-                                    source: modelData.photoR
-                                    fillMode: Image.PreserveAspectFit
-                                    sourceSize.width: 90
-                                    sourceSize.height: 120
-                                    asynchronous: true
+                                Rectangle {
+                                    width: 92
+                                    height: 122
+                                    radius: 4
+                                    color: "transparent"
+                                    border.color: root.morphMode && root.selectedRightIndex === index ? "#ffb300" : "transparent"
+                                    border.width: root.morphMode && root.selectedRightIndex === index ? 2 : 0
+                                    Image {
+                                        anchors.centerIn: parent
+                                        width: 90
+                                        height: 120
+                                        source: modelData.photoR
+                                        fillMode: Image.PreserveAspectFit
+                                        sourceSize.width: 90
+                                        sourceSize.height: 120
+                                        asynchronous: true
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        visible: root.morphMode
+                                        onClicked: root.selectedRightIndex = index
+                                    }
                                 }
                             }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onEntered: parent.hovered = true
-                            onExited: parent.hovered = false
-                            onClicked: root.selectedTextureIndex = index
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                visible: !root.morphMode
+                                onEntered: parent.hovered = true
+                                onExited: parent.hovered = false
+                                onClicked: root.selectedTextureIndex = index
+                            }
                         }
-                    }
                 }
                 }
             }

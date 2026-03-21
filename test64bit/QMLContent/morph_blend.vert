@@ -1,0 +1,7 @@
+VARYING vec2 fragUV;
+
+void MAIN()
+{
+    fragUV = UV0;
+    POSITION = MODELVIEWPROJECTION_MATRIX * vec4(VERTEX, 1.0);
+}

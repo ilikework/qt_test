@@ -50,9 +50,8 @@ Item {
     Text {
         id: label
         anchors.fill: parent
-        anchors.leftMargin: 12
         verticalAlignment: Text.AlignVCenter
-        horizontalAlignment: Text.AlignLeft
+        horizontalAlignment: Text.AlignHCenter
         font.pixelSize: 20
         font.bold: true
         color: "white"
