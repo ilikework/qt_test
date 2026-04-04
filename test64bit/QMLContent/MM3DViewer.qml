@@ -102,6 +102,42 @@ Item {
     /// 为 false 时关闭 [MM3D] 材质刷新日志（默认开启，便于在「应用程序输出」里看到）
     property bool mm3dDebugLogs: true
 
+    /// 主画面放大镜：圆心处画面固定 2 倍；可拖动透镜位置；滚轮只调透镜半径（大小）
+    property bool magnifierActive: false
+    property real magnifierCenterNX: 0.5
+    property real magnifierCenterNY: 0.5
+    /// 半径占 min(宽,高) 的比例（初始约为原 0.2 的 1/4）
+    property real magnifierRadiusN: 0.05
+    readonly property real magnifierLensZoom: 2.0
+    property bool magnifierDragging: false
+    property real magnifierDragGrabOffX: 0
+    property real magnifierDragGrabOffY: 0
+
+    onMagnifierActiveChanged: {
+        if (magnifierActive) {
+            magnifierCenterNX = 0.5
+            magnifierCenterNY = 0.5
+            magnifierRadiusN = 0.05
+        } else {
+            magnifierDragging = false
+        }
+    }
+
+    /// 放大镜透镜可见圆内（与 hit 区无关），用于滚轮：圆内调大小，圆外交给 3D 轨道
+    function magnifierPointInVisibleLens(localX, localY) {
+        var w = viewArea.width
+        var h = viewArea.height
+        if (w < 1 || h < 1 || !magnifierActive)
+            return false
+        var mn = Math.min(w, h)
+        var cx = magnifierCenterNX * w
+        var cy = magnifierCenterNY * h
+        var r = magnifierRadiusN * mn
+        var dx = localX - cx
+        var dy = localY - cy
+        return dx * dx + dy * dy <= r * r
+    }
+
     Component.onCompleted: {
         console.warn("[MM3D] MM3DViewer 已加载；材质调试日志 mm3dDebugLogs=", mm3dDebugLogs,
                      "（若看不到本行，请检查 Qt Creator「应用程序输出」或 qml 控制台是否被过滤）")
@@ -360,6 +396,7 @@ Item {
 
             View3D {
                 id: view3d
+                z: -1
                 anchors.fill: parent
                 camera: camera
 
@@ -557,11 +594,14 @@ Item {
                     origin: originNode
                     xInvert: true
                     yInvert: false
+                    /// 拖移放大镜时不要带动 3D 旋转
+                    mouseEnabled: !(root.magnifierActive && root.magnifierDragging)
                 }
             }
 
             /// 仅在 View3D 内按下鼠标后才停止摆动并重置 30 秒无操作计时，避免只移入/移动就停
             MouseArea {
+                z: 1
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 propagateComposedEvents: true
@@ -584,11 +624,12 @@ Item {
                 }
             }
 
-            /// Z 轴：变脸模式下在主画面上用滚轮调节偏移（覆盖在 View3D 上，避免与相机轨道抢滚轮）
+            /// Z 轴：变脸滚轮；打开放大镜时关闭本层，圆外滚轮才能交给轨道缩放
+            /// z 须低于底栏，否则全屏透明层会抢先命中，底部滑条无法拖动
             Item {
                 anchors.fill: parent
-                visible: root.morphMode && root.morphBlendAxis === 2
-                z: 103
+                visible: root.morphMode && root.morphBlendAxis === 2 && !root.magnifierActive
+                z: 50
                 WheelHandler {
                     onWheel: function (event) {
                         var dy = event.angleDelta.y / 120.0
@@ -603,16 +644,17 @@ Item {
             }
 
             /// Y 轴偏移：主画面右侧竖条，拖动方向与屏幕上下一致（底栏之上）
+            /// 高度由底栏 y 推算，避免与底栏 anchors 成环；非 Y 轴时高度为 0
             Item {
                 id: morphYSliderPanel
                 visible: root.morphMode && root.morphBlendAxis === 1
-                z: 101
+                z: 201
                 width: 56
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.topMargin: 8
-                anchors.bottom: view3dBottomOverlay.top
-                anchors.bottomMargin: 6
+                readonly property bool morphYActive: root.morphMode && root.morphBlendAxis === 1
+                height: morphYActive ? Math.max(0, view3dBottomOverlay.y - y - 6) : 0
 
                 Rectangle {
                     anchors.fill: parent
@@ -651,7 +693,7 @@ Item {
             /// 主画面底部：变脸控件在上，3D 光源角度/亮度在最下（需在 MouseArea 之上才能拖动滑条）
             Column {
                 id: view3dBottomOverlay
-                z: 100
+                z: 200
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
@@ -827,8 +869,115 @@ Item {
                 }
             }
 
+            /// 放大镜：圆心在屏幕上的位置 = 采样中心，圆内为固定 2×；滚轮改半径
+            Item {
+                id: magnifierLayer
+                anchors.fill: parent
+                visible: root.magnifierActive
+                z: 180
+
+                ShaderEffectSource {
+                    id: magnifierGrab
+                    anchors.fill: parent
+                    sourceItem: view3d
+                    live: root.magnifierActive
+                    hideSource: false
+                    smooth: true
+                }
+
+                ShaderEffect {
+                    id: magnifierShader
+                    anchors.fill: parent
+                    property variant source: magnifierGrab
+                    property real centerNX: root.magnifierCenterNX
+                    property real centerNY: root.magnifierCenterNY
+                    property real radiusN: root.magnifierRadiusN
+                    property real zoomMag: root.magnifierLensZoom
+                    property real texW: width
+                    property real texH: height
+                    /// Qt 6：fragmentShader 须为 qsb 资源（由 CMake qt_add_shaders 生成）
+                    fragmentShader: "qrc:/shaders/magnifier_glass.frag.qsb"
+                }
+
+                /// 滚轮必须用顶层 MouseArea：WheelHandler 的 wheel.x/y 与透镜判定坐标系不一致，会导致圆内永远判不中
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    propagateComposedEvents: true
+                    acceptedButtons: Qt.LeftButton
+                    onWheel: function (wheel) {
+                        if (!root.magnifierActive) {
+                            wheel.accepted = false
+                            return
+                        }
+                        var px = wheel.x
+                        var py = wheel.y
+                        if (!root.magnifierPointInVisibleLens(px, py)) {
+                            wheel.accepted = false
+                            return
+                        }
+                        var d = wheel.angleDelta.y / 120.0
+                        if (Math.abs(d) < 1e-6 && wheel.pixelDelta !== undefined) {
+                            var pdy = wheel.pixelDelta.y
+                            if (pdy > 0.5) d = 0.3
+                            else if (pdy < -0.5) d = -0.3
+                        }
+                        if (Math.abs(d) < 1e-6) {
+                            wheel.accepted = false
+                            return
+                        }
+                        var f = 1.0 + d * 0.1
+                        var mnPx = Math.max(1.0, Math.min(width, height))
+                        var minN = 12.0 / mnPx
+                        var maxN = 0.48
+                        root.magnifierRadiusN = Math.max(minN, Math.min(maxN, root.magnifierRadiusN * f))
+                        wheel.accepted = true
+                    }
+                    onPressed: function (mouse) {
+                        var w = width
+                        var h = height
+                        if (w < 1 || h < 1) {
+                            mouse.accepted = false
+                            return
+                        }
+                        var mn = Math.min(w, h)
+                        var cx = root.magnifierCenterNX * w
+                        var cy = root.magnifierCenterNY * h
+                        var r = root.magnifierRadiusN * mn
+                        /// 略大于可见圆，便于拖移小透镜
+                        var hitR = r + 10
+                        var dx = mouse.x - cx
+                        var dy = mouse.y - cy
+                        if (dx * dx + dy * dy <= hitR * hitR) {
+                            root.magnifierDragging = true
+                            root.magnifierDragGrabOffX = mouse.x - cx
+                            root.magnifierDragGrabOffY = mouse.y - cy
+                            mouse.accepted = true
+                        } else {
+                            mouse.accepted = false
+                        }
+                    }
+                    onPositionChanged: function (mouse) {
+                        if (!root.magnifierDragging || !(mouse.buttons & Qt.LeftButton))
+                            return
+                        var w = width
+                        var h = height
+                        var nx = (mouse.x - root.magnifierDragGrabOffX) / w
+                        var ny = (mouse.y - root.magnifierDragGrabOffY) / h
+                        root.magnifierCenterNX = Math.max(0.0, Math.min(1.0, nx))
+                        root.magnifierCenterNY = Math.max(0.0, Math.min(1.0, ny))
+                    }
+                    onReleased: function (mouse) {
+                        var was = root.magnifierDragging
+                        root.magnifierDragging = false
+                        mouse.accepted = was
+                    }
+                }
+            }
+
             Rectangle {
                 anchors.fill: viewArea
+                z: 300
                 color: "#80000000"
                 visible: mm3dManager.running
                 BusyIndicator { anchors.centerIn: parent; running: true }
@@ -842,6 +991,7 @@ Item {
 
             Rectangle {
                 anchors.fill: viewArea
+                z: 300
                 color: "#1a0a0a"
                 visible: root.generationErrorMessage !== ""
                 Text {
@@ -923,8 +1073,25 @@ Item {
                 }
 
                 Item {
+                    width: parent.width
+                    height: 40
+                    CheckButton {
+                        id: magnifierBtn
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.magnifierActive ? "关放大镜" : "放大镜"
+                        checked: root.magnifierActive
+                        onClicked: root.magnifierActive = !root.magnifierActive
+                    }
+                    Binding {
+                        target: magnifierBtn
+                        property: "checked"
+                        value: root.magnifierActive
+                    }
+                }
+
+                Item {
                     width: parent.width - 2
-                    height: parent.height - 136
+                    height: parent.height - 180
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     ListView {
