@@ -32,16 +32,18 @@ Item {
     property int selectedRightIndex: 0
     /// 变脸左右分界固定 50:50（不调）
     readonly property real morphLeftRatio: 0.5
-    /// 变脸：局部轴 0=X，1=Y，2=Z（常见人脸左右为 X，若不对可换 Y/Z）；固定按模型局部轴分界
+    /// 变脸：局部轴 0=X，1=Y，2=Z（Y 用右侧竖滑条；Z 用滚轮）
     property int morphBlendAxis: 0
     /// 局部坐标 → 0~1：coord = clamp(axis * scale + bias, 0, 1)；轴缩放固定为原滑条最大值 20，不可调
     readonly property real morphMeshScale: 20.0
     property real morphMeshBias: 0.0
-    /// 轴偏移：局部 X ±15，局部 Y ±18，局部 Z 0~11
+    /// 轴偏移：局部 X ±15，局部 Y 约 ±19~17，局部 Z -11~11
     readonly property real morphBiasMin: morphBlendAxis === 0 ? -15.0
-        : (morphBlendAxis === 1 ? -19.0 : 0.0)
+        : (morphBlendAxis === 1 ? -19.0 : -11.0)
     readonly property real morphBiasMax: morphBlendAxis === 0 ? 15.0
         : (morphBlendAxis === 1 ? 17.0 : 11.0)
+    /// Z 轴：滚轮每「刻度」步进（angleDelta 按 120 归一）
+    property real morphZWheelStep: 0.12
     /// 接缝柔化固定为最小，不可调
     readonly property real morphBlendFeather: 0.012
     /// 与 CustomMaterial uEmissiveFactor 同源：普通模式与变脸共用
@@ -272,8 +274,16 @@ Item {
     }
 
     onMorphBlendAxisChanged: {
-        if (morphMeshBias < morphBiasMin) morphMeshBias = morphBiasMin
-        else if (morphMeshBias > morphBiasMax) morphMeshBias = morphBiasMax
+        if (morphBlendAxis < 0)
+            morphBlendAxis = 0
+        else if (morphBlendAxis > 2)
+            morphBlendAxis = 2
+        if (morphBlendAxis === 2) {
+            morphMeshBias = 11
+        } else {
+            if (morphMeshBias < morphBiasMin) morphMeshBias = morphBiasMin
+            else if (morphMeshBias > morphBiasMax) morphMeshBias = morphBiasMax
+        }
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
@@ -574,6 +584,70 @@ Item {
                 }
             }
 
+            /// Z 轴：变脸模式下在主画面上用滚轮调节偏移（覆盖在 View3D 上，避免与相机轨道抢滚轮）
+            Item {
+                anchors.fill: parent
+                visible: root.morphMode && root.morphBlendAxis === 2
+                z: 103
+                WheelHandler {
+                    onWheel: function (event) {
+                        var dy = event.angleDelta.y / 120.0
+                        var nb = root.morphMeshBias - dy * root.morphZWheelStep
+                        if (nb < root.morphBiasMin)
+                            nb = root.morphBiasMin
+                        if (nb > root.morphBiasMax)
+                            nb = root.morphBiasMax
+                        root.morphMeshBias = nb
+                    }
+                }
+            }
+
+            /// Y 轴偏移：主画面右侧竖条，拖动方向与屏幕上下一致（底栏之上）
+            Item {
+                id: morphYSliderPanel
+                visible: root.morphMode && root.morphBlendAxis === 1
+                z: 101
+                width: 56
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: 8
+                anchors.bottom: view3dBottomOverlay.top
+                anchors.bottomMargin: 6
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: "#66000000"
+                    radius: 4
+                    border.color: "#40ffffff"
+                    border.width: 1
+                }
+                Label {
+                    id: morphYValueLabel
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 6
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.morphMeshBias.toFixed(2)
+                    color: "#ccc"
+                    font.pixelSize: 11
+                }
+                Slider {
+                    orientation: Qt.Vertical
+                    anchors.top: parent.top
+                    anchors.topMargin: 8
+                    anchors.bottom: morphYValueLabel.top
+                    anchors.bottomMargin: 4
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 36
+                    from: root.morphBiasMin
+                    to: root.morphBiasMax
+                    stepSize: 0.02
+                    /// 与模型局部 Y 分界方向对齐：滑条上推对应画面上移（相对原颠倒映射）
+                    value: root.morphBiasMin + root.morphBiasMax - root.morphMeshBias
+                    onMoved: root.morphMeshBias = root.morphBiasMin + root.morphBiasMax - value
+                }
+            }
+
             /// 主画面底部：变脸控件在上，3D 光源角度/亮度在最下（需在 MouseArea 之上才能拖动滑条）
             Column {
                 id: view3dBottomOverlay
@@ -585,53 +659,104 @@ Item {
                 spacing: 8
                 width: parent.width - 16
 
-                /// 变脸：分界轴、轴偏移（对应 morph_blend 里局部坐标 t）
+                /// 变脸：图标按钮循环 X→Y→Z；X 底栏横滑条，Y 右侧竖滑条，Z 主画面滚轮
                 Column {
                     width: parent.width
                     visible: root.morphMode
-                    spacing: 4
-                    Label {
-                        width: parent.width
-                        wrapMode: Text.WordWrap
-                        text: "左右图按模型局部轴与偏移在 3D 上混合（非整张贴图竖切）。"
-                        color: "#888"
-                        font.pixelSize: 10
-                    }
-                    RowLayout {
-                        width: parent.width
-                        spacing: 8
-                        Label { text: "分界轴"; color: "#aaa"; font.pixelSize: 11 }
-                        ComboBox {
-                            Layout.fillWidth: true
-                            model: ["局部 X（常见左右）", "局部 Y", "局部 Z"]
-                            currentIndex: root.morphBlendAxis
-                            onActivated: function (idx) {
-                                root.morphBlendAxis = idx
-                            }
-                        }
-                    }
+                    spacing: 6
                     RowLayout {
                         width: parent.width
                         spacing: 6
-                        Label {
-                            text: root.morphBlendAxis === 0 ? "轴偏移 X"
-                                  : (root.morphBlendAxis === 1 ? "轴偏移 Y" : "轴偏移 Z")
-                            color: "#aaa"
-                            font.pixelSize: 11
+                        ToolButton {
+                            id: morphAxisBtn
+                            implicitWidth: 44
+                            implicitHeight: 44
+                            padding: 4
+                            flat: true
+                            display: AbstractButton.IconOnly
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
+                                          : (root.morphBlendAxis === 1 ? "分界轴 Y（点按→Z）" : "分界轴 Z（点按→X）")
+                            onClicked: root.morphBlendAxis = (root.morphBlendAxis + 1) % 3
+                            /// 图1 左右分界 / 图2 上下分界 / 图3 中心圆点（内嵌矢量，不依赖外部 png）
+                            contentItem: Item {
+                                implicitWidth: 36
+                                implicitHeight: 36
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 3
+                                    color: "#b8b8b8"
+                                    border.width: 1
+                                    border.color: "#5a5a5a"
+                                }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    color: "#a8a8a8"
+                                    border.width: 1
+                                    border.color: "#1a1a1a"
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 22
+                                        height: 22
+                                        Row {
+                                            visible: root.morphBlendAxis === 0
+                                            anchors.centerIn: parent
+                                            spacing: 0
+                                            Rectangle { width: 11; height: 22; color: "#252525" }
+                                            Rectangle { width: 11; height: 22; color: "#e0e0e0" }
+                                        }
+                                        Column {
+                                            visible: root.morphBlendAxis === 1
+                                            anchors.centerIn: parent
+                                            spacing: 0
+                                            Rectangle { width: 22; height: 11; color: "#e8e8e8" }
+                                            Rectangle { width: 22; height: 11; color: "#252525" }
+                                        }
+                                        Item {
+                                            visible: root.morphBlendAxis === 2
+                                            anchors.centerIn: parent
+                                            width: 22
+                                            height: 22
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#d8d8d8"
+                                            }
+                                            Rectangle {
+                                                width: 8
+                                                height: 8
+                                                radius: 4
+                                                anchors.centerIn: parent
+                                                color: "#1a1a1a"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Slider {
                             Layout.fillWidth: true
+                            visible: root.morphBlendAxis === 0
                             from: root.morphBiasMin
                             to: root.morphBiasMax
                             stepSize: 0.02
                             value: root.morphMeshBias
                             onMoved: root.morphMeshBias = value
                         }
+                        Item {
+                            Layout.fillWidth: true
+                            visible: root.morphBlendAxis === 2
+                        }
                         Label {
-                            text: root.morphMeshBias.toFixed(2)
+                            visible: root.morphBlendAxis === 0 || root.morphBlendAxis === 2
+                            text: root.morphBlendAxis === 2
+                                  ? (root.morphMeshBias.toFixed(2) + " ·滚轮")
+                                  : root.morphMeshBias.toFixed(2)
                             color: "#ccc"
                             font.pixelSize: 11
-                            Layout.minimumWidth: 40
+                            Layout.minimumWidth: root.morphBlendAxis === 2 ? 64 : 40
                         }
                     }
                 }
