@@ -27,6 +27,8 @@ Item {
     property var mainphotoes:  analyseModule.thumbphotoes
     property var subphotoes:[]
     property int currentGroupID: 0
+    /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
+    property int subListSelectedIndex: 0
 
     Component.onCompleted:
     {
@@ -42,6 +44,7 @@ Item {
     {
         currentGroupID = mainphotoes[index].GROUPID
         subphotoes = analyseModule.loadSub(mainphotoes[index].GROUPID)
+        subListSelectedIndex = subphotoes.length > 0 ? 0 : -1
         if(subphotoes.length>0)
         {
             // Let the list render first, then load the main editing area in the next frame
@@ -55,12 +58,12 @@ Item {
     }
 
 
-    /* ==== 上方缩略图栏 ==== */
+    /* ==== 上方缩略图栏（整体约 72.5% 缩放） ==== */
     Rectangle
     {
         id: thumbBar
         width: parent.width
-        height: 145
+        height: 105
         color: "#222226"
         border.color: "#444"
         border.width: 1
@@ -73,12 +76,12 @@ Item {
         RowLayout
         {
             anchors.fill: parent
-            anchors.margins: 10
-            spacing: 8
+            anchors.margins: 7
+            spacing: 6
 
             IconButton {
-                Layout.preferredWidth:60
-                Layout.preferredHeight:120
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 87
                 source: "./images/left_icon.svg"
                 enabled: thumbBar.thumbCurrentPage > 1
                 opacity: enabled ? 1 : 0.4
@@ -95,43 +98,43 @@ Item {
 
                 Row {
                     id: thumbRow
-                    spacing: 8
+                    spacing: 6
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.right: parent.right
 
-                    readonly property int delegateWidth: 188
+                    readonly property int delegateWidth: 141
                     property int rowWidth: delegateWidth + spacing
 
                     Repeater {
                         id: mainThumbList
                         model: mainphotoes.slice((thumbBar.thumbCurrentPage-1)*thumbBar.thumbPageSize, thumbBar.thumbCurrentPage*thumbBar.thumbPageSize)
                         delegate: Rectangle {
-                            width: 188; height: 128; radius: 4
+                            width: 141; height: 93; radius: 4
                             property int globalIndex: (thumbBar.thumbCurrentPage - 1) * thumbBar.thumbPageSize + index
                             color: globalIndex === curIndex ? "#2a2a2e" : "#333"
                             border.color: globalIndex === curIndex ? "#ffb300" : "#444"
                             border.width: 4
 
                             Row {
-                                leftPadding: 4
-                                topPadding: 4
+                                leftPadding: 3
+                                topPadding: 3
                                 //spacing: 8
 
                                 Image {
-                                    width: 90; height: 120
+                                    width: 65; height: 87
                                     fillMode: Image.PreserveAspectFit
                                     source: modelData.photoL
-                                    sourceSize.width: 90
-                                    sourceSize.height: 120
+                                    sourceSize.width: 65
+                                    sourceSize.height: 87
                                     asynchronous: true
                                 }
                                 Image {
-                                    width: 90; height: 120
+                                    width: 65; height: 87
                                     fillMode: Image.PreserveAspectFit
                                     source: modelData.photoR
-                                    sourceSize.width: 90
-                                    sourceSize.height: 120
+                                    sourceSize.width: 65
+                                    sourceSize.height: 87
                                     asynchronous: true
                                 }
                             }
@@ -156,8 +159,8 @@ Item {
                 }
             }
             IconButton {
-                Layout.preferredWidth:60
-                Layout.preferredHeight:120
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 87
                 source: "./images/right_icon.svg"
                 enabled: thumbBar.thumbCurrentPage < thumbBar.thumbTotalPages
                 opacity: enabled ? 1 : 0.4
@@ -181,7 +184,7 @@ Item {
         /* ==== 左栏按钮区域 ==== */
         Rectangle {
             id: leftBar
-            width: 240
+            width: 192
             color: "#232325"
             Layout.fillHeight: true
 
@@ -370,7 +373,7 @@ Item {
                 // ==========================================================
                 Rectangle {
                     id: sideBar
-                    Layout.preferredWidth: 210
+                    Layout.preferredWidth: 162
                     Layout.fillHeight: true
                     color: "#1e1e1e"
                     radius: 8
@@ -385,58 +388,65 @@ Item {
                         clip: true
                         spacing: 10
 
-                        delegate: Rectangle {
-                            width: 195
-                            height: 135
-                            radius: 6
-                            // 增加选中效果：如果当前主图正是这张，则高亮
-                            color: "#2a2a2e"
-                            border.color: (leftMain.source === modelData.photoL) ? "#ffb300" : "#444"
-                            border.width: (leftMain.source === modelData.photoL) ? 2 : 1
+                        delegate: Item {
+                            width: ListView.view.width
+                            height: 98
+                            readonly property bool thumbSelected: index === customerDetail.subListSelectedIndex
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 4
-                                Row {
-                                    spacing: 4
-                                    Image {
-                                        width: 90; height: 120
-                                        source: modelData.photoL
-                                        fillMode: Image.PreserveAspectFit
-                                        sourceSize.width: 90
-                                        sourceSize.height: 120
-                                        asynchronous: true
-                                        // 优化：平滑缩放
-                                        //mipmap: true
+                            Rectangle {
+                                id: subListThumbRect
+                                width: 141
+                                height: 98
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                radius: 6
+                                color: parent.thumbSelected ? "#3a3a4e" : "#2a2a2e"
+                                property bool thumbHovered: false
+                                // 悬停：银灰外框；选中（点击后主图已是该项）：橙色外框
+                                border.color: parent.thumbSelected ? "#ffb300"
+                                    : (thumbHovered ? "#b8b8c0" : "#444")
+                                border.width: parent.thumbSelected ? 2 : 1
 
-                                    }
-                                    Image {
-                                        width: 90; height: 120
-                                        source: modelData.photoR
-                                        fillMode: Image.PreserveAspectFit
-                                        sourceSize.width: 90
-                                        sourceSize.height: 120
-                                        asynchronous: true
-                                        //mipmap: true
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 3
+                                    Row {
+                                        spacing: 3
+                                        Image {
+                                            width: 65; height: 87
+                                            source: modelData.photoL
+                                            fillMode: Image.PreserveAspectFit
+                                            sourceSize.width: 65
+                                            sourceSize.height: 87
+                                            asynchronous: true
+                                        }
+                                        Image {
+                                            width: 65; height: 87
+                                            source: modelData.photoR
+                                            fillMode: Image.PreserveAspectFit
+                                            sourceSize.width: 65
+                                            sourceSize.height: 87
+                                            asynchronous: true
+                                        }
                                     }
                                 }
-                            } // Column
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                hoverEnabled: true
-                                onEntered: parent.border.color = "#888"
-                                onExited: if(leftMain.source !== modelData.photoL) parent.border.color = "#444"
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    onEntered: subListThumbRect.thumbHovered = true
+                                    onExited: subListThumbRect.thumbHovered = false
 
-                                onClicked: {
-                                    // 强制触发 UI 刷新（如果模型没自动发信号）
-                                    leftMain.source = modelData.photoL
-                                    leftMain.init(modelData.IXL,"_L")
-                                    rightMain.source = modelData.photoR
-                                    rightMain.init(modelData.IXR,"_R")
-                                }
-                            } // MouseArea
+                                    onClicked: {
+                                        customerDetail.subListSelectedIndex = index
+                                        // 强制触发 UI 刷新（如果模型没自动发信号）
+                                        leftMain.source = modelData.photoL
+                                        leftMain.init(modelData.IXL,"_L")
+                                        rightMain.source = modelData.photoR
+                                        rightMain.init(modelData.IXR,"_R")
+                                    }
+                                } // MouseArea
+                            }
                         }
                     }
                 }

@@ -50,7 +50,10 @@ file(GLOB_RECURSE QML_RESOURCE_FILES
 # --- 变脸 shader 必须打进 qrc，否则 CustomMaterial 会报 Failed to read shader code from :/morph_blend.vert ---
 list(APPEND QML_RESOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend.vert"
-    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend.frag"
+    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend_lit.frag"
+    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend_unlit.frag"
+    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/material_demo.vert"
+    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/material_demo_unlit.frag"
 )
 
 # --- 将 QMLContent 目录下的所有文件作为资源编译进程序 ---
