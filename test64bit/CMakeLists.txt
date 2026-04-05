@@ -52,8 +52,6 @@ list(APPEND QML_RESOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend_lit.frag"
     "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/morph_blend_unlit.frag"
-    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/material_demo.vert"
-    "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/material_demo_unlit.frag"
 )
 
 # --- 将 QMLContent 目录下的所有文件作为资源编译进程序 ---
@@ -62,6 +60,34 @@ qt_add_resources(apptest64bit "qml_resources"
     BASE ${CMAKE_CURRENT_SOURCE_DIR}/QMLContent
     PREFIX "/"
     FILES ${QML_RESOURCE_FILES}
+)
+
+# ShaderEffect（放大镜）：不用 qt_add_shaders，避免 Qt 6.10 + Ninja 在 Windows 上生成错误路径
+# （.qsb/D:/...）。改用 qsb 可执行文件 + qt_add_resources。
+find_program(QT_QSB_EXECUTABLE
+    NAMES qsb qsb.exe
+    REQUIRED
+    HINTS "${Qt6_DIR}/../../../bin" "${Qt6_DIR}/../../bin" "$ENV{QTDIR}/bin"
+    DOC "Qt Shader Baker (ShaderEffect .qsb)"
+)
+set(MM_MAGNIFIER_FRAG "${CMAKE_CURRENT_SOURCE_DIR}/shaders/magnifier_glass.frag")
+set(MM_MAGNIFIER_QSB "${CMAKE_CURRENT_BINARY_DIR}/magnifier_glass.frag.qsb")
+# --qt6：生成 GLSL(100es/120/150)+HLSL(SM5.0)+MSL，与 qt_add_shaders 默认一致；缺 HLSL 时 Windows D3D 会报 pipeline 失败
+add_custom_command(
+    OUTPUT "${MM_MAGNIFIER_QSB}"
+    COMMAND "${QT_QSB_EXECUTABLE}" --qt6 "${MM_MAGNIFIER_FRAG}" -o "${MM_MAGNIFIER_QSB}"
+    DEPENDS "${MM_MAGNIFIER_FRAG}"
+    COMMENT "Baking magnifier_glass.frag for ShaderEffect (multi-backend)"
+    VERBATIM
+)
+# Qt 6.10+：构建树里的绝对路径进 qrc 时必须设别名，才能在资源里按 PREFIX+别名访问
+set_source_files_properties("${MM_MAGNIFIER_QSB}" PROPERTIES
+    QT_RESOURCE_ALIAS "magnifier_glass.frag.qsb"
+    GENERATED TRUE
+)
+qt_add_resources(apptest64bit "mm_magnifier_qsb"
+    PREFIX "/shaders"
+    FILES "${MM_MAGNIFIER_QSB}"
 )
 
 
