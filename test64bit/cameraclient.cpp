@@ -174,8 +174,16 @@ void CameraClient::startPreviewInternal() {
 
 void CameraClient::capture()
 {
-    if (!connected()) { emit log("Not connected."); return; }
-    if (!previewOn()) { emit log("Not previewOn."); return; }
+    if (!connected()) {
+        emit log("Not connected.");
+        emit captureFinished(false);
+        return;
+    }
+    if (!previewOn()) {
+        emit log("Not previewOn.");
+        emit captureFinished(false);
+        return;
+    }
 
     left_pics_.clear();
     right_pics_.clear();
@@ -188,6 +196,7 @@ void CameraClient::capture()
     auto* flow = new CaptureFlow(this,CustomerID_,GroupID_,this);
     connect(flow, &CaptureFlow::finished, this, [this](bool ok, const QString& msg){
         emit log(msg);
+        emit captureFinished(ok);
     });
     flow->start();
 }

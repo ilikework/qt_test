@@ -15,6 +15,7 @@ Item {
     property var subphotoes: []
     property string customerID: ""
     property int groupID: 0
+    /// 由父级传入（如 currentIndex===1）；仅作语义标记。空闲计时以 root.visible 为准，避免未绑定时恒为 false 导致永不恢复摆动。
     property bool is3DViewActive: false
 
     readonly property string groupIdStr: groupID < 10 ? ("0" + groupID) : String(groupID)
@@ -37,6 +38,11 @@ Item {
     /// 局部坐标 → 0~1：coord = clamp(axis * scale + bias, 0, 1)；轴缩放固定为原滑条最大值 20，不可调
     readonly property real morphMeshScale: 20.0
     property real morphMeshBias: 0.0
+    /// 各分界轴（左右 / 上下 / 中心圆点）独立保存偏移，切换轴时互不覆盖
+    property real morphBiasAxis0: 0.0
+    property real morphBiasAxis1: 0.0
+    property real morphBiasAxis2: 11.0
+    property bool _morphBiasSyncInternally: false
     /// 轴偏移：局部 X ±15，局部 Y 约 ±19~17，局部 Z -11~11
     readonly property real morphBiasMin: morphBlendAxis === 0 ? -15.0
         : (morphBlendAxis === 1 ? -19.0 : -11.0)
@@ -92,8 +98,15 @@ Item {
 
     /// true = 无人操作，obj 左右摆动；false = 用户正在操作，停止摆动
     property bool swingIdle: true
-    /// 人脸中心轴 ±90° 半周期时长（ms）；相对原 4000ms 摆动角速度降低约 30%（时长 ÷0.7）
-    readonly property int swingHalfCycleMs: 5714
+    /// 人脸中心轴 ±90° 半周期时长（ms）；在 5714ms 基础上再放慢约 30%（×1.3）
+    readonly property int swingHalfCycleMs: Math.round(5714 * 1.3)
+
+    /// 即将恢复自动摆动前的 15s 倒计时（点击可关闭；关闭后 30 秒内不再出现）
+    property bool swingCountdownVisible: false
+    property int swingCountdownSec: 0
+    property bool swingReminderSuppressed: false
+    /// 上次主画面交互时间戳（ms），与 swingIdleTickTimer 一起推导 15s 预告 / 30s 恢复摆动
+    property real swingIdleLastMs: 0
 
     /// true = 使用同级目录 01_L-01_R_relief.png 作为贴图（3D模型按钮）
     property bool reliefTextureMode: false
@@ -266,9 +279,15 @@ Item {
         return JSON.stringify(obj)
     }
 
-    onIs3DViewActiveChanged: {
-        if (is3DViewActive)
+    onVisibleChanged: {
+        if (visible) {
             Qt.callLater(ensureObjGenerated)
+            if (!root.swingIdle && root.objSource)
+                Qt.callLater(root.resumeSwingIdleTickIfNeeded)
+        } else {
+            swingIdleTickTimer.stop()
+            swingCountdownVisible = false
+        }
     }
 
     onGroupIDChanged: {
@@ -279,7 +298,7 @@ Item {
         root.selectedLeftIndex = 0
         root.selectedRightIndex = 0
         root.reliefTextureMode = false
-        if (root.is3DViewActive)
+        if (root.visible)
             Qt.callLater(ensureObjGenerated)
     }
 
@@ -290,6 +309,11 @@ Item {
                 reliefTextureMode = false
             selectedLeftIndex = selectedTextureIndex
             selectedRightIndex = selectedTextureIndex
+            /// 变脸时也允许 30s 无操作恢复摆动 + 15～30s 倒计时，不在这里停表
+            if (!root.swingIdle && root.objSource && root.visible)
+                Qt.callLater(root.resumeSwingIdleTickIfNeeded)
+        } else if (!root.swingIdle && root.objSource && root.visible) {
+            Qt.callLater(root.restartSwingIdleTimers)
         }
         console.log("[MM3D] morphMode on → leftTextureSource:", leftTextureSource, "rightTextureSource:", rightTextureSource, "fallback textureSource:", textureSource)
         Qt.callLater(refresh3DMaterial)
@@ -305,8 +329,43 @@ Item {
     }
 
     onMorphMeshBiasChanged: {
+        if (!_morphBiasSyncInternally) {
+            if (morphBlendAxis === 0)
+                morphBiasAxis0 = morphMeshBias
+            else if (morphBlendAxis === 1)
+                morphBiasAxis1 = morphMeshBias
+            else
+                morphBiasAxis2 = morphMeshBias
+        }
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
+    }
+
+    /// 循环切换分界轴：先写入当前轴存储，再读出目标轴存储并 clamp（不再在 Z 轴强制写死 11）
+    function advanceMorphBlendAxis() {
+        if (morphBlendAxis === 0)
+            morphBiasAxis0 = morphMeshBias
+        else if (morphBlendAxis === 1)
+            morphBiasAxis1 = morphMeshBias
+        else
+            morphBiasAxis2 = morphMeshBias
+
+        var next = (morphBlendAxis + 1) % 3
+        morphBlendAxis = next
+
+        _morphBiasSyncInternally = true
+        if (next === 0)
+            morphMeshBias = morphBiasAxis0
+        else if (next === 1)
+            morphMeshBias = morphBiasAxis1
+        else
+            morphMeshBias = morphBiasAxis2
+
+        if (morphMeshBias < morphBiasMin)
+            morphMeshBias = morphBiasMin
+        else if (morphMeshBias > morphBiasMax)
+            morphMeshBias = morphBiasMax
+        _morphBiasSyncInternally = false
     }
 
     onMorphBlendAxisChanged: {
@@ -314,12 +373,6 @@ Item {
             morphBlendAxis = 0
         else if (morphBlendAxis > 2)
             morphBlendAxis = 2
-        if (morphBlendAxis === 2) {
-            morphMeshBias = 11
-        } else {
-            if (morphMeshBias < morphBiasMin) morphMeshBias = morphBiasMin
-            else if (morphMeshBias > morphBiasMax) morphMeshBias = morphBiasMax
-        }
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
@@ -376,12 +429,74 @@ Item {
         }
     }
 
-    /// 30 秒无操作后恢复 obj 左右摆动
+    /// 无操作 30s 恢复摆动、15s～30s 段显示剩余秒数：统一由本定时器每秒根据 swingIdleLastMs 计算（避免多 Timer 竞态）
     Timer {
-        id: idleTimer
+        id: swingIdleTickTimer
+        interval: 1000
+        repeat: true
+        running: false
+        triggeredOnStart: true
+        onTriggered: root.swingIdleTick()
+    }
+
+    /// 点击关闭摆动倒计时横幅后 30 秒内不再弹出提示（不影响 30s 后仍自动恢复摆动）
+    Timer {
+        id: suppressSwingReminderTimer
         interval: 30000
         repeat: false
-        onTriggered: root.swingIdle = true
+        onTriggered: {
+            root.swingReminderSuppressed = false
+        }
+    }
+
+    function nowMs() {
+        return new Date().getTime()
+    }
+
+    /// 由 swingIdleLastMs 推导：满 30s → swingIdle；15s～30s 且未抑制 → 显示剩余秒数（变脸/普通 3D 均适用；须 root.visible）
+    function swingIdleTick() {
+        if (!root.objSource || !root.visible) {
+            swingIdleTickTimer.stop()
+            root.swingCountdownVisible = false
+            return
+        }
+        if (root.swingIdle) {
+            swingIdleTickTimer.stop()
+            return
+        }
+        var elapsed = root.nowMs() - root.swingIdleLastMs
+        if (elapsed >= 30000) {
+            root.swingIdle = true
+            root.swingCountdownVisible = false
+            swingIdleTickTimer.stop()
+            root.swingReminderSuppressed = false
+            return
+        }
+        if (elapsed >= 15000 && !root.swingReminderSuppressed) {
+            root.swingCountdownVisible = true
+            root.swingCountdownSec = Math.max(1, Math.ceil((30000 - elapsed) / 1000))
+        } else {
+            root.swingCountdownVisible = false
+        }
+    }
+
+    function restartSwingIdleTimers() {
+        root.swingReminderSuppressed = false
+        if (suppressSwingReminderTimer.running)
+            suppressSwingReminderTimer.stop()
+
+        root.swingIdleLastMs = root.nowMs()
+        root.swingCountdownVisible = false
+        if (!root.swingIdle && root.objSource && root.visible)
+            swingIdleTickTimer.start()
+        else
+            swingIdleTickTimer.stop()
+    }
+
+    /// 从隐藏再回到可见时：不重置空闲起点、不清抑制横幅，只恢复每秒检查
+    function resumeSwingIdleTickIfNeeded() {
+        if (!root.swingIdle && root.objSource && root.visible)
+            swingIdleTickTimer.start()
     }
 
     RowLayout {
@@ -566,9 +681,10 @@ Item {
                     }
                 }
 
-                /// 人脸中心轴左右 ±90° 摆动，有 obj 且 30 秒无操作时运行
+                /// 人脸中心轴左右 ±90° 摆动，有 obj 且 30 秒无操作时运行；变脸时不摆动避免干扰操作
                 SequentialAnimation {
                     id: swingAnimation
+                    /// 变脸时也允许自动左右摆（无操作满 30s 后恢复）
                     running: root.swingIdle && !!root.objSource
                     loops: Animation.Infinite
                     NumberAnimation {
@@ -608,18 +724,18 @@ Item {
                 hoverEnabled: true
                 onPressed: function(mouse) {
                     root.swingIdle = false
-                    idleTimer.restart()
+                    root.restartSwingIdleTimers()
                     mouse.accepted = false
                 }
                 onPositionChanged: function(mouse) {
                     if (mouse.buttons !== 0) {
                         root.swingIdle = false
-                        idleTimer.restart()
+                        root.restartSwingIdleTimers()
                     }
                     mouse.accepted = false
                 }
                 onReleased: function(mouse) {
-                    idleTimer.restart()
+                    root.restartSwingIdleTimers()
                     mouse.accepted = false
                 }
             }
@@ -721,7 +837,7 @@ Item {
                             ToolTip.delay: 400
                             ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
                                           : (root.morphBlendAxis === 1 ? "分界轴 Y（点按→Z）" : "分界轴 Z（点按→X）")
-                            onClicked: root.morphBlendAxis = (root.morphBlendAxis + 1) % 3
+                            onClicked: root.advanceMorphBlendAxis()
                             /// 图1 左右分界 / 图2 上下分界 / 图3 中心圆点（内嵌矢量，不依赖外部 png）
                             contentItem: Item {
                                 implicitWidth: 36
@@ -865,6 +981,59 @@ Item {
                                 Layout.minimumWidth: 48
                             }
                         }
+                    }
+                }
+            }
+
+            /// 即将自动左右摆动：空闲后段 15s 倒计时；点击关闭后 30s 内不再提示（15+15）
+            Rectangle {
+                id: swingIdleCountdownBanner
+                z: 175
+                visible: root.swingCountdownVisible && !!root.objSource && root.visible
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: view3dBottomOverlay.top
+                anchors.bottomMargin: 8
+                width: Math.min(parent.width - 24, 420)
+                height: bannerCol.implicitHeight + 20
+                radius: 8
+                color: "#cc1a1a24"
+                border.color: "#55ffffff"
+                border.width: 1
+
+                Column {
+                    id: bannerCol
+                    width: parent.width - 20
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: 10
+                    spacing: 4
+
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.swingCountdownSec > 0
+                              ? ("约 " + root.swingCountdownSec + " 秒后自动左右摆动")
+                              : ""
+                        color: "#eee"
+                        font.pixelSize: 15
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                    }
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "点击关闭 · 30 秒内不再提示"
+                        color: "#aaa"
+                        font.pixelSize: 12
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.swingCountdownVisible = false
+                        root.swingReminderSuppressed = true
+                        suppressSwingReminderTimer.restart()
                     }
                 }
             }
@@ -1019,10 +1188,14 @@ Item {
 
                 Item {
                     width: parent.width
-                    height: 40
+                    height: 32
                     CheckButton {
                         id: morphBtn
                         anchors.horizontalCenter: parent.horizontalCenter
+                        buttonHeight: 32
+                        fontPixelSize: 16
+                        cornerRadius: 6
+                        borderW: 1
                         text: root.morphMode ? "退出变脸" : "变脸"
                         checked: root.morphMode
                         onClicked: root.morphMode = !root.morphMode
@@ -1036,10 +1209,14 @@ Item {
 
                 Item {
                     width: parent.width
-                    height: 40
+                    height: 32
                     CheckButton {
                         id: reliefBtn
                         anchors.horizontalCenter: parent.horizontalCenter
+                        buttonHeight: 32
+                        fontPixelSize: 16
+                        cornerRadius: 6
+                        borderW: 1
                         text: root.reliefTextureMode ? "退出模型" : "3D模型"
                         checked: root.reliefTextureMode
                         onClicked: {
@@ -1057,10 +1234,14 @@ Item {
 
                 Item {
                     width: parent.width
-                    height: 40
+                    height: 32
                     CheckButton {
                         id: light3dBtn
                         anchors.horizontalCenter: parent.horizontalCenter
+                        buttonHeight: 32
+                        fontPixelSize: 16
+                        cornerRadius: 6
+                        borderW: 1
                         text: root.rotatingLight3DEnabled ? "关灯" : "开灯"
                         checked: root.rotatingLight3DEnabled
                         onClicked: root.rotatingLight3DEnabled = !root.rotatingLight3DEnabled
@@ -1074,10 +1255,14 @@ Item {
 
                 Item {
                     width: parent.width
-                    height: 40
+                    height: 32
                     CheckButton {
                         id: magnifierBtn
                         anchors.horizontalCenter: parent.horizontalCenter
+                        buttonHeight: 32
+                        fontPixelSize: 16
+                        cornerRadius: 6
+                        borderW: 1
                         text: root.magnifierActive ? "关放大镜" : "放大镜"
                         checked: root.magnifierActive
                         onClicked: root.magnifierActive = !root.magnifierActive
@@ -1091,7 +1276,7 @@ Item {
 
                 Item {
                     width: parent.width - 2
-                    height: parent.height - 180
+                    height: parent.height - 148
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     ListView {
@@ -1103,7 +1288,7 @@ Item {
                         anchors.bottomMargin: 2
                         model: root.subphotoes
                         clip: true
-                        spacing: 10
+                        spacing: 2
 
                         delegate: Rectangle {
                             width: 145

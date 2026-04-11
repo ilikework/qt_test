@@ -108,7 +108,8 @@ signals:
     void openFinished(bool ok, const QString& msg);
     /// 预览打开失败（open NG 或 startpreview NG）时发出，供界面提示
     void previewOpenFailed(const QString& msg);
-
+    /// 单次 capture() 对应的多张连拍流程结束（含过早返回的失败）
+    void captureFinished(bool ok);
 
 private slots:
     void onConnected();

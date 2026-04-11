@@ -5,11 +5,13 @@ import QtQuick.Controls.Basic
 Button {
     id: customButton
 
-    // 支持外部设置宽高
-    //width: 120
-    //height: 40
-
     property bool isShowToolTip: false
+    /// 未显式设 height 时的默认高度（各对话框保持 40；侧栏可改小）
+    property int preferredHeight: 40
+    property int preferredFontPixelSize: 20
+    property int preferredRadius: 16
+
+    implicitHeight: preferredHeight
     text: ""
     property string toolTip: ""
 
@@ -19,9 +21,9 @@ Button {
     background: Rectangle {
         id: bg
         implicitWidth: 120
-        implicitHeight: 40
+        implicitHeight: customButton.preferredHeight
         anchors.fill: parent
-        radius: 16
+        radius: customButton.preferredRadius
         color: {
             if(!customButton.enabled)
                 return "#aaaaaa"       // disable颜色
@@ -50,7 +52,7 @@ Button {
         text: customButton.text
         color: "white"
         //font.pixelSize: Math.min(customButton.height * 0.5, 20)
-        font.pixelSize: 20
+        font.pixelSize: customButton.preferredFontPixelSize
         font.bold: true
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
