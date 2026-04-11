@@ -70,18 +70,24 @@ Item {
     property real morphUnshadedApplySceneExposure: 0.0
     /// 变脸 lit 材质走引擎默认受光；以下仍保留供以后扩展或调场景
     property real morphShadedLightingGain: 5.0 //3.65
-    /// 仅乘在 AMBIENT_LIGHT 的 scene 项上：越小旋转灯越「主导」明暗
-    property real morphShadedAmbientFactor: 0.20 //0.52
-    /// 半球底亮（与 TOTAL_AMBIENT_COLOR 无关）：避免无 IBL 时整模全黑；略大则旋转感略弱
-    property real morphShadedHemisphereFill: 0.1 // 0.30
-    /// 变脸+3D打光：场景方向光补亮（片内另有水平模拟光）
-    property real morphShadedSunBrightness: 0.1
+    /// 仅乘在 AMBIENT_LIGHT 的 scene 项上：越小旋转灯越「主导」明暗、略更锐利
+    property real morphShadedAmbientFactor: 0.17 //0.52
+    /// 半球底亮（与 TOTAL_AMBIENT_COLOR 无关）：略低则主光方向对比更清晰
+    property real morphShadedHemisphereFill: 0.085 // 0.30
+    /// 变脸+3D打光：场景方向光补亮（略低以免冲淡主光方向明暗）
+    property real morphShadedSunBrightness: 0.035
     /// 与 3DDemo material.frag 一致：开灯 albedo 色度/暖色微调
     property real litChromaBoost: 1.08
     property vector3d litWarmTint: Qt.vector3d(1.04, 1.0, 0.98)
-    /// 3D 打光：水平光源方位角（度），-90=左侧射向模型，0=正面，90=右侧
-    property real lightYawDeg: 0
-    /// 3D 打光：片内模拟方向光强度（与 simLightBoost 相乘；滑条调主观明暗）
+    /// 主光球面轨道：先绕 Y（方位角，左负右正），再绕 X（仰角，上正下负）
+    property real lightAzimuthDeg: 0
+    /// 默认 45°：与旧版「内层 DirectionalLight euler (-45,0,0)」等效（tilt 为 X(-elevation)）
+    property real lightElevationDeg: 45
+    property bool showLightOrbitMarker: true
+    readonly property real orbitSphereRadius: 1.55
+    /// 主画面里灯泡/赤道子午等示意球相对原尺寸的缩放（再小一圈）
+    readonly property real lightOrbitMarkerScale: 0.72
+    /// 3D 打光：片内模拟方向光强度（与 simLightBoost 相乘）
     property real light3DBrightness: 3.15
     /// 片内模拟光总倍率（默认 10 ≈ 相对未乘前「至少亮一个数量级」，对齐旧 Principled+DirectionalLight）
     property real simLightBoost: 10.0
@@ -149,6 +155,21 @@ Item {
         var dx = localX - cx
         var dy = localY - cy
         return dx * dx + dy * dy <= r * r
+    }
+
+    /// 圆盘正投影：圆心 = 方位 0°·仰角 0°（正面）；横轴→左右转灯，纵轴→上下仰角
+    function lightOrbitFromPadMouse(lx, ly, padW, padH, padR) {
+        var cx = padW * 0.5
+        var cy = padH * 0.5
+        var nx = (lx - cx) / padR
+        var ny = (ly - cy) / padR
+        var L = Math.sqrt(nx * nx + ny * ny)
+        if (L > 1 && L > 0) {
+            nx /= L
+            ny /= L
+        }
+        lightAzimuthDeg = nx * 180
+        lightElevationDeg = -ny * 89
     }
 
     Component.onCompleted: {
@@ -533,30 +554,6 @@ Item {
                     clipFar: 1000
                 }
 
-                DirectionalLight {
-                    id: sunLight
-                    eulerRotation: Qt.vector3d(-30, 0, 0)
-                    color: "#fff5ed"
-                    // 3D 开灯：暖补光（与 3DDemo 一致）；单张贴图与变脸均走 CustomMaterial lit
-                    brightness: root.rotatingLight3DEnabled ? root.morphShadedSunBrightness : 0.0
-                }
-
-                // 主光：平行光，方向 = 父节点 Y(-lightYawDeg，与滑条「左负右正」观感一致) + 子节点俯仰 -45°
-                Node {
-                    id: keyLightPivot
-                    position: Qt.vector3d(0, 0, 0)
-                    eulerRotation: Qt.vector3d(0, -root.lightYawDeg, 0)
-                    DirectionalLight {
-                        id: keyDirectionalLight
-                        eulerRotation: Qt.vector3d(-45, 0, 0)
-                        color: "#fff6f0"
-                        brightness: root.rotatingLight3DEnabled
-                            ? Math.min(3.0, Math.max(0.0, root.light3DBrightness * 0.28))
-                            : 0.0
-                        castsShadow: false
-                    }
-                }
-
                 Node { id: originNode; position: Qt.vector3d(0, 0, 0) }
 
                 Texture {
@@ -664,6 +661,93 @@ Item {
                         }
                         var kids = node.children
                         for (var i = 0; i < kids.length; ++i) applyMaterialRecursively(kids[i])
+                    }
+                }
+
+                /// 与 importNode（mesh）同角：补光、主光、脸心暗点与黄灯泡随模型旋转（无 Repeater，避免 QML 异常）
+                Node {
+                    id: meshLightFrame
+                    parent: originNode
+                    eulerRotation: importNode.eulerRotation
+                    position: importNode.position
+                    scale: importNode.scale
+
+                    DirectionalLight {
+                        id: sunLight
+                        eulerRotation: Qt.vector3d(-30, 0, 0)
+                        color: "#fff5ed"
+                        brightness: root.rotatingLight3DEnabled ? root.morphShadedSunBrightness : 0.0
+                    }
+
+                    Node {
+                        id: keyLightPivot
+                        position: Qt.vector3d(0, 0, 0)
+                        eulerRotation: Qt.vector3d(0, root.lightAzimuthDeg, 0)
+                        Node {
+                            id: keyLightTilt
+                            eulerRotation: Qt.vector3d(-root.lightElevationDeg, 0, 0)
+                            DirectionalLight {
+                                id: keyDirectionalLight
+                                eulerRotation: Qt.vector3d(0, 0, 0)
+                                color: "#fff6f0"
+                                brightness: root.rotatingLight3DEnabled
+                                    ? Math.min(2.5, Math.max(0.0, root.light3DBrightness * 0.14))
+                                    : 0.0
+                                castsShadow: false
+                            }
+                            Model {
+                                id: lightBulbOuter
+                                visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                                source: "#Sphere"
+                                position: Qt.vector3d(0, 0, root.orbitSphereRadius)
+                                scale: Qt.vector3d(0.00096 * root.lightOrbitMarkerScale,
+                                                    0.00096 * root.lightOrbitMarkerScale,
+                                                    0.00096 * root.lightOrbitMarkerScale)
+                                materials: [
+                                    PrincipledMaterial {
+                                        lighting: PrincipledMaterial.NoLighting
+                                        baseColor: "#fff0d8"
+                                        emissiveFactor: Qt.vector3d(0.08, 0.07, 0.04)
+                                    }
+                                ]
+                            }
+                            Model {
+                                id: lightBulbCore
+                                visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                                source: "#Sphere"
+                                position: Qt.vector3d(0, 0, root.orbitSphereRadius)
+                                scale: Qt.vector3d(0.00044 * root.lightOrbitMarkerScale,
+                                                    0.00044 * root.lightOrbitMarkerScale,
+                                                    0.00044 * root.lightOrbitMarkerScale)
+                                materials: [
+                                    PrincipledMaterial {
+                                        lighting: PrincipledMaterial.NoLighting
+                                        baseColor: "#ffffee"
+                                        emissiveFactor: Qt.vector3d(0.18, 0.15, 0.09)
+                                    }
+                                ]
+                            }
+                        }
+                    }
+
+                    Node {
+                        id: orbitGuideRoot
+                        visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                        position: Qt.vector3d(0, 0, 0)
+                        Model {
+                            source: "#Sphere"
+                            position: Qt.vector3d(0, 0, 0)
+                            scale: Qt.vector3d(0.003 * root.lightOrbitMarkerScale,
+                                               0.003 * root.lightOrbitMarkerScale,
+                                               0.003 * root.lightOrbitMarkerScale)
+                            materials: [
+                                PrincipledMaterial {
+                                    lighting: PrincipledMaterial.NoLighting
+                                    baseColor: "#334455"
+                                    emissiveFactor: Qt.vector3d(0.03, 0.04, 0.05)
+                                }
+                            ]
+                        }
                     }
                 }
 
@@ -806,7 +890,158 @@ Item {
                 }
             }
 
-            /// 主画面底部：变脸控件在上，3D 光源角度/亮度在最下（需在 MouseArea 之上才能拖动滑条）
+            /// 右上角：3D 光源圆盘 + 亮度（开灯时显示；需在 MouseArea 之上）
+            Rectangle {
+                id: light3dControlPanel
+                z: 210
+                visible: root.rotatingLight3DEnabled
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: 12
+                anchors.rightMargin: morphYSliderPanel.visible ? morphYSliderPanel.width + 12 : 12
+                width: 320
+                height: light3dControlCol.implicitHeight + 20
+                color: "#99000000"
+                radius: 6
+                border.color: "#40ffffff"
+                border.width: 1
+                MouseArea {
+                    anchors.fill: parent
+                    z: 0
+                    hoverEnabled: true
+                    acceptedButtons: Qt.AllButtons
+                    onPressed: function (mouse) {
+                        mouse.accepted = true
+                    }
+                    onPositionChanged: function (mouse) {
+                        if (mouse.buttons !== 0)
+                            mouse.accepted = true
+                    }
+                }
+                Column {
+                    id: light3dControlCol
+                    z: 1
+                    x: 10
+                    y: 10
+                    width: parent.width - 20
+                    spacing: 8
+                    Label {
+                        width: parent.width
+                        text: "3D 光源"
+                        color: "#ccc"
+                        font.pixelSize: 12
+                    }
+                    Label {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "圆盘=球面正投影：圆心=正面。3D：暗点=脸心，黄点=主光方向示意。"
+                        color: "#9cf"
+                        font.pixelSize: 10
+                    }
+                    Item {
+                        id: lightOrbitPad
+                        width: parent.width
+                        height: 200
+                        readonly property real padR: Math.min(width, height) * 0.5 - 10
+                        readonly property real mapNx: root.lightAzimuthDeg / 180
+                        readonly property real mapNy: -root.lightElevationDeg / 89
+                        readonly property real mapLen: Math.sqrt(mapNx * mapNx + mapNy * mapNy)
+                        readonly property real nxNorm: mapLen > 1 ? mapNx / mapLen : mapNx
+                        readonly property real nyNorm: mapLen > 1 ? mapNy / mapLen : mapNy
+                        readonly property real dotCx: width * 0.5 + nxNorm * padR
+                        readonly property real dotCy: height * 0.5 + nyNorm * padR
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Math.min(parent.width, parent.height) - 4
+                            height: width
+                            radius: width * 0.5
+                            color: "#22000000"
+                            border.width: 2
+                            border.color: "#555"
+                        }
+                        Rectangle {
+                            id: lightOrbitHandle
+                            width: 20
+                            height: 20
+                            radius: 10
+                            x: lightOrbitPad.dotCx - width * 0.5
+                            y: lightOrbitPad.dotCy - height * 0.5
+                            color: "#e8b030"
+                            border.width: 1
+                            border.color: "#fff8e0"
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: true
+                            onPressed: function (mouse) {
+                                mouse.accepted = true
+                                root.lightOrbitFromPadMouse(mouse.x, mouse.y, lightOrbitPad.width,
+                                                            lightOrbitPad.height, lightOrbitPad.padR)
+                            }
+                            onPositionChanged: function (mouse) {
+                                if (mouse.buttons & Qt.LeftButton) {
+                                    mouse.accepted = true
+                                    root.lightOrbitFromPadMouse(mouse.x, mouse.y, lightOrbitPad.width,
+                                                                lightOrbitPad.height, lightOrbitPad.padR)
+                                }
+                            }
+                            onReleased: function (mouse) {
+                                mouse.accepted = true
+                            }
+                        }
+                    }
+                    Label {
+                        width: parent.width
+                        text: "方位角 " + root.lightAzimuthDeg.toFixed(0) + "° · 仰角 " + root.lightElevationDeg.toFixed(0) + "°"
+                        color: "#bbb"
+                        font.pixelSize: 11
+                    }
+                    RowLayout {
+                        width: parent.width
+                        CheckBox {
+                            text: "显示球形灯泡"
+                            checked: root.showLightOrbitMarker
+                            onClicked: root.showLightOrbitMarker = checked
+                        }
+                        Item {
+                            Layout.fillWidth: true
+                        }
+                        Button {
+                            text: "重置光位"
+                            onClicked: {
+                                root.lightAzimuthDeg = 0
+                                root.lightElevationDeg = 45
+                            }
+                        }
+                    }
+                    RowLayout {
+                        width: parent.width
+                        Label {
+                            text: "亮度"
+                            color: "#aaa"
+                            font.pixelSize: 11
+                            Layout.minimumWidth: 40
+                        }
+                        Slider {
+                            Layout.fillWidth: true
+                            from: 0.2
+                            to: 10.0
+                            stepSize: 0.05
+                            live: true
+                            value: root.light3DBrightness
+                            onMoved: root.light3DBrightness = value
+                        }
+                        Label {
+                            text: root.light3DBrightness.toFixed(2)
+                            color: "#eee"
+                            font.pixelSize: 12
+                            Layout.minimumWidth: 48
+                        }
+                    }
+                }
+            }
+
+            /// 主画面底部：变脸控件（需在 MouseArea 之上才能拖动滑条）
             Column {
                 id: view3dBottomOverlay
                 z: 200
@@ -915,71 +1150,6 @@ Item {
                             color: "#ccc"
                             font.pixelSize: 11
                             Layout.minimumWidth: root.morphBlendAxis === 2 ? 64 : 40
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: light3dPanelCol.implicitHeight + 16
-                    visible: root.rotatingLight3DEnabled
-                    color: "#99000000"
-                    radius: 6
-                    border.color: "#40ffffff"
-                    border.width: 1
-                    Column {
-                        id: light3dPanelCol
-                        x: 8
-                        y: 8
-                        width: parent.width - 16
-                        spacing: 6
-                        Label {
-                            width: parent.width
-                            text: "3D 光源（水平角：左侧 -90° · 正面 0° · 右侧 90°）"
-                            color: "#ccc"
-                            font.pixelSize: 11
-                        }
-                        RowLayout {
-                            width: parent.width
-                            Slider {
-                                Layout.fillWidth: true
-                                from: -90
-                                to: 90
-                                stepSize: 1
-                                live: true
-                                value: root.lightYawDeg
-                                onMoved: root.lightYawDeg = value
-                            }
-                            Label {
-                                text: root.lightYawDeg.toFixed(0) + "°"
-                                color: "#eee"
-                                font.pixelSize: 12
-                                Layout.minimumWidth: 40
-                            }
-                        }
-                        RowLayout {
-                            width: parent.width
-                            Label {
-                                text: "亮度"
-                                color: "#aaa"
-                                font.pixelSize: 11
-                                Layout.minimumWidth: 40
-                            }
-                            Slider {
-                                Layout.fillWidth: true
-                                from: 0.2
-                                to: 5.0
-                                stepSize: 0.05
-                                live: true
-                                value: root.light3DBrightness
-                                onMoved: root.light3DBrightness = value
-                            }
-                            Label {
-                                text: root.light3DBrightness.toFixed(2)
-                                color: "#eee"
-                                font.pixelSize: 12
-                                Layout.minimumWidth: 48
-                            }
                         }
                     }
                 }

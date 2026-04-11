@@ -65,8 +65,8 @@ void MAIN()
     BASE_COLOR = vec4(baseLin, blended.a);
     EMISSIVE_COLOR = emiLin;
     METALNESS = 0.05;
-    ROUGHNESS = 0.48;
-    SPECULAR_AMOUNT = 0.3;
+    ROUGHNESS = 0.40;
+    SPECULAR_AMOUNT = 0.34;
 }
 
 void DIRECTIONAL_LIGHT()
