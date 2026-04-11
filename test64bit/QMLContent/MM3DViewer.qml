@@ -686,13 +686,30 @@ Item {
                         Node {
                             id: keyLightTilt
                             eulerRotation: Qt.vector3d(-root.lightElevationDeg, 0, 0)
+                            /// 弱平行光：略匀脸，主观感交给下方 SpotLight
                             DirectionalLight {
                                 id: keyDirectionalLight
                                 eulerRotation: Qt.vector3d(0, 0, 0)
                                 color: "#fff6f0"
                                 brightness: root.rotatingLight3DEnabled
-                                    ? Math.min(2.5, Math.max(0.0, root.light3DBrightness * 0.14))
+                                    ? Math.min(0.35, Math.max(0.0, root.light3DBrightness * 0.04))
                                     : 0.0
+                                castsShadow: false
+                            }
+                            /// 手电筒式聚光：与黄点同侧 +Z，沿局部 −Z 照向脸心，锥内更亮、边缘更快暗
+                            SpotLight {
+                                id: keySpotLight
+                                position: Qt.vector3d(0, 0, root.orbitSphereRadius)
+                                eulerRotation: Qt.vector3d(0, 0, 0)
+                                color: "#fff6f0"
+                                brightness: root.rotatingLight3DEnabled
+                                    ? Math.min(9.0, Math.max(0.0, root.light3DBrightness * 0.52))
+                                    : 0.0
+                                coneAngle: 40
+                                innerConeAngle: 22
+                                constantFade: 1.0
+                                linearFade: 0.15
+                                quadraticFade: 0.45
                                 castsShadow: false
                             }
                             Model {
@@ -1025,7 +1042,7 @@ Item {
                         Slider {
                             Layout.fillWidth: true
                             from: 0.2
-                            to: 10.0
+                            to: 5.0
                             stepSize: 0.05
                             live: true
                             value: root.light3DBrightness

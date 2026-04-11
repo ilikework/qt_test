@@ -1,7 +1,7 @@
-// 变脸 + 3D：MAIN() 输出 BASE_COLOR/EMISSIVE/MR；显式实现 DIRECTIONAL_LIGHT()。
+// 变脸 + 3D：MAIN() 输出 BASE_COLOR/EMISSIVE/MR；显式实现 DIRECTIONAL_LIGHT()、SPOT_LIGHT()。
 // 原因：仅写 MAIN() 依赖引擎默认方向光时，在「自定义顶点 + RuntimeLoader 网格」下 VAR_WORLD_NORMAL 易失效，
 // N·L≈0 → 只有自发光可见，调节 DirectionalLight.brightness 无效。此处用顶点 VARYING vWorldNormal 做 Lambert 漫反射。
-// 未实现 AMBIENT_LIGHT / IBL_PROBE / POINT_LIGHT 等时仍走引擎默认（与 Principled 一致）。
+// 聚光灯同理，否则 SpotLight 亮度调节不明显；未实现 AMBIENT_LIGHT / IBL_PROBE / POINT_LIGHT 等仍走引擎默认。
 VARYING vec3 vLocalPos;
 VARYING vec2 vUV;
 VARYING vec3 vWorldNormal;
@@ -75,4 +75,13 @@ void DIRECTIONAL_LIGHT()
     float ndotl = max(0.0, dot(n, TO_LIGHT_DIR));
     vec3 kd = BASE_COLOR.rgb * (1.0 - METALNESS);
     DIFFUSE += kd * LIGHT_COLOR * SHADOW_CONTRIB * ndotl;
+}
+
+/// 聚光灯（手电筒）：与 DIRECTIONAL_LIGHT 同用法线；SPOT_FACTOR / LIGHT_ATTENUATION 由引擎按锥角与距离给出
+void SPOT_LIGHT()
+{
+    vec3 n = normalize(vWorldNormal);
+    float ndotl = max(0.0, dot(n, TO_LIGHT_DIR));
+    vec3 kd = BASE_COLOR.rgb * (1.0 - METALNESS);
+    DIFFUSE += kd * LIGHT_COLOR * LIGHT_ATTENUATION * SPOT_FACTOR * SHADOW_CONTRIB * ndotl;
 }
