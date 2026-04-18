@@ -74,6 +74,11 @@ int AppConfig::CameraSeries() const
     return m_root.value("CameraSeries").toInt();
 }
 
+QString AppConfig::CameraDll() const
+{
+    return m_root.value("CameraDll").toString();
+}
+
 int AppConfig::GetBeforeInterval(const QString & capture_type) const
 {
     if(capture_type=="RGB")

@@ -191,7 +191,7 @@ Item   {
                     // 已连上程序但未开预览：请连接相机硬件后点预览，红色
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "请连接相机后，点击「预览」按钮打开预览"
+                        text: "正在连接相机打开预览"
                         color: "#e04040"
                         font.pixelSize: 28
                         font.bold: true
@@ -246,6 +246,8 @@ Item   {
                             autoToggle: false
                             text: "预览"
                             onClicked: {
+                                if (camClient.previewOn)
+                                    return
                                 if (camClient.connected) {
                                     cameraRoot.statusMessage = ""
                                     camClient.startPreview()

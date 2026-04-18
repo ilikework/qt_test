@@ -60,6 +60,9 @@ int main(int argc, char *argv[])
             if (!obj && url == objUrl)
                 QCoreApplication::exit(-1);
         }, Qt::QueuedConnection);
+
+    QObject::connect(&app, &QCoreApplication::aboutToQuit,
+                     &client, &CameraClient::closeCamera);
     engine.load(url);
 
     // --- Final setup and execution ---

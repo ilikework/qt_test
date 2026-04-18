@@ -131,6 +131,7 @@ void CameraClient::openCamera() {
     QJsonObject obj;
     obj["cmd"] = "open";
     obj["series"] = AppConfig::instance().CameraSeries();
+    obj["dllname"] = AppConfig::instance().CameraDll();
 
     sendCommandRequest2(obj, [this](const QJsonObject& resp) {
         bool ok = isOpenResultOk(resp);

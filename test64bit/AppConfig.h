@@ -9,6 +9,7 @@ public:
     static AppConfig& instance();
 
     int CameraSeries() const;
+    QString CameraDll() const;
     int GetBeforeInterval(const QString & capture_type) const;
     int GetAfterInterval(const QString & capture_type) const;
     int BeforeRGBShootInterval() const;
