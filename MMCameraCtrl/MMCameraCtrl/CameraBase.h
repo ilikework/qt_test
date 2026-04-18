@@ -187,6 +187,8 @@ public:
 	virtual bool IsInited() = 0;
 	virtual void PushGetEvent() = 0; // special for Canon EDS
 
+	void ConnectCameraByTime(int nPulseTime);
+
 	void setCaptureSetting(const CaptureSetting& captureSetting)
 	{
 		m_captureSetting = captureSetting;

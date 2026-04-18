@@ -1,6 +1,15 @@
 #include "CameraBase.h"
 #include "USBControler.h"
 
+void ICameraBase::ConnectCameraByTime(int nPulseTime)
+{
+    if (!m_pCtrler->Open())
+        return;
+    m_pCtrler->Init();
+    m_pCtrler->ConnectCameraByTime(nPulseTime);
+    Sleep(3000);
+}
+
 void ICameraBase::BeforeCapture(int nILLTypes)
 {
     switch (nILLTypes)

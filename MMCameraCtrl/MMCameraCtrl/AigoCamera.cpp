@@ -122,7 +122,8 @@ long CAigoCamera::InitFunctions(const wchar_t* pszDllName)
 {
 	if (m_hModule)
 		return 0;
-	m_hModule = LoadLibrary(pszDllName);
+	std::wstring str = std::format(L"{}\\{}", Util::Instance().GetExeDir().c_str(), pszDllName);
+	m_hModule = LoadLibrary(str.c_str());
 	if (m_hModule)
 	{
 		InitHardWare = (pInitHardWare)GetProcAddress(m_hModule, "InitHardWare");
@@ -234,14 +235,14 @@ bool CAigoCamera::StartPreview(void)
 	KZIsUseCaptureAF(0);
 	//if (Util::Instance().GetCaptureSetting(Aigo, m_captureSetting))
 	{
-		this->SetZoom(Util::Instance().GetAigoZoom());
-		this->SetWB(m_captureSetting.get_rgb().wb);
-		this->SetISO(m_captureSetting.get_rgb().iso);
-		this->SetAperture(m_captureSetting.get_rgb().aperture);
-		this->SetExposure(m_captureSetting.get_rgb().exposure);
-		this->SetImgQuality(m_captureSetting.getImgQuality());
-		this->SetImgSize(m_captureSetting.getImgSize());
-		this->SetFlash(Util::Instance().GetAigoFlash());
+		//this->SetZoom(Util::Instance().GetAigoZoom());
+		//this->SetWB(m_captureSetting.get_rgb().wb);
+		//this->SetISO(m_captureSetting.get_rgb().iso);
+		//this->SetAperture(m_captureSetting.get_rgb().aperture);
+		//this->SetExposure(m_captureSetting.get_rgb().exposure);
+		//this->SetImgQuality(m_captureSetting.getImgQuality());
+		//this->SetImgSize(m_captureSetting.getImgSize());
+		//this->SetFlash(Util::Instance().GetAigoFlash());
 
 		this->SetFocusType(1); // 设定近焦
 		this->Autofocusing(1); // 设定自动对焦
@@ -1172,8 +1173,9 @@ bool CAigoCamera::doCapture(const wchar_t* pstrFileName)
 	}
 
 	//strPath = "V10.jpg";
+	std::wstring fullpath = this->m_folderPath + L"/" + std::wstring(pstrFileName);
 	//////////////////////////////////+++
-	HANDLE hFile = CreateFile(pstrFileName,
+	HANDLE hFile = CreateFile(fullpath.c_str(),
 		GENERIC_READ | GENERIC_WRITE,  // read-write access
 		0,                             // NO share
 		NULL,                          // NO security specification
@@ -1199,26 +1201,39 @@ bool CAigoCamera::doCapture(const wchar_t* pstrFileName)
 
 long CAigoCamera::Capture(uint32_t id, CapturedCallback callback)
 {
-	int nILLTypes[] = {ILL_RGB_TYPE,
-  				  ILL_365UV_TYPE,
-				  ILL_405UV_TYPE,
-				  ILL_PL_TYPE,
-				  ILL_NPL_TYPE };
-	const int nCount = sizeof(nILLTypes) / sizeof(nILLTypes[0]);
-	this->Autofocusing(0);
+	//int nILLTypes[] = {ILL_RGB_TYPE,
+ // 				  ILL_365UV_TYPE,
+	//			  ILL_405UV_TYPE,
+	//			  ILL_PL_TYPE,
+	//			  ILL_NPL_TYPE };
+	//const int nCount = sizeof(nILLTypes) / sizeof(nILLTypes[0]);
+	//this->Autofocusing(0);
 
-	for (int i = 0; i < nCount; ++i) {
-		int type = nILLTypes[i];
-		if (!Util::Instance().IsAutoCreate(type))
-		{
-			BeforeCapture(type);
-			doCapture(GetCaptureFileName(type).c_str());
-			AfterCapture(type);
-		}
-	}
-	std::vector<std::string> create_files;
-	callback(id, create_files);
+	//for (int i = 0; i < nCount; ++i) {
+	//	int type = nILLTypes[i];
+	//	if (!Util::Instance().IsAutoCreate(type))
+	//	{
+	//		BeforeCapture(type);
+	//		doCapture(GetCaptureFileName(type).c_str());
+	//		AfterCapture(type);
+	//	}
+	//}
+	//std::vector<std::string> create_files;
+	//callback(id, create_files);
 	
+	BeforeCapture(GetILLType());
+	std::wstring filename = GetCaptureFileName(GetILLType());
+	doCapture(filename.c_str());
+	AfterCapture(GetILLType());
+
+	std::wstring left, right;
+	SplitFile(filename, left, right);
+	std::vector<std::string> files;
+	files.push_back(Util::Instance().WStringToString(filename));
+	files.push_back(Util::Instance().WStringToString(left));
+	files.push_back(Util::Instance().WStringToString(right));
+	callback(id, files);
+
 	return 0;
 
 }
@@ -1466,10 +1481,68 @@ bool CAigoCamera::GetSupportExposures(std::vector<int>& values)
 void CAigoCamera::ReqOneFrame2()
 {
 }
+struct AutoResumePreview {
+	CAigoCamera* self;
+	explicit AutoResumePreview(CAigoCamera* s) : self(s) {}
+	~AutoResumePreview() { if (self) self->ResumePreview(); }
+};
+
 
 std::vector<uint8_t> CAigoCamera::GetFrame2()
 {
-	return std::vector<uint8_t>();
+	std::vector<uint8_t> empty;
+
+	if (this->IsPausePreview())
+		return empty;
+
+	this->PausePreview();
+	AutoResumePreview resumeGuard(this);  // ✅ 保证一定 ResumePreview
+	
+	OneVideoFrameFinish = false;
+
+	BOOL bRet = KZPreviewOneVideoFrameRGB(m_lpBuf1);
+	OneVideoFrameFinish = true;
+
+	std::string base64 = BmpBufferToBase64Jpeg(m_lpBuf1, this->m_usVideo_w, m_usVideo_h);
+
+	int stride = this->m_usVideo_w * 3; // 24-bit BGR
+	Bitmap bmp(this->m_usVideo_w, m_usVideo_h, stride, PixelFormat24bppRGB, m_lpBuf1);
+
+	// 保存到内存流（JPEG 格式）
+	CLSID clsidEncoder;
+	UINT num = 0, size = 0;
+	GetImageEncodersSize(&num, &size);
+	std::vector<uint8_t> buffer;
+	if (size == 0) return std::vector<uint8_t>();
+
+	std::unique_ptr<ImageCodecInfo[]> pImageCodecInfo((ImageCodecInfo*)(malloc(size)));
+	GetImageEncoders(num, size, pImageCodecInfo.get());
+	for (UINT i = 0; i < num; ++i)
+	{
+		if (wcscmp(pImageCodecInfo[i].MimeType, L"image/jpeg") == 0)
+		{
+			clsidEncoder = pImageCodecInfo[i].Clsid;
+			break;
+		}
+	}
+
+	CComPtr<IStream> pStream;
+	CreateStreamOnHGlobal(NULL, TRUE, &pStream);
+	bmp.Save(pStream, &clsidEncoder, NULL);
+
+	// 读取IStream内容
+	STATSTG statstg;
+	pStream->Stat(&statstg, STATFLAG_NONAME);
+	ULONG sizeBytes = (ULONG)statstg.cbSize.QuadPart;
+	buffer.resize(sizeBytes);
+
+	LARGE_INTEGER liZero = {};
+	pStream->Seek(liZero, STREAM_SEEK_SET, NULL);
+	ULONG bytesRead = 0;
+	pStream->Read(buffer.data(), sizeBytes, &bytesRead);
+
+	return buffer;
+
 }
 
 bool CAigoCamera::IsInited()

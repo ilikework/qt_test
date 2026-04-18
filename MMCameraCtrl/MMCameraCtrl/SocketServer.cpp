@@ -466,11 +466,14 @@ bool SocketServer::handleMessage(const MessageHeader& hdrHost,
             int series = j.value("series", NoneType);
             if(series== CanonEOS)
                 pCamera_ = std::make_unique<CanonEDSCamera>();
-            else if (series == CanonEOS)
+            else if (series == Aigo)
                 pCamera_ = std::make_unique<CAigoCamera>();
+            pCamera_->ConnectCameraByTime(3000);
             std::wstring dllname = Util::Instance().AnsiToWString(j.value("dllname", "").c_str());
-            if(pCamera_->Init(dllname.c_str())==0)
-                result ="OK";
+            if (pCamera_->Init(dllname.c_str()) == 0)
+            {
+                result = "OK";
+            }
             else
                 result = "NG";
         }
