@@ -33,7 +33,7 @@ Item {
     property int selectedRightIndex: 0
     /// 变脸左右分界固定 50:50（不调）
     readonly property real morphLeftRatio: 0.5
-    /// 变脸：局部轴 0=X，1=Y，2=Z（Y 用右侧竖滑条；Z 用滚轮）
+    /// 变脸：局部轴 0=X，1=Y，2=Z（Y 用右侧竖滑条；Z 用滚轮；界面暂时仅 X↔Y，不进入 Z）
     property int morphBlendAxis: 0
     /// 局部坐标 → 0~1：coord = clamp(axis * scale + bias, 0, 1)；轴缩放固定为原滑条最大值 20，不可调
     readonly property real morphMeshScale: 20.0
@@ -362,16 +362,19 @@ Item {
             Qt.callLater(refresh3DMaterial)
     }
 
-    /// 循环切换分界轴：先写入当前轴存储，再读出目标轴存储并 clamp（不再在 Z 轴强制写死 11）
+    /// 循环切换分界轴：先写入当前轴存储，再读出目标轴存储并 clamp（暂时仅 X↔Y，跳过 Z）
     function advanceMorphBlendAxis() {
         if (morphBlendAxis === 0)
             morphBiasAxis0 = morphMeshBias
         else if (morphBlendAxis === 1)
             morphBiasAxis1 = morphMeshBias
         else
+            /// 保留：若 morphBlendAxis 曾被外部写成 2，仍把当前偏移写回 Z 存储，避免丢值
             morphBiasAxis2 = morphMeshBias
 
-        var next = (morphBlendAxis + 1) % 3
+        /// 正常 UI 下轴仅为 0/1，此处 %2 即 X↔Y；Math.min 用于轴异常为 2 时仍能算出合法下一轴（与 onMorphBlendAxisChanged 钳位配合）
+        // 恢复 Z 轴切换时用回：var next = (morphBlendAxis + 1) % 3
+        var next = (Math.min(morphBlendAxis, 1) + 1) % 2
         morphBlendAxis = next
 
         _morphBiasSyncInternally = true
@@ -380,6 +383,7 @@ Item {
         else if (next === 1)
             morphMeshBias = morphBiasAxis1
         else
+            /// 保留：恢复 Z 轴切换后 next 可能为 2，此处仍须从 morphBiasAxis2 读出
             morphMeshBias = morphBiasAxis2
 
         if (morphMeshBias < morphBiasMin)
@@ -392,8 +396,18 @@ Item {
     onMorphBlendAxisChanged: {
         if (morphBlendAxis < 0)
             morphBlendAxis = 0
-        else if (morphBlendAxis > 2)
-            morphBlendAxis = 2
+        else if (morphBlendAxis > 1) {
+            /// 界面循环本不应出现 2；保留本分支：防外部/C++/旧状态/调试把 morphBlendAxis 写成 2，统一回落到 Y 并同步滑条与材质
+            // 允许 Z 轴时上限钳位用回：else if (morphBlendAxis > 2) morphBlendAxis = 2
+            morphBlendAxis = 1
+            _morphBiasSyncInternally = true
+            morphMeshBias = morphBiasAxis1
+            if (morphMeshBias < morphBiasMin)
+                morphMeshBias = morphBiasMin
+            else if (morphMeshBias > morphBiasMax)
+                morphMeshBias = morphBiasMax
+            _morphBiasSyncInternally = false
+        }
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
@@ -1069,7 +1083,7 @@ Item {
                 spacing: 8
                 width: parent.width - 16
 
-                /// 变脸：图标按钮循环 X→Y→Z；X 底栏横滑条，Y 右侧竖滑条，Z 主画面滚轮
+                /// 变脸：图标按钮循环 X↔Y（Z 暂时关闭）；X 底栏横滑条，Y 右侧竖滑条
                 Column {
                     width: parent.width
                     visible: root.morphMode
@@ -1088,7 +1102,7 @@ Item {
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
                             ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
-                                          : (root.morphBlendAxis === 1 ? "分界轴 Y（点按→Z）" : "分界轴 Z（点按→X）")
+                                          : "分界轴 Y（点按→X）"
                             onClicked: root.advanceMorphBlendAxis()
                             /// 图1 左右分界 / 图2 上下分界 / 图3 中心圆点（内嵌矢量，不依赖外部 png）
                             contentItem: Item {
