@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include "AppDb.h"
 #include <QThread>
+#include <QTimer>
 #include "SocketWorker.h"
 
 class CameraImageProvider;
@@ -42,6 +43,8 @@ class CameraClient : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(int frameToken READ frameToken NOTIFY frameTokenChanged) // 用来刷新 Image
     Q_PROPERTY(bool previewOn READ previewOn NOTIFY previewOnChanged)
+    Q_PROPERTY(bool cameraOpening READ cameraOpening NOTIFY cameraOpeningChanged)
+    Q_PROPERTY(int cameraOpenRemainingMs READ cameraOpenRemainingMs NOTIFY cameraOpenRemainingMsChanged)
     Q_PROPERTY(QVariantList isos READ isos NOTIFY isosChanged)
     Q_PROPERTY(QVariantList exposuretimes READ exposuretimes NOTIFY exposuretimesChanged)
     Q_PROPERTY(QVariantList apertures READ apertures NOTIFY aperturesChanged)
@@ -59,6 +62,8 @@ public:
     bool connected() const { return connected_; }
     int frameToken() const { return frameToken_; }
     bool previewOn() const { return previewOn_; }
+    bool cameraOpening() const { return cameraOpening_; }
+    int cameraOpenRemainingMs() const { return cameraOpenRemainingMs_; }
 
     Q_INVOKABLE void init(const QString & strCustomerID);
     Q_INVOKABLE void startup();
@@ -92,6 +97,8 @@ signals:
     void connectedChanged();
     void frameTokenChanged();
     void previewOnChanged();
+    void cameraOpeningChanged();
+    void cameraOpenRemainingMsChanged();
     void isosChanged();
     void exposuretimesChanged();
     void aperturesChanged();
@@ -140,6 +147,9 @@ private:
     bool connected_ = false;
     bool previewOn_ = false;
     bool cameraOpenOk_ = false;
+    bool cameraOpening_ = false;
+    int cameraOpenRemainingMs_ = 0;
+    QTimer cameraOpenCountdownTimer_;
     bool pendingStartPreview_ = false;
     //QStringList isos_, exposuretimes_, apertures_, wbs_, imageSizes_, imageQualities_;
 

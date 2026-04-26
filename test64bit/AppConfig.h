@@ -12,6 +12,7 @@ public:
     QString CameraDll() const;
     int GetBeforeInterval(const QString & capture_type) const;
     int GetAfterInterval(const QString & capture_type) const;
+    int WaitForConnectCamera() const;
     int BeforeRGBShootInterval() const;
     int AfterRGBShootInterval() const;
     int BeforeUVShootInterval() const;

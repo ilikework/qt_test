@@ -30,7 +30,8 @@ bool AppConfig::load()
     if (!f.exists()) {
         // 文件不存在：创建一个默认的
         m_root = QJsonObject{
-            { "camera", "" }
+            { "camera", "" },
+            { "WaitForConnectCamera", 5000 }
         };
         save();
         return true;
@@ -77,6 +78,12 @@ int AppConfig::CameraSeries() const
 QString AppConfig::CameraDll() const
 {
     return m_root.value("CameraDll").toString();
+}
+
+int AppConfig::WaitForConnectCamera() const
+{
+    const int waitMs = m_root.value("WaitForConnectCamera").toInt(5000);
+    return waitMs > 0 ? waitMs : 5000;
 }
 
 int AppConfig::GetBeforeInterval(const QString & capture_type) const

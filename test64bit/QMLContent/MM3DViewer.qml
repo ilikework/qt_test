@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick3D 6.7
+import QtQuick3D
 import QtQuick3D.Helpers
 import QtQuick3D.AssetUtils
 import "components"
@@ -83,7 +83,6 @@ Item {
     property real lightAzimuthDeg: 0
     /// 默认 45°：与旧版「内层 DirectionalLight euler (-45,0,0)」等效（tilt 为 X(-elevation)）
     property real lightElevationDeg: 45
-    property bool showLightOrbitMarker: true
     readonly property real orbitSphereRadius: 1.55
     /// 主画面里灯泡/赤道子午等示意球相对原尺寸的缩放（再小一圈）
     readonly property real lightOrbitMarkerScale: 0.72
@@ -111,13 +110,16 @@ Item {
     property bool swingCountdownVisible: false
     property int swingCountdownSec: 0
     property bool swingReminderSuppressed: false
-    /// 上次主画面交互时间戳（ms），与 swingIdleTickTimer 一起推导 15s 预告 / 30s 恢复摆动
+    /// 上次主画面交互时间戳（ms），与 swingIdleTickTimer 一起推导 45s 预告 / 60s 恢复摆动
     property real swingIdleLastMs: 0
 
     /// true = 使用同级目录 01_L-01_R_relief.png 作为贴图（3D模型按钮）
     property bool reliefTextureMode: false
     /// true = 启用片内 3D 打光；false = 平面显示（等同原 Unshaded）
     property bool rotatingLight3DEnabled: false
+    property bool lightDragOnMainView: false
+    property real lightDragHandleGrabOffX: 0
+    property real lightDragHandleGrabOffY: 0
     /// 为 false 时关闭 [MM3D] 材质刷新日志（默认开启，便于在「应用程序输出」里看到）
     property bool mm3dDebugLogs: true
 
@@ -170,6 +172,23 @@ Item {
         }
         lightAzimuthDeg = nx * 180
         lightElevationDeg = -ny * 89
+    }
+
+    /// 可拖拽手柄位置 -> 光源角度（前半球）：x 映射方位 -90..90，y 映射仰角 89..-89
+    function lightFromHandlePos(handleX, handleY, minX, maxX, minY, maxY) {
+        var rx = Math.max(minX, Math.min(maxX, handleX))
+        var ry = Math.max(minY, Math.min(maxY, handleY))
+        var nx = (maxX > minX) ? ((rx - minX) / (maxX - minX)) : 0.5
+        var ny = (maxY > minY) ? ((ry - minY) / (maxY - minY)) : 0.5
+        lightAzimuthDeg = -90 + nx * 180
+        lightElevationDeg = 89 - ny * 178
+    }
+
+    /// 主画面坐标（鼠标）驱动拖拽手柄位置，再映射为光源角度
+    function lightFromViewMouse(viewMouseX, viewMouseY, minX, maxX, minY, maxY) {
+        lightFromHandlePos(viewMouseX - lightDragHandleGrabOffX,
+                           viewMouseY - lightDragHandleGrabOffY,
+                           minX, maxX, minY, maxY)
     }
 
     Component.onCompleted: {
@@ -330,7 +349,7 @@ Item {
                 reliefTextureMode = false
             selectedLeftIndex = selectedTextureIndex
             selectedRightIndex = selectedTextureIndex
-            /// 变脸时也允许 30s 无操作恢复摆动 + 15～30s 倒计时，不在这里停表
+            /// 变脸时也允许 60s 无操作恢复摆动 + 45～60s 倒计时，不在这里停表
             if (!root.swingIdle && root.objSource && root.visible)
                 Qt.callLater(root.resumeSwingIdleTickIfNeeded)
         } else if (!root.swingIdle && root.objSource && root.visible) {
@@ -369,7 +388,6 @@ Item {
         else if (morphBlendAxis === 1)
             morphBiasAxis1 = morphMeshBias
         else
-            /// 保留：若 morphBlendAxis 曾被外部写成 2，仍把当前偏移写回 Z 存储，避免丢值
             morphBiasAxis2 = morphMeshBias
 
         /// 正常 UI 下轴仅为 0/1，此处 %2 即 X↔Y；Math.min 用于轴异常为 2 时仍能算出合法下一轴（与 onMorphBlendAxisChanged 钳位配合）
@@ -383,7 +401,6 @@ Item {
         else if (next === 1)
             morphMeshBias = morphBiasAxis1
         else
-            /// 保留：恢复 Z 轴切换后 next 可能为 2，此处仍须从 morphBiasAxis2 读出
             morphMeshBias = morphBiasAxis2
 
         if (morphMeshBias < morphBiasMin)
@@ -397,8 +414,6 @@ Item {
         if (morphBlendAxis < 0)
             morphBlendAxis = 0
         else if (morphBlendAxis > 1) {
-            /// 界面循环本不应出现 2；保留本分支：防外部/C++/旧状态/调试把 morphBlendAxis 写成 2，统一回落到 Y 并同步滑条与材质
-            // 允许 Z 轴时上限钳位用回：else if (morphBlendAxis > 2) morphBlendAxis = 2
             morphBlendAxis = 1
             _morphBiasSyncInternally = true
             morphMeshBias = morphBiasAxis1
@@ -408,6 +423,9 @@ Item {
                 morphMeshBias = morphBiasMax
             _morphBiasSyncInternally = false
         }
+        /// 界面循环本不应出现 2；保留本分支：防外部/C++/旧状态/调试把 morphBlendAxis 写成 2，统一回落到 Y 并同步滑条与材质
+        //else if (morphBlendAxis > 2)
+        //    morphBlendAxis = 2    
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
@@ -464,7 +482,7 @@ Item {
         }
     }
 
-    /// 无操作 30s 恢复摆动、15s～30s 段显示剩余秒数：统一由本定时器每秒根据 swingIdleLastMs 计算（避免多 Timer 竞态）
+    /// 无操作 60s 恢复摆动、45s～60s 段显示剩余秒数：统一由本定时器每秒根据 swingIdleLastMs 计算（避免多 Timer 竞态）
     Timer {
         id: swingIdleTickTimer
         interval: 1000
@@ -488,7 +506,7 @@ Item {
         return new Date().getTime()
     }
 
-    /// 由 swingIdleLastMs 推导：满 30s → swingIdle；15s～30s 且未抑制 → 显示剩余秒数（变脸/普通 3D 均适用；须 root.visible）
+    /// 由 swingIdleLastMs 推导：满 60s → swingIdle；45s～60s 且未抑制 → 显示剩余秒数（变脸/普通 3D 均适用；须 root.visible）
     function swingIdleTick() {
         if (!root.objSource || !root.visible) {
             swingIdleTickTimer.stop()
@@ -500,16 +518,16 @@ Item {
             return
         }
         var elapsed = root.nowMs() - root.swingIdleLastMs
-        if (elapsed >= 30000) {
+        if (elapsed >= 60000) {
             root.swingIdle = true
             root.swingCountdownVisible = false
             swingIdleTickTimer.stop()
             root.swingReminderSuppressed = false
             return
         }
-        if (elapsed >= 15000 && !root.swingReminderSuppressed) {
+        if (elapsed >= 45000 && !root.swingReminderSuppressed) {
             root.swingCountdownVisible = true
-            root.swingCountdownSec = Math.max(1, Math.ceil((30000 - elapsed) / 1000))
+            root.swingCountdownSec = Math.max(1, Math.ceil((60000 - elapsed) / 1000))
         } else {
             root.swingCountdownVisible = false
         }
@@ -728,7 +746,7 @@ Item {
                             }
                             Model {
                                 id: lightBulbOuter
-                                visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                                visible: false
                                 source: "#Sphere"
                                 position: Qt.vector3d(0, 0, root.orbitSphereRadius)
                                 scale: Qt.vector3d(0.00096 * root.lightOrbitMarkerScale,
@@ -744,7 +762,7 @@ Item {
                             }
                             Model {
                                 id: lightBulbCore
-                                visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                                visible: false
                                 source: "#Sphere"
                                 position: Qt.vector3d(0, 0, root.orbitSphereRadius)
                                 scale: Qt.vector3d(0.00044 * root.lightOrbitMarkerScale,
@@ -763,7 +781,7 @@ Item {
 
                     Node {
                         id: orbitGuideRoot
-                        visible: root.rotatingLight3DEnabled && root.showLightOrbitMarker
+                        visible: false
                         position: Qt.vector3d(0, 0, 0)
                         Model {
                             source: "#Sphere"
@@ -796,10 +814,10 @@ Item {
                     }
                 }
 
-                /// 人脸中心轴左右 ±90° 摆动，有 obj 且 30 秒无操作时运行；变脸时不摆动避免干扰操作
+                /// 人脸中心轴左右 ±90° 摆动，有 obj 且 60 秒无操作时运行；变脸时不摆动避免干扰操作
                 SequentialAnimation {
                     id: swingAnimation
-                    /// 变脸时也允许自动左右摆（无操作满 30s 后恢复）
+                    /// 变脸时也允许自动左右摆（无操作满 60s 后恢复）
                     running: root.swingIdle && !!root.objSource
                     loops: Animation.Infinite
                     NumberAnimation {
@@ -826,11 +844,11 @@ Item {
                     xInvert: true
                     yInvert: false
                     /// 拖移放大镜时不要带动 3D 旋转
-                    mouseEnabled: !(root.magnifierActive && root.magnifierDragging)
+                    mouseEnabled: !(root.magnifierActive && root.magnifierDragging) && !root.lightDragOnMainView
                 }
             }
 
-            /// 仅在 View3D 内按下鼠标后才停止摆动并重置 30 秒无操作计时，避免只移入/移动就停
+            /// 仅在 View3D 内按下鼠标后才停止摆动并重置 60 秒无操作计时，避免只移入/移动就停
             MouseArea {
                 z: 1
                 anchors.fill: parent
@@ -840,6 +858,13 @@ Item {
                 onPressed: function(mouse) {
                     root.swingIdle = false
                     root.restartSwingIdleTimers()
+                    if (root.rotatingLight3DEnabled && root.lightDragOnMainView && (mouse.button === Qt.LeftButton)) {
+                        root.lightFromViewMouse(mouse.x, mouse.y,
+                                                mainViewLightDragToggle.minDragX, mainViewLightDragToggle.maxDragX,
+                                                mainViewLightDragToggle.minDragY, mainViewLightDragToggle.maxDragY)
+                        mouse.accepted = true
+                        return
+                    }
                     mouse.accepted = false
                 }
                 onPositionChanged: function(mouse) {
@@ -847,11 +872,82 @@ Item {
                         root.swingIdle = false
                         root.restartSwingIdleTimers()
                     }
+                    if (root.rotatingLight3DEnabled && root.lightDragOnMainView && (mouse.buttons & Qt.LeftButton)) {
+                        root.lightFromViewMouse(mouse.x, mouse.y,
+                                                mainViewLightDragToggle.minDragX, mainViewLightDragToggle.maxDragX,
+                                                mainViewLightDragToggle.minDragY, mainViewLightDragToggle.maxDragY)
+                        mouse.accepted = true
+                        return
+                    }
                     mouse.accepted = false
                 }
                 onReleased: function(mouse) {
                     root.restartSwingIdleTimers()
+                    if (root.lightDragOnMainView && mouse.button === Qt.LeftButton) {
+                        root.lightDragOnMainView = false
+                        mainViewLightDragToggle.dragging = false
+                        mouse.accepted = true
+                        return
+                    }
                     mouse.accepted = false
+                }
+            }
+
+            /// 拖动此按钮即可调光位；主画面本身保持 3D 旋转交互
+            Rectangle {
+                id: mainViewLightDragToggle
+                z: 211
+                visible: root.rotatingLight3DEnabled
+                property bool dragging: false
+                width: 40
+                height: 40
+                radius: 20
+                readonly property real minDragX: 14
+                readonly property real maxDragX: Math.max(minDragX, viewArea.width - width - 14)
+                readonly property real minDragY: 14
+                readonly property real maxDragY: Math.max(minDragY, viewArea.height - height - 14)
+                x: minDragX + ((root.lightAzimuthDeg + 90) / 180) * (maxDragX - minDragX)
+                y: minDragY + ((89 - root.lightElevationDeg) / 178) * (maxDragY - minDragY)
+                color: dragging ? "#d49a1e" : "#66000000"
+                //border.color: dragging ? "#fff2cc" : "#55ffffff"
+                //border.width: 1
+
+                Image {
+                    anchors.centerIn: parent
+                    width: 34
+                    height: 34
+                    source: "./images/light_drag_sun.svg"
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                    opacity: mainViewLightDragToggle.dragging ? 1.0 : 0.95
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: function(mouse) {
+                        mainViewLightDragToggle.dragging = true
+                        root.lightDragOnMainView = true
+                        root.lightDragHandleGrabOffX = mouse.x
+                        root.lightDragHandleGrabOffY = mouse.y
+                        mouse.accepted = true
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!mainViewLightDragToggle.dragging || !(mouse.buttons & Qt.LeftButton))
+                            return
+                        var p = mainViewLightDragToggle.mapToItem(viewArea, mouse.x, mouse.y)
+                        root.lightFromViewMouse(p.x, p.y,
+                                                mainViewLightDragToggle.minDragX, mainViewLightDragToggle.maxDragX,
+                                                mainViewLightDragToggle.minDragY, mainViewLightDragToggle.maxDragY)
+                        mouse.accepted = true
+                    }
+                    onReleased: function(mouse) {
+                        mainViewLightDragToggle.dragging = false
+                        root.lightDragOnMainView = false
+                        mouse.accepted = true
+                    }
                 }
             }
 
@@ -962,17 +1058,11 @@ Item {
                         color: "#ccc"
                         font.pixelSize: 12
                     }
-                    Label {
-                        width: parent.width
-                        wrapMode: Text.WordWrap
-                        text: "圆盘=球面正投影：圆心=正面。3D：暗点=脸心，黄点=主光方向示意。"
-                        color: "#9cf"
-                        font.pixelSize: 10
-                    }
                     Item {
                         id: lightOrbitPad
                         width: parent.width
-                        height: 200
+                        visible: false
+                        height: visible ? 200 : 0
                         readonly property real padR: Math.min(width, height) * 0.5 - 10
                         readonly property real mapNx: root.lightAzimuthDeg / 180
                         readonly property real mapNy: -root.lightElevationDeg / 89
@@ -1029,11 +1119,6 @@ Item {
                     }
                     RowLayout {
                         width: parent.width
-                        CheckBox {
-                            text: "显示球形灯泡"
-                            checked: root.showLightOrbitMarker
-                            onClicked: root.showLightOrbitMarker = checked
-                        }
                         Item {
                             Layout.fillWidth: true
                         }
@@ -1103,6 +1188,9 @@ Item {
                             ToolTip.delay: 400
                             ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
                                           : "分界轴 Y（点按→X）"
+                            //ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
+                            //               : (root.morphBlendAxis === 1 ? "分界轴 Y（点按→Z）" : "分界轴 Z（点按→X）")
+                                          
                             onClicked: root.advanceMorphBlendAxis()
                             /// 图1 左右分界 / 图2 上下分界 / 图3 中心圆点（内嵌矢量，不依赖外部 png）
                             contentItem: Item {
@@ -1186,7 +1274,7 @@ Item {
                 }
             }
 
-            /// 即将自动左右摆动：空闲后段 15s 倒计时；点击关闭后 30s 内不再提示（15+15）
+            /// 即将自动左右摆动：空闲后段 45s～60s 倒计时；点击关闭后 30s 内不再提示
             Rectangle {
                 id: swingIdleCountdownBanner
                 z: 175

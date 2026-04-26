@@ -74,6 +74,21 @@ CameraClient::CameraClient(CameraImageProvider* provider, QObject* parent)
             },
             Qt::QueuedConnection);
 
+    cameraOpenCountdownTimer_.setInterval(1000);
+    connect(&cameraOpenCountdownTimer_, &QTimer::timeout, this, [this]() {
+        if (!cameraOpening_) {
+            cameraOpenCountdownTimer_.stop();
+            return;
+        }
+
+        const int nextRemaining = cameraOpenRemainingMs_ > 1000
+            ? cameraOpenRemainingMs_ - 1000
+            : 0;
+        if (cameraOpenRemainingMs_ != nextRemaining) {
+            cameraOpenRemainingMs_ = nextRemaining;
+            emit cameraOpenRemainingMsChanged();
+        }
+    });
 }
 
 CameraClient::~CameraClient()
@@ -128,13 +143,30 @@ bool CameraClient::isOpenResultOk(const QJsonObject& resp) {
 
 void CameraClient::openCamera() {
     if (!connected()) { emit log("Not connected."); return; }
+    if (cameraOpenOk_ || cameraOpening_) return;
+
+    const int waitForConnectCamera = AppConfig::instance().WaitForConnectCamera();
+    cameraOpening_ = true;
+    cameraOpenRemainingMs_ = waitForConnectCamera;
+    emit cameraOpeningChanged();
+    emit cameraOpenRemainingMsChanged();
+    cameraOpenCountdownTimer_.start();
+
     QJsonObject obj;
     obj["cmd"] = "open";
     obj["series"] = AppConfig::instance().CameraSeries();
     obj["dllname"] = AppConfig::instance().CameraDll();
+    obj["WaitForConnectCamera"] = waitForConnectCamera;
 
     sendCommandRequest2(obj, [this](const QJsonObject& resp) {
         bool ok = isOpenResultOk(resp);
+        cameraOpenCountdownTimer_.stop();
+        cameraOpening_ = false;
+        if (cameraOpenRemainingMs_ != 0) {
+            cameraOpenRemainingMs_ = 0;
+            emit cameraOpenRemainingMsChanged();
+        }
+        emit cameraOpeningChanged();
         cameraOpenOk_ = ok;
         emit log(ok ? "open OK" : "open NG");
         emit openFinished(ok, ok ? QString() : QStringLiteral("相机打开失败，请检查连接"));
@@ -482,7 +514,8 @@ void CameraClient::onConnected() {
     emit log("Connected.");
     connected_ = true;
     emit connectedChanged();
-    // 不再在此处自动 open；仅当用户进入拍摄页/点「预览」时再发 open，且 open 返回 OK 后才发 startpreview
+    // Socket 建立后立即打开相机；预览仍由 startPreview/stopPreview 控制。
+    openCamera();
 }
 
 void CameraClient::onDisconnected() {
@@ -490,6 +523,15 @@ void CameraClient::onDisconnected() {
     rxBuf_.clear();
     connected_ = false;
     cameraOpenOk_ = false;
+    if (cameraOpening_) {
+        cameraOpenCountdownTimer_.stop();
+        cameraOpening_ = false;
+        emit cameraOpeningChanged();
+    }
+    if (cameraOpenRemainingMs_ != 0) {
+        cameraOpenRemainingMs_ = 0;
+        emit cameraOpenRemainingMsChanged();
+    }
     pendingStartPreview_ = false;
     emit connectedChanged();
 }

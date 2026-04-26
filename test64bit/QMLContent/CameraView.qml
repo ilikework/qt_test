@@ -188,6 +188,16 @@ Item   {
                         visible: !camClient.connected
                     }
 
+                    // 已连上程序，正在等待相机硬件打开
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "正在打开相机，请稍候（" + Math.ceil(camClient.cameraOpenRemainingMs / 1000) + "秒）"
+                        color: "#e04040"
+                        font.pixelSize: 28
+                        font.bold: true
+                        visible: camClient.connected && camClient.cameraOpening && !camClient.previewOn && cameraRoot.statusMessage === ""
+                    }
+
                     // 已连上程序但未开预览：请连接相机硬件后点预览，红色
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -195,7 +205,7 @@ Item   {
                         color: "#e04040"
                         font.pixelSize: 28
                         font.bold: true
-                        visible: camClient.connected && !camClient.previewOn && cameraRoot.statusMessage === ""
+                        visible: camClient.connected && !camClient.cameraOpening && !camClient.previewOn && cameraRoot.statusMessage === ""
                     }
 
                     // 仅 startpreview 失败时显示红字（open 失败不再设 statusMessage）

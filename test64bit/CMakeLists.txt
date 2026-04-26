@@ -43,7 +43,7 @@ qt_add_executable(apptest64bit
 )
 
 # --- Gather all QML and resource files from the QMLContent directory ---
-file(GLOB_RECURSE QML_RESOURCE_FILES
+file(GLOB_RECURSE QML_RESOURCE_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/QMLContent/*"
 )
 

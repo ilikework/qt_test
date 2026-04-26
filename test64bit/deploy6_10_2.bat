@@ -38,6 +38,7 @@ copy /Y "%PROJECT_ROOT%libs\dllProc.dll" "%DEPLOY_DIR%\"
 if exist "%PROJECT_ROOT%..\MMCameraCtrl\Release\MMCameraCtrl.exe" copy /Y "%PROJECT_ROOT%..\MMCameraCtrl\Release\MMCameraCtrl.exe" "%DEPLOY_DIR%\"
 if exist "%PROJECT_ROOT%..\MMCameraCtrl\Release\EDSDK.dll" copy /Y "%PROJECT_ROOT%..\MMCameraCtrl\Release\EDSDK.dll" "%DEPLOY_DIR%\"
 if exist "%PROJECT_ROOT%..\MMCameraCtrl\Release\EdsImage.dll" copy /Y "%PROJECT_ROOT%..\MMCameraCtrl\Release\EdsImage.dll" "%DEPLOY_DIR%\"
+if exist "%PROJECT_ROOT%..\MMCameraCtrl\Release\kzdsc_880.dll" copy /Y "%PROJECT_ROOT%..\MMCameraCtrl\Release\kzdsc_880.dll" "%DEPLOY_DIR%\"
 echo.
 
 REM --- 初始化数据库并复制到上一级 deploy 目录 ---

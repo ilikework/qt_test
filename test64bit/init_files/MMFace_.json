@@ -1,7 +1,10 @@
 {
   "language": "zh_CN",
   "CameraSeriesComment": "4:CanonEOS, 5:Aigo880",
-  "CameraSeries": 4,
+  "CameraSeries": 5,
+  "CameraDll": "kzdsc_880.dll",
+  
+  "WaitForConnectCamera": 5000,
   "BeforeRGBShootInterval": 1,
   "AfterRGBShootInterval": 1,
   "BeforeUVShootInterval": 1000,
