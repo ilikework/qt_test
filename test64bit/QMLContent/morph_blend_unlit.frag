@@ -35,7 +35,7 @@ float pickAxis(vec3 p)
         return p.x;
     if (uBlendAxis == 1)
         return -p.y;
-    return p.z;
+    return 0.0;
 }
 
 vec4 morphBlendColorLinear()
@@ -49,8 +49,28 @@ vec4 morphBlendColorLinear()
         rightColor.rgb = srgbToLinear(rightColor.rgb);
     }
 
-    float t;
-    if (uUseMeshAxis > 0.5) {
+    float t = 0.0;
+    vec4 blended;
+    if (uUseMeshAxis > 0.5 && uBlendAxis == 2) {
+        float tx = clamp(vLocalPos.x * uMeshScale + uMeshBiasX, 0.0, 1.0);
+        float ty = clamp((-vLocalPos.y) * uMeshScale + uMeshBiasY, 0.0, 1.0);
+        float f = max(uFeather, 0.0001);
+        float wx = smoothstep(uLeftRatio - f, uLeftRatio + f, tx);
+        float wy = smoothstep(uLeftRatio - f, uLeftRatio + f, ty);
+        blended = mix(leftColor, rightColor, wx * wy);
+
+        if (uShowGuide > 0.5) {
+            float guideT = max(0.001, uGuideThickness);
+            float xMask = 1.0 - smoothstep(guideT, guideT * 1.6, abs(tx - uLeftRatio));
+            float yMask = 1.0 - smoothstep(guideT, guideT * 1.6, abs(ty - uLeftRatio));
+            vec3 xColor = vec3(1.0, 0.93, 0.20);
+            vec3 yColor = vec3(1.0, 0.24, 0.24);
+            vec3 guideColor = clamp(xColor * (xMask * 0.68) + yColor * (yMask * 0.68), 0.0, 1.0);
+            float mixMask = clamp(max(xMask, yMask) * 0.68, 0.0, 1.0);
+            blended.rgb = mix(blended.rgb, guideColor, mixMask);
+        }
+        return blended;
+    } else if (uUseMeshAxis > 0.5) {
         float c = pickAxis(vLocalPos);
         t = clamp(c * uMeshScale + uMeshBias, 0.0, 1.0);
     } else {
@@ -59,7 +79,14 @@ vec4 morphBlendColorLinear()
 
     float f = max(uFeather, 0.0001);
     float w = smoothstep(uLeftRatio - f, uLeftRatio + f, t);
-    return mix(leftColor, rightColor, w);
+    blended = mix(leftColor, rightColor, w);
+    if (uShowGuide > 0.5 && uUseMeshAxis > 0.5) {
+        float guideT = max(0.001, uGuideThickness);
+        float lineMask = 1.0 - smoothstep(guideT, guideT * 1.6, abs(t - uLeftRatio));
+        vec3 guideColor = uBlendAxis == 0 ? vec3(1.0, 0.93, 0.20) : vec3(1.0, 0.24, 0.24);
+        blended.rgb = mix(blended.rgb, guideColor, lineMask * 0.72);
+    }
+    return blended;
 }
 
 void MAIN()

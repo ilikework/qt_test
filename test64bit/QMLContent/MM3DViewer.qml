@@ -33,25 +33,43 @@ Item {
     property int selectedRightIndex: 0
     /// 变脸左右分界固定 50:50（不调）
     readonly property real morphLeftRatio: 0.5
-    /// 变脸：局部轴 0=X，1=Y，2=Z（Y 用右侧竖滑条；Z 用滚轮；界面暂时仅 X↔Y，不进入 Z）
+    /// 变脸：0=X 左右，1=Y 上下，2=XY 区域
     property int morphBlendAxis: 0
     /// 局部坐标 → 0~1：coord = clamp(axis * scale + bias, 0, 1)；轴缩放固定为原滑条最大值 20，不可调
     readonly property real morphMeshScale: 20.0
     property real morphMeshBias: 0.0
-    /// 各分界轴（左右 / 上下 / 中心圆点）独立保存偏移，切换轴时互不覆盖
+    property real morphMeshBiasX: 0.0
+    property real morphMeshBiasY: 0.0
+    /// 各分界轴（左右 / 上下 / XY）独立保存偏移，切换轴时互不覆盖
     property real morphBiasAxis0: 0.0
     property real morphBiasAxis1: 0.0
-    property real morphBiasAxis2: 11.0
+    property real morphBiasAxis2X: 0.0
+    property real morphBiasAxis2Y: 0.0
     property bool _morphBiasSyncInternally: false
-    /// 轴偏移：局部 X ±15，局部 Y 约 ±19~17，局部 Z -11~11
+    /// 轴偏移：局部 X ±15，局部 Y 约 ±19~17
     readonly property real morphBiasMin: morphBlendAxis === 0 ? -15.0
-        : (morphBlendAxis === 1 ? -19.0 : -11.0)
+        : (morphBlendAxis === 1 ? -19.0 : 0.0)
     readonly property real morphBiasMax: morphBlendAxis === 0 ? 15.0
-        : (morphBlendAxis === 1 ? 17.0 : 11.0)
-    /// Z 轴：滚轮每「刻度」步进（angleDelta 按 120 归一）
-    property real morphZWheelStep: 0.12
+        : (morphBlendAxis === 1 ? 17.0 : 0.0)
+    readonly property real morphBiasXMin: -15.0
+    readonly property real morphBiasXMax: 15.0
+    readonly property real morphBiasYMin: -19.0
+    readonly property real morphBiasYMax: 17.0
     /// 接缝柔化固定为最小，不可调
     readonly property real morphBlendFeather: 0.012
+    property bool morphSurfaceDragging: false
+    property bool morphSingleAxisLineDragging: false
+    property bool morphDragTargetHovered: false
+    property bool xyHandlePickingSurface: false
+    property bool xyHandleOnSurface: false
+    property real xyHandlePosZ: 0.82
+    readonly property real xyHandleSpherePrimRadius: 50.0
+    readonly property real xyHandleSphereUniformScale: 0.00036
+    readonly property real xyHandleSphereRadiusLocal: xyHandleSpherePrimRadius * xyHandleSphereUniformScale
+    property real xyHandleSurfaceEmbedFactor: 1.0
+    property real xyMarkerEmbedDepth: 0.0
+    property vector3d xyMarkerScenePos: Qt.vector3d(0, 0, 0)
+    property real singleAxisLineHitTolerance: 0.045
     /// 与 CustomMaterial uEmissiveFactor 同源：普通模式与变脸共用
     property vector3d skinEmissiveFactor: Qt.vector3d(1, 1, 1)
     /// Principled：自发光相对贴图强度（略低于 1，留出漫反射/高光让方向光可见）
@@ -68,12 +86,6 @@ Item {
     property real morphUnshadedSaturationBoost: 1.06
     /// 1=片内再乘 sceneEnvironment.exposure（易与全局重复变亮）；默认 0
     property real morphUnshadedApplySceneExposure: 0.0
-    /// 变脸 lit 材质走引擎默认受光；以下仍保留供以后扩展或调场景
-    property real morphShadedLightingGain: 5.0 //3.65
-    /// 仅乘在 AMBIENT_LIGHT 的 scene 项上：越小旋转灯越「主导」明暗、略更锐利
-    property real morphShadedAmbientFactor: 0.17 //0.52
-    /// 半球底亮（与 TOTAL_AMBIENT_COLOR 无关）：略低则主光方向对比更清晰
-    property real morphShadedHemisphereFill: 0.085 // 0.30
     /// 变脸+3D打光：场景方向光补亮（略低以免冲淡主光方向明暗）
     property real morphShadedSunBrightness: 0.035
     /// 与 3DDemo material.frag 一致：开灯 albedo 色度/暖色微调
@@ -90,9 +102,6 @@ Item {
     property real light3DBrightness: 3.15
     /// 片内模拟光总倍率（默认 10 ≈ 相对未乘前「至少亮一个数量级」，对齐旧 Principled+DirectionalLight）
     property real simLightBoost: 10.0
-    /// 无打光时写入 DIFFUSE 的系数（一般为 1；偏暗/偏亮可微调）
-    property real morphFlatUnlitLevel: 1.0
-
     property string objSource: ""
     property string textureSource: ""
     property string generationErrorMessage: ""
@@ -189,6 +198,309 @@ Item {
         lightFromHandlePos(viewMouseX - lightDragHandleGrabOffX,
                            viewMouseY - lightDragHandleGrabOffY,
                            minX, maxX, minY, maxY)
+    }
+
+    function isNodeUnder(node, ancestor) {
+        var p = node
+        while (p) {
+            if (p === ancestor)
+                return true
+            p = p.parent
+        }
+        return false
+    }
+
+    function setXYBiasFromSurfaceLocal(local) {
+        morphMeshBiasX = Math.max(morphBiasXMin, Math.min(morphBiasXMax, local.x * morphMeshScale - morphLeftRatio))
+        morphMeshBiasY = Math.max(morphBiasYMin, Math.min(morphBiasYMax, -local.y * morphMeshScale - morphLeftRatio))
+        morphBiasAxis2X = morphMeshBiasX
+        morphBiasAxis2Y = morphMeshBiasY
+    }
+
+    function pickObjSurfaceAtMouse(mx, my) {
+        if (importNode.status !== RuntimeLoader.Success)
+            return ({ objectHit: null })
+
+        var bestPickRes = ({ objectHit: null })
+        function considerPickAt(sx, sy) {
+            if (sx < 0 || sx > view3d.width || sy < 0 || sy > view3d.height || bestPickRes.objectHit)
+                return
+            var pr = view3d.pick(sx, sy)
+            if (pr.objectHit && isNodeUnder(pr.objectHit, importNode))
+                bestPickRes = pr
+        }
+
+        considerPickAt(mx, my)
+        var radii = [4, 8, 14, 22]
+        for (var ri = 0; ri < radii.length && !bestPickRes.objectHit; ++ri) {
+            var r = radii[ri]
+            for (var i = 0; i < 16 && !bestPickRes.objectHit; ++i) {
+                var a = (Math.PI * 2 / 16) * i
+                considerPickAt(mx + Math.cos(a) * r, my + Math.sin(a) * r)
+            }
+        }
+        return bestPickRes
+    }
+
+    function singleAxisValueFromLocal(local) {
+        if (morphBlendAxis === 0)
+            return local.x
+        return -local.y
+    }
+
+    function isMouseNearSingleAxisLine(mx, my) {
+        if (!morphMode || (morphBlendAxis !== 0 && morphBlendAxis !== 1))
+            return false
+        var pr = pickObjSurfaceAtMouse(mx, my)
+        if (!pr.objectHit)
+            return false
+        var local = importNode.mapPositionFromScene(pr.scenePosition)
+        var t = singleAxisValueFromLocal(local) * morphMeshScale - morphMeshBias
+        return Math.abs(t - morphLeftRatio) <= Math.max(singleAxisLineHitTolerance, morphBlendFeather * 3.0)
+    }
+
+    function updateSingleAxisBiasFromSurfaceMouse(mx, my) {
+        if (!morphMode || (morphBlendAxis !== 0 && morphBlendAxis !== 1))
+            return false
+        var pr = pickObjSurfaceAtMouse(mx, my)
+        if (!pr.objectHit)
+            return false
+        var local = importNode.mapPositionFromScene(pr.scenePosition)
+        var nextBias = singleAxisValueFromLocal(local) * morphMeshScale - morphLeftRatio
+        morphMeshBias = Math.max(morphBiasMin, Math.min(morphBiasMax, nextBias))
+        return true
+    }
+
+    function isMouseOverXYDragHandle(mx, my) {
+        if (!morphMode || morphBlendAxis !== 2)
+            return false
+
+        function checkAt(sx, sy) {
+            if (sx < 0 || sx > view3d.width || sy < 0 || sy > view3d.height)
+                return false
+            var pr = view3d.pick(sx, sy)
+            return pr.objectHit === xyHandleSphere || pr.objectHit === xyCrossCoordMarker
+        }
+
+        if (checkAt(mx, my))
+            return true
+        var radii = [4, 8, 12]
+        for (var ri = 0; ri < radii.length; ++ri) {
+            var r = radii[ri]
+            for (var i = 0; i < 12; ++i) {
+                var a = (Math.PI * 2 / 12) * i
+                if (checkAt(mx + Math.cos(a) * r, my + Math.sin(a) * r))
+                    return true
+            }
+        }
+        return false
+    }
+
+    function isMouseOverMorphDragTarget(mx, my) {
+        if (morphBlendAxis === 2)
+            return isMouseOverXYDragHandle(mx, my)
+        return isMouseNearSingleAxisLine(mx, my)
+    }
+
+    function updateXYBiasFromSurfaceMouse(mx, my) {
+        if (!morphMode || morphBlendAxis !== 2 || importNode.status !== RuntimeLoader.Success)
+            return false
+
+        var bestPickRes = ({ objectHit: null })
+        function considerPickAt(sx, sy) {
+            if (sx < 0 || sx > view3d.width || sy < 0 || sy > view3d.height)
+                return
+            var pr = view3d.pick(sx, sy)
+            if (pr.objectHit && isNodeUnder(pr.objectHit, importNode) && !bestPickRes.objectHit)
+                bestPickRes = pr
+        }
+
+        try {
+            xyHandlePickingSurface = true
+            considerPickAt(mx, my)
+            var radii = [5, 10, 18, 28]
+            for (var ri = 0; ri < radii.length && !bestPickRes.objectHit; ++ri) {
+                var r = radii[ri]
+                for (var i = 0; i < 16 && !bestPickRes.objectHit; ++i) {
+                    var a = (Math.PI * 2 / 16) * i
+                    considerPickAt(mx + Math.cos(a) * r, my + Math.sin(a) * r)
+                }
+            }
+        } finally {
+            xyHandlePickingSurface = false
+        }
+
+        if (!bestPickRes.objectHit)
+            return false
+
+        setXYBiasFromSurfaceLocal(importNode.mapPositionFromScene(bestPickRes.scenePosition))
+        updateXYHandleSurfacePos()
+        return true
+    }
+
+    function scheduleXYHandleSurfaceUpdate() {
+        if (!morphMode || morphBlendAxis !== 2 || morphSurfaceDragging)
+            return
+        surfacePickRetryTimer.restart()
+    }
+
+    function updateXYHandleSurfacePos() {
+        if (importNode.status !== RuntimeLoader.Success)
+            return
+
+        var targetLocalX = (morphLeftRatio + morphMeshBiasX) / morphMeshScale
+        var targetLocalY = -(morphLeftRatio + morphMeshBiasY) / morphMeshScale
+        var localX = targetLocalX
+        var localY = targetLocalY
+        var localZ = xyHandlePosZ
+        var markerScenePos = importNode.mapPositionToScene(Qt.vector3d(localX, localY, localZ))
+
+        var ax = 0.33
+        var ay = 0.47
+        var rx = localX / ax
+        var ry = localY / ay
+        var rr = rx * rx + ry * ry
+        if (rr > 1.0)
+            rr = 1.0
+        localZ = 0.70 + Math.sqrt(Math.max(0.0, 1.0 - rr)) * 0.13
+
+        try {
+            xyHandlePickingSurface = true
+            var bestPickRes = ({ objectHit: null })
+            var bestScore = 1e9
+
+            function considerPickResult(pr, sx, sy) {
+                if (!pr.objectHit || !isNodeUnder(pr.objectHit, importNode))
+                    return
+                var pl = importNode.mapPositionFromScene(pr.scenePosition)
+                var dx = pl.x - targetLocalX
+                var dy = pl.y - targetLocalY
+                var pp = view3d.mapFrom3DScene(pr.scenePosition)
+                var screenDx = pp.x - sx
+                var screenDy = pp.y - sy
+                var score = dx * dx + dy * dy + (screenDx * screenDx + screenDy * screenDy) * 0.0000002
+                if (score < bestScore) {
+                    bestScore = score
+                    bestPickRes = pr
+                }
+            }
+
+            function considerPickAt(sx, sy) {
+                if (sx < 0 || sx > view3d.width || sy < 0 || sy > view3d.height)
+                    return
+                considerPickResult(view3d.pick(sx, sy), sx, sy)
+            }
+
+            function scanProjectedLocalPoint(sampleZ) {
+                var sampleScene = importNode.mapPositionToScene(Qt.vector3d(targetLocalX, targetLocalY, sampleZ))
+                var sp = view3d.mapFrom3DScene(sampleScene)
+                considerPickAt(sp.x, sp.y)
+                considerPickAt(sp.x - 4, sp.y)
+                considerPickAt(sp.x + 4, sp.y)
+                considerPickAt(sp.x, sp.y - 4)
+                considerPickAt(sp.x, sp.y + 4)
+                considerPickAt(sp.x - 9, sp.y - 9)
+                considerPickAt(sp.x + 9, sp.y - 9)
+                considerPickAt(sp.x - 9, sp.y + 9)
+                considerPickAt(sp.x + 9, sp.y + 9)
+            }
+
+            scanProjectedLocalPoint(localZ)
+            scanProjectedLocalPoint(xyHandlePosZ)
+            for (var zi = -18; zi <= 22; ++zi)
+                scanProjectedLocalPoint(zi * 0.05)
+
+            var pickRes = bestPickRes
+            if (pickRes.objectHit) {
+                var hitScene = pickRes.scenePosition
+                markerScenePos = hitScene
+
+                var centerScene = originNode.mapPositionToScene(Qt.vector3d(0, 0, 0))
+                var inX = centerScene.x - hitScene.x
+                var inY = centerScene.y - hitScene.y
+                var inZ = centerScene.z - hitScene.z
+                var inLen = Math.sqrt(inX * inX + inY * inY + inZ * inZ)
+
+                var sceneO = importNode.mapPositionToScene(Qt.vector3d(0, 0, 0))
+                var sceneEx = importNode.mapPositionToScene(Qt.vector3d(1, 0, 0))
+                var sceneEy = importNode.mapPositionToScene(Qt.vector3d(0, 1, 0))
+                var sceneEz = importNode.mapPositionToScene(Qt.vector3d(0, 0, 1))
+                var ux = sceneEx.x - sceneO.x, uy = sceneEx.y - sceneO.y, uz = sceneEx.z - sceneO.z
+                var vx = sceneEy.x - sceneO.x, vy = sceneEy.y - sceneO.y, vz = sceneEy.z - sceneO.z
+                var wx = sceneEz.x - sceneO.x, wy = sceneEz.y - sceneO.y, wz = sceneEz.z - sceneO.z
+                var sX = Math.sqrt(ux * ux + uy * uy + uz * uz)
+                var sY = Math.sqrt(vx * vx + vy * vy + vz * vz)
+                var sZ = Math.sqrt(wx * wx + wy * wy + wz * wz)
+                var rScene = xyHandleSphereRadiusLocal * ((sX + sY + sZ) / 3.0)
+                var embedDist = rScene * xyHandleSurfaceEmbedFactor + xyMarkerEmbedDepth
+
+                var outX = hitScene.x - centerScene.x
+                var outY = hitScene.y - centerScene.y
+                var outZ = hitScene.z - centerScene.z
+                var outLen = Math.sqrt(outX * outX + outY * outY + outZ * outZ)
+                var nsx = 0, nsy = 0, nsz = 0
+                var hasOut = outLen > 1e-7
+                if (hasOut) {
+                    nsx = outX / outLen
+                    nsy = outY / outLen
+                    nsz = outZ / outLen
+                }
+                if (pickRes.sceneNormal) {
+                    var nLenS = Math.sqrt(pickRes.sceneNormal.x * pickRes.sceneNormal.x
+                                        + pickRes.sceneNormal.y * pickRes.sceneNormal.y
+                                        + pickRes.sceneNormal.z * pickRes.sceneNormal.z)
+                    if (nLenS > 1e-7) {
+                        var px = pickRes.sceneNormal.x / nLenS
+                        var py = pickRes.sceneNormal.y / nLenS
+                        var pz = pickRes.sceneNormal.z / nLenS
+                        if (hasOut) {
+                            var align = px * nsx + py * nsy + pz * nsz
+                            if (align < 0) {
+                                px = -px
+                                py = -py
+                                pz = -pz
+                            }
+                        }
+                        nsx = px
+                        nsy = py
+                        nsz = pz
+                    }
+                } else if (!hasOut) {
+                    nsz = 1
+                }
+                if (embedDist !== 0.0) {
+                    if (Math.abs(nsx) + Math.abs(nsy) + Math.abs(nsz) < 1e-7 && inLen > 1e-7) {
+                        var invIn = 1.0 / inLen
+                        markerScenePos = Qt.vector3d(
+                            hitScene.x + inX * invIn * embedDist,
+                            hitScene.y + inY * invIn * embedDist,
+                            hitScene.z + inZ * invIn * embedDist
+                        )
+                    } else {
+                        markerScenePos = Qt.vector3d(
+                            hitScene.x - nsx * embedDist,
+                            hitScene.y - nsy * embedDist,
+                            hitScene.z - nsz * embedDist
+                        )
+                    }
+                }
+
+                var hitLocal = importNode.mapPositionFromScene(markerScenePos)
+                localX = hitLocal.x
+                localY = hitLocal.y
+                localZ = hitLocal.z
+                xyHandleOnSurface = true
+            } else {
+                xyHandleOnSurface = false
+            }
+        } catch (e) {
+            xyHandleOnSurface = false
+        } finally {
+            xyHandlePickingSurface = false
+        }
+
+        xyHandlePosZ = localZ
+        xyMarkerScenePos = markerScenePos
     }
 
     Component.onCompleted: {
@@ -356,6 +668,8 @@ Item {
             Qt.callLater(root.restartSwingIdleTimers)
         }
         console.log("[MM3D] morphMode on → leftTextureSource:", leftTextureSource, "rightTextureSource:", rightTextureSource, "fallback textureSource:", textureSource)
+        if (morphMode)
+            Qt.callLater(updateXYHandleSurfacePos)
         Qt.callLater(refresh3DMaterial)
     }
 
@@ -374,25 +688,39 @@ Item {
                 morphBiasAxis0 = morphMeshBias
             else if (morphBlendAxis === 1)
                 morphBiasAxis1 = morphMeshBias
-            else
-                morphBiasAxis2 = morphMeshBias
         }
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
 
-    /// 循环切换分界轴：先写入当前轴存储，再读出目标轴存储并 clamp（暂时仅 X↔Y，跳过 Z）
+    onMorphMeshBiasXChanged: {
+        morphBiasAxis2X = morphMeshBiasX
+        if (morphMode) {
+            Qt.callLater(refresh3DMaterial)
+            Qt.callLater(updateXYHandleSurfacePos)
+        }
+    }
+
+    onMorphMeshBiasYChanged: {
+        morphBiasAxis2Y = morphMeshBiasY
+        if (morphMode) {
+            Qt.callLater(refresh3DMaterial)
+            Qt.callLater(updateXYHandleSurfacePos)
+        }
+    }
+
+    /// 循环切换分界轴：X 左右 → Y 上下 → XY 区域
     function advanceMorphBlendAxis() {
         if (morphBlendAxis === 0)
             morphBiasAxis0 = morphMeshBias
         else if (morphBlendAxis === 1)
             morphBiasAxis1 = morphMeshBias
-        else
-            morphBiasAxis2 = morphMeshBias
+        else {
+            morphBiasAxis2X = morphMeshBiasX
+            morphBiasAxis2Y = morphMeshBiasY
+        }
 
-        /// 正常 UI 下轴仅为 0/1，此处 %2 即 X↔Y；Math.min 用于轴异常为 2 时仍能算出合法下一轴（与 onMorphBlendAxisChanged 钳位配合）
-        // 恢复 Z 轴切换时用回：var next = (morphBlendAxis + 1) % 3
-        var next = (Math.min(morphBlendAxis, 1) + 1) % 2
+        var next = (morphBlendAxis + 1) % 3
         morphBlendAxis = next
 
         _morphBiasSyncInternally = true
@@ -400,12 +728,14 @@ Item {
             morphMeshBias = morphBiasAxis0
         else if (next === 1)
             morphMeshBias = morphBiasAxis1
-        else
-            morphMeshBias = morphBiasAxis2
+        else {
+            morphMeshBiasX = morphBiasAxis2X
+            morphMeshBiasY = morphBiasAxis2Y
+        }
 
-        if (morphMeshBias < morphBiasMin)
+        if (next !== 2 && morphMeshBias < morphBiasMin)
             morphMeshBias = morphBiasMin
-        else if (morphMeshBias > morphBiasMax)
+        else if (next !== 2 && morphMeshBias > morphBiasMax)
             morphMeshBias = morphBiasMax
         _morphBiasSyncInternally = false
     }
@@ -413,25 +743,28 @@ Item {
     onMorphBlendAxisChanged: {
         if (morphBlendAxis < 0)
             morphBlendAxis = 0
-        else if (morphBlendAxis > 1) {
-            morphBlendAxis = 1
+        else if (morphBlendAxis > 2)
+            morphBlendAxis = 2
+
+        if (morphBlendAxis === 0 || morphBlendAxis === 1) {
             _morphBiasSyncInternally = true
-            morphMeshBias = morphBiasAxis1
+            morphMeshBias = morphBlendAxis === 0 ? morphBiasAxis0 : morphBiasAxis1
             if (morphMeshBias < morphBiasMin)
                 morphMeshBias = morphBiasMin
             else if (morphMeshBias > morphBiasMax)
                 morphMeshBias = morphBiasMax
             _morphBiasSyncInternally = false
+        } else {
+            morphMeshBiasX = morphBiasAxis2X
+            morphMeshBiasY = morphBiasAxis2Y
+            Qt.callLater(updateXYHandleSurfacePos)
         }
-        /// 界面循环本不应出现 2；保留本分支：防外部/C++/旧状态/调试把 morphBlendAxis 写成 2，统一回落到 Y 并同步滑条与材质
-        //else if (morphBlendAxis > 2)
-        //    morphBlendAxis = 2    
+
         if (morphMode)
             Qt.callLater(refresh3DMaterial)
     }
 
     onRotatingLight3DEnabledChanged: Qt.callLater(refresh3DMaterial)
-    onMorphFlatUnlitLevelChanged: Qt.callLater(refresh3DMaterial)
     onSimLightBoostChanged: Qt.callLater(refresh3DMaterial)
 
     onSelectedTextureIndexChanged: {
@@ -562,6 +895,13 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            Timer {
+                id: surfacePickRetryTimer
+                interval: 16
+                repeat: false
+                onTriggered: root.updateXYHandleSurfacePos()
+            }
+
             View3D {
                 id: view3d
                 z: -1
@@ -627,7 +967,11 @@ Item {
                     property int uBlendAxis: root.morphBlendAxis
                     property real uMeshScale: root.morphMeshScale
                     property real uMeshBias: -root.morphMeshBias
+                    property real uMeshBiasX: -root.morphMeshBiasX
+                    property real uMeshBiasY: -root.morphMeshBiasY
                     property real uFeather: root.morphBlendFeather
+                    property real uShowGuide: root.morphMode ? 1.0 : 0.0
+                    property real uGuideThickness: root.morphBlendAxis === 2 ? 0.018 : 0.014
                     property vector3d uEmissiveFactor: root.skinPrincipledEmissiveScaled
                     property real uSceneExposure: sceneEnvironment.exposure
                     property real uAssumeSrgbTexture: root.morphUnshadedAssumeSrgbTexture
@@ -654,7 +998,11 @@ Item {
                     property int uBlendAxis: root.morphBlendAxis
                     property real uMeshScale: root.morphMeshScale
                     property real uMeshBias: -root.morphMeshBias
+                    property real uMeshBiasX: -root.morphMeshBiasX
+                    property real uMeshBiasY: -root.morphMeshBiasY
                     property real uFeather: root.morphBlendFeather
+                    property real uShowGuide: root.morphMode ? 1.0 : 0.0
+                    property real uGuideThickness: root.morphBlendAxis === 2 ? 0.018 : 0.014
                     property vector3d uEmissiveFactor: root.skinPrincipledEmissiveScaled
                     property real uSceneExposure: sceneEnvironment.exposure
                     property int uTonemapFlavor: sceneEnvironment.tonemapMode === SceneEnvironment.TonemapModeAces ? 1 : 0
@@ -675,11 +1023,15 @@ Item {
                         if (status === RuntimeLoader.Success) {
                             importNode.scale = Qt.vector3d(1, 1, 1)
                             applyMaterialRecursively(importNode)
+                            root.updateXYHandleSurfacePos()
+                            surfacePickRetryTimer.restart()
                         }
                     }
 
                     function applyMaterialRecursively(node) {
                         if (!node) return
+                        if ("pickable" in node)
+                            node.pickable = true
                         if ("materials" in node) {
                             var matPick = root.rotatingLight3DEnabled ? skinMorphMatLit : skinMorphMatUnlit
                             node.materials = []
@@ -694,6 +1046,51 @@ Item {
                         var kids = node.children
                         for (var i = 0; i < kids.length; ++i) applyMaterialRecursively(kids[i])
                     }
+                }
+
+                Model {
+                    id: xyHandleSphere
+                    visible: root.morphMode && root.morphBlendAxis === 2
+                        && !root.xyHandlePickingSurface
+                        && root.xyHandleOnSurface
+                    parent: originNode
+                    source: "#Sphere"
+                    position: originNode.mapPositionFromScene(root.xyMarkerScenePos)
+                    scale: Qt.vector3d(root.xyHandleSphereUniformScale,
+                                       root.xyHandleSphereUniformScale,
+                                       root.xyHandleSphereUniformScale)
+                    pickable: true
+                    materials: [
+                        PrincipledMaterial {
+                            lighting: PrincipledMaterial.NoLighting
+                            baseColor: root.morphSurfaceDragging ? "#57ff6f" : "#2fd44a"
+                            emissiveFactor: root.morphSurfaceDragging
+                                ? Qt.vector3d(0.18, 0.90, 0.25)
+                                : Qt.vector3d(0.10, 0.52, 0.15)
+                        }
+                    ]
+                }
+
+                Model {
+                    id: xyCrossCoordMarker
+                    visible: root.morphMode && root.morphBlendAxis === 2
+                        && !root.xyHandlePickingSurface
+                        && root.xyHandleOnSurface
+                    parent: originNode
+                    source: "#Sphere"
+                    position: originNode.mapPositionFromScene(root.xyMarkerScenePos)
+                    scale: Qt.vector3d(0.0005, 0.0005, 0.0005)
+                    depthBias: -1.5
+                    castsShadows: false
+                    receivesShadows: false
+                    pickable: true
+                    materials: [
+                        PrincipledMaterial {
+                            lighting: PrincipledMaterial.NoLighting
+                            baseColor: "#00ff00"
+                            emissiveFactor: Qt.vector3d(0.35, 1.0, 0.35)
+                        }
+                    ]
                 }
 
                 /// 与 importNode（mesh）同角：补光、主光、脸心暗点与黄灯泡随模型旋转（无 Repeater，避免 QML 异常）
@@ -806,12 +1203,34 @@ Item {
                         if (importNode.status === RuntimeLoader.Success)
                             Qt.callLater(root.refresh3DMaterial)
                     }
+                    function onMorphModeChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onMorphBlendAxisChanged() { root.scheduleXYHandleSurfaceUpdate() }
                     function onSwingIdleChanged() {
                         if (!root.swingIdle) {
                             originNode.eulerRotation = Qt.vector3d(0, 0, 0)
                             importNode.eulerRotation = Qt.vector3d(0, 0, 0)
                         }
                     }
+                }
+
+                Connections {
+                    target: camera
+                    function onPositionChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onEulerRotationChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                }
+
+                Connections {
+                    target: originNode
+                    function onPositionChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onEulerRotationChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onScaleChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                }
+
+                Connections {
+                    target: importNode
+                    function onPositionChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onEulerRotationChanged() { root.scheduleXYHandleSurfaceUpdate() }
+                    function onScaleChanged() { root.scheduleXYHandleSurfaceUpdate() }
                 }
 
                 /// 人脸中心轴左右 ±90° 摆动，有 obj 且 60 秒无操作时运行；变脸时不摆动避免干扰操作
@@ -844,7 +1263,9 @@ Item {
                     xInvert: true
                     yInvert: false
                     /// 拖移放大镜时不要带动 3D 旋转
-                    mouseEnabled: !(root.magnifierActive && root.magnifierDragging) && !root.lightDragOnMainView
+                    mouseEnabled: !(root.magnifierActive && root.magnifierDragging)
+                        && !root.lightDragOnMainView
+                        && !root.morphSurfaceDragging
                 }
             }
 
@@ -891,6 +1312,81 @@ Item {
                     }
                     mouse.accepted = false
                 }
+            }
+
+            MouseArea {
+                id: morphSurfaceInteractionLayer
+                z: 80
+                anchors.fill: parent
+                enabled: root.morphMode && !root.magnifierActive
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                propagateComposedEvents: true
+                cursorShape: (root.morphDragTargetHovered || root.morphSurfaceDragging)
+                    ? Qt.PointingHandCursor
+                    : Qt.ArrowCursor
+
+                onPressed: function(mouse) {
+                    if (root.morphBlendAxis === 2) {
+                        var pickRes = view3d.pick(mouse.x, mouse.y)
+                        if (pickRes.objectHit === xyHandleSphere || pickRes.objectHit === xyCrossCoordMarker) {
+                            root.swingIdle = false
+                            root.restartSwingIdleTimers()
+                            root.morphSurfaceDragging = true
+                            root.morphSingleAxisLineDragging = false
+                            root.updateXYBiasFromSurfaceMouse(mouse.x, mouse.y)
+                            mouse.accepted = true
+                            return
+                        }
+
+                        root.morphSurfaceDragging = false
+                        root.morphSingleAxisLineDragging = false
+                        mouse.accepted = false
+                        return
+                    }
+
+                    if (root.isMouseNearSingleAxisLine(mouse.x, mouse.y)) {
+                        root.swingIdle = false
+                        root.restartSwingIdleTimers()
+                        root.morphSurfaceDragging = true
+                        root.morphSingleAxisLineDragging = true
+                        root.updateSingleAxisBiasFromSurfaceMouse(mouse.x, mouse.y)
+                        mouse.accepted = true
+                        return
+                    }
+
+                    root.morphSurfaceDragging = false
+                    root.morphSingleAxisLineDragging = false
+                    mouse.accepted = false
+                }
+
+                onPositionChanged: function(mouse) {
+                    if (!root.morphSurfaceDragging || !(mouse.buttons & Qt.LeftButton)) {
+                        root.morphDragTargetHovered = root.isMouseOverMorphDragTarget(mouse.x, mouse.y)
+                        mouse.accepted = false
+                        return
+                    }
+
+                    root.swingIdle = false
+                    root.restartSwingIdleTimers()
+                    if (root.morphSingleAxisLineDragging)
+                        root.updateSingleAxisBiasFromSurfaceMouse(mouse.x, mouse.y)
+                    else
+                        root.updateXYBiasFromSurfaceMouse(mouse.x, mouse.y)
+                    mouse.accepted = true
+                }
+
+                onReleased: function(mouse) {
+                    if (root.morphSurfaceDragging && mouse.button === Qt.LeftButton) {
+                        root.morphSurfaceDragging = false
+                        root.morphSingleAxisLineDragging = false
+                        mouse.accepted = true
+                        return
+                    }
+                    mouse.accepted = false
+                }
+
+                onExited: root.morphDragTargetHovered = false
             }
 
             /// 拖动此按钮即可调光位；主画面本身保持 3D 旋转交互
@@ -951,72 +1447,6 @@ Item {
                 }
             }
 
-            /// Z 轴：变脸滚轮；打开放大镜时关闭本层，圆外滚轮才能交给轨道缩放
-            /// z 须低于底栏，否则全屏透明层会抢先命中，底部滑条无法拖动
-            Item {
-                anchors.fill: parent
-                visible: root.morphMode && root.morphBlendAxis === 2 && !root.magnifierActive
-                z: 50
-                WheelHandler {
-                    onWheel: function (event) {
-                        var dy = event.angleDelta.y / 120.0
-                        var nb = root.morphMeshBias - dy * root.morphZWheelStep
-                        if (nb < root.morphBiasMin)
-                            nb = root.morphBiasMin
-                        if (nb > root.morphBiasMax)
-                            nb = root.morphBiasMax
-                        root.morphMeshBias = nb
-                    }
-                }
-            }
-
-            /// Y 轴偏移：主画面右侧竖条，拖动方向与屏幕上下一致（底栏之上）
-            /// 高度由底栏 y 推算，避免与底栏 anchors 成环；非 Y 轴时高度为 0
-            Item {
-                id: morphYSliderPanel
-                visible: root.morphMode && root.morphBlendAxis === 1
-                z: 201
-                width: 56
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.topMargin: 8
-                readonly property bool morphYActive: root.morphMode && root.morphBlendAxis === 1
-                height: morphYActive ? Math.max(0, view3dBottomOverlay.y - y - 6) : 0
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "#66000000"
-                    radius: 4
-                    border.color: "#40ffffff"
-                    border.width: 1
-                }
-                Label {
-                    id: morphYValueLabel
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 6
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    text: root.morphMeshBias.toFixed(2)
-                    color: "#ccc"
-                    font.pixelSize: 11
-                }
-                Slider {
-                    orientation: Qt.Vertical
-                    anchors.top: parent.top
-                    anchors.topMargin: 8
-                    anchors.bottom: morphYValueLabel.top
-                    anchors.bottomMargin: 4
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 36
-                    from: root.morphBiasMin
-                    to: root.morphBiasMax
-                    stepSize: 0.02
-                    /// 与模型局部 Y 分界方向对齐：滑条上推对应画面上移（相对原颠倒映射）
-                    value: root.morphBiasMin + root.morphBiasMax - root.morphMeshBias
-                    onMoved: root.morphMeshBias = root.morphBiasMin + root.morphBiasMax - value
-                }
-            }
-
             /// 右上角：3D 光源圆盘 + 亮度（开灯时显示；需在 MouseArea 之上）
             Rectangle {
                 id: light3dControlPanel
@@ -1025,7 +1455,7 @@ Item {
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.topMargin: 12
-                anchors.rightMargin: morphYSliderPanel.visible ? morphYSliderPanel.width + 12 : 12
+                anchors.rightMargin: 12
                 width: 320
                 height: light3dControlCol.implicitHeight + 20
                 color: "#99000000"
@@ -1168,7 +1598,7 @@ Item {
                 spacing: 8
                 width: parent.width - 16
 
-                /// 变脸：图标按钮循环 X↔Y（Z 暂时关闭）；X 底栏横滑条，Y 右侧竖滑条
+                /// 变脸：图标按钮循环 X 左右 → Y 上下 → XY 区域
                 Column {
                     width: parent.width
                     visible: root.morphMode
@@ -1186,13 +1616,12 @@ Item {
                             hoverEnabled: true
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
-                            ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
-                                          : "分界轴 Y（点按→X）"
-                            //ToolTip.text: root.morphBlendAxis === 0 ? "分界轴 X（点按→Y）"
-                            //               : (root.morphBlendAxis === 1 ? "分界轴 Y（点按→Z）" : "分界轴 Z（点按→X）")
+                            ToolTip.text: root.morphBlendAxis === 0 ? "X轴左右变脸（点按→Y轴上下）"
+                                          : (root.morphBlendAxis === 1 ? "Y轴上下变脸（点按→XY区域）"
+                                                                       : "XY区域变脸（点按→X轴左右）")
                                           
                             onClicked: root.advanceMorphBlendAxis()
-                            /// 图1 左右分界 / 图2 上下分界 / 图3 中心圆点（内嵌矢量，不依赖外部 png）
+                            /// 图1 左右分界 / 图2 上下分界 / 图3 XY 区域（内嵌矢量，不依赖外部 png）
                             contentItem: Item {
                                 implicitWidth: 36
                                 implicitHeight: 36
@@ -1233,8 +1662,20 @@ Item {
                                             width: 22
                                             height: 22
                                             Rectangle {
-                                                anchors.fill: parent
-                                                color: "#d8d8d8"
+                                                x: 0; y: 0; width: 11; height: 11
+                                                color: "#252525"
+                                            }
+                                            Rectangle {
+                                                x: 11; y: 0; width: 11; height: 11
+                                                color: "#e0e0e0"
+                                            }
+                                            Rectangle {
+                                                x: 0; y: 11; width: 11; height: 11
+                                                color: "#e0e0e0"
+                                            }
+                                            Rectangle {
+                                                x: 11; y: 11; width: 11; height: 11
+                                                color: "#252525"
                                             }
                                             Rectangle {
                                                 width: 8
@@ -1248,27 +1689,8 @@ Item {
                                 }
                             }
                         }
-                        Slider {
-                            Layout.fillWidth: true
-                            visible: root.morphBlendAxis === 0
-                            from: root.morphBiasMin
-                            to: root.morphBiasMax
-                            stepSize: 0.02
-                            value: root.morphMeshBias
-                            onMoved: root.morphMeshBias = value
-                        }
                         Item {
                             Layout.fillWidth: true
-                            visible: root.morphBlendAxis === 2
-                        }
-                        Label {
-                            visible: root.morphBlendAxis === 0 || root.morphBlendAxis === 2
-                            text: root.morphBlendAxis === 2
-                                  ? (root.morphMeshBias.toFixed(2) + " ·滚轮")
-                                  : root.morphMeshBias.toFixed(2)
-                            color: "#ccc"
-                            font.pixelSize: 11
-                            Layout.minimumWidth: root.morphBlendAxis === 2 ? 64 : 40
                         }
                     }
                 }
