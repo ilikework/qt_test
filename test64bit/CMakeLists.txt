@@ -4,7 +4,7 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D)
+find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D PrintSupport)
 
 qt_standard_project_setup()
 
@@ -36,10 +36,12 @@ qt_add_executable(apptest64bit
     MM_Const_Define.h
     BackupManager.h BackupManager.cpp
     PreRecordManager.h PreRecordManager.cpp
+    CustomerReportManager.h CustomerReportManager.cpp
     BaseDrawingItem.h BaseDrawingItem.cpp
     ImageEditor.h ImageEditor.cpp
     MM3DManager.h MM3DManager.cpp
     MMLogger.h MMLogger.cpp
+    PrintHelper.h PrintHelper.cpp
 )
 
 # --- Gather all QML and resource files from the QMLContent directory ---
@@ -129,6 +131,7 @@ target_link_libraries(apptest64bit
     Qt6::Quick
     Qt6::Charts
     Qt6::Quick3D
+    Qt6::PrintSupport
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
 )
 

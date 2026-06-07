@@ -146,6 +146,15 @@ public:
     QVector<int> getOfferingIxsForReportIx(int reportIx);
     bool setOfferingsForReportIx(int reportIx, const QVector<int> &offeringIxs);
 
+    // 客户报告：T_Report_Main / T_Report_Offering（按 Cust_ID + Group_ID + Photo_ID + Report_Type 唯一）
+    bool ensureCustomerReportTables();
+    bool findCustomerReportMain(const QString &custId, int groupId, int photoId, int reportType,
+                                int &outIx, QString &outMemo, int &outLevel);
+    int upsertCustomerReportMain(const QString &custId, int groupId, int photoId, int reportType,
+                                 int reportLevel, const QString &memo);
+    QVector<int> getCustomerReportOfferings(int reportMainIx);
+    bool setCustomerReportOfferings(int reportMainIx, const QVector<int> &offeringIxs);
+
 private:
     explicit AppDb(QObject* parent=nullptr);
     ~AppDb();

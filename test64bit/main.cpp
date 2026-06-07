@@ -9,6 +9,8 @@
 #include "AnalyseManager.h"
 #include "BackupManager.h"
 #include "PreRecordManager.h"
+#include "CustomerReportManager.h"
+#include "PrintHelper.h"
 #include "ImageEditor.h"
 #include "MM3DManager.h"
 #include <QCoreApplication> // For applicationDirPath
@@ -46,6 +48,12 @@ int main(int argc, char *argv[])
     
     PreRecordManager preRecordMgr;
     engine.rootContext()->setContextProperty("preRecordManager", &preRecordMgr);
+
+    CustomerReportManager customerReportMgr;
+    engine.rootContext()->setContextProperty("customerReportManager", &customerReportMgr);
+
+    PrintHelper printHelper;
+    engine.rootContext()->setContextProperty("printHelper", &printHelper);
 
     MM3DManager mm3dManager;
     engine.rootContext()->setContextProperty("mm3dManager", &mm3dManager);

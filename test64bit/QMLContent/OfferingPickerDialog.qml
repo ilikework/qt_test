@@ -9,16 +9,14 @@ Window {
     id: offeringPickerWin
     modality: Qt.ApplicationModal
     flags: Qt.Dialog | Qt.FramelessWindowHint
-    width: Math.min(520, 520)
-    height: Math.min(560, 560)
-    minimumWidth: 400
-    minimumHeight: 400
+    width: 780
+    height: 680
+    minimumWidth: 640
+    minimumHeight: 520
     color: "transparent"
     visible: false
 
-    // 由调用方设置后 show()
     property var host: null
-    /// 若设置，打开时从此 manager 的 getProducts() 拉取 T_Offerings_Template 数据并填入 host，确保列表来自数据库
     property var preRecordManager: null
     property int reportIdx: -1
     property int tier: -1
@@ -26,8 +24,22 @@ Window {
 
     ListModel { id: filteredProductsModel }
     property string productFilterText: ""
-    /// 弹窗内本地勾选状态，仅点「确定」时写回 host，避免选择时立刻出现在报告预录
     property var pendingSelection: []
+
+    function photoUrl(path) {
+        if (!path || String(path).length === 0)
+            return ""
+        var s = String(path)
+        return s.indexOf("file://") === 0 ? s : "file:///" + s
+    }
+
+    function formatPrice(priceVal) {
+        if (priceVal === undefined || priceVal === null || priceVal === "")
+            return ""
+        if (typeof priceVal === "number")
+            return priceVal % 1 === 0 ? String(priceVal) : priceVal.toFixed(2)
+        return String(priceVal)
+    }
 
     function rebuildFilteredProducts() {
         filteredProductsModel.clear()
@@ -36,10 +48,16 @@ Window {
         for (var i = 0; i < productsModel.count; i++) {
             var p = productsModel.get(i)
             var name = (p.name || "").toLowerCase()
-            var priceVal = p.price
-            var priceStr = (priceVal !== undefined && priceVal !== null) ? (typeof priceVal === "number" ? String(priceVal) : String(priceVal)) : ""
-            if (!filter || name.indexOf(filter) >= 0)
-                filteredProductsModel.append({ productIndex: i, name: p.name || "未命名", price: priceStr })
+            var usage = (p.usage || "").toLowerCase()
+            var priceStr = formatPrice(p.price)
+            if (!filter || name.indexOf(filter) >= 0 || usage.indexOf(filter) >= 0)
+                filteredProductsModel.append({
+                    productIndex: i,
+                    name: p.name || "未命名",
+                    priceText: priceStr,
+                    usage: p.usage || "",
+                    photoPath: p.photoPath || ""
+                })
         }
     }
 
@@ -52,7 +70,7 @@ Window {
         var next = pendingSelection.slice()
         if (i >= 0) next.splice(i, 1)
         else next.push(productIndex)
-        next.sort(function(a,b) { return a - b })
+        next.sort(function(a, b) { return a - b })
         pendingSelection = next
     }
 
@@ -62,21 +80,13 @@ Window {
         tier = tIdx
         productFilterText = ""
 
-        // 1) 确保 host 的产品列表是最新的。
-        //    注意：loadFromPreRecordManager 会加载所有数据，包括产品和报告关联。
-        //    这可以确保在打开选择器之前，host 的数据是最新的。
-        //    如果 host 已经有未保存的修改，则不应执行此操作。
-        //    PreRecordDialog 的逻辑是 onVisibleChanged 时加载，这里不再需要重复加载。
-
-        // 2) 从 host (PreRecordDialog) 的暂存数据中初始化勾选状态
         var indices = []
         if (host && host.selectedOfferings && Array.isArray(host.selectedOfferings) &&
             reportIdx >= 0 && reportIdx < host.selectedOfferings.length &&
             tier >= 0 && tier < 3) {
             var selections = host.selectedOfferings[reportIdx][tier]
-            if (selections && Array.isArray(selections)) {
+            if (selections && Array.isArray(selections))
                 indices = selections
-            }
         }
 
         pendingSelection = indices.slice ? indices.slice() : indices
@@ -114,9 +124,8 @@ Window {
                 font.bold: true
             }
             TextField {
-                id: productFilterField
                 Layout.fillWidth: true
-                placeholderText: "输入名称筛选（支持大量产品时快速查找）"
+                placeholderText: "输入名称或功能说明筛选"
                 text: productFilterText
                 font.pixelSize: 14
                 color: "#ffffff"
@@ -211,38 +220,102 @@ Window {
                 ListView {
                     id: pickerListView
                     model: filteredProductsModel
-                    spacing: 2
-                    delegate: CheckBox {
+                    spacing: 6
+                    delegate: Rectangle {
                         width: pickerListView.width - 8
-                        checked: model ? isSelected(model.productIndex) : false
-                        text: model ? (model.name || "未命名") : ""
-                        font.pixelSize: 14
-                        palette.text: "#ffffff"
-                        contentItem: Text {
-                            text: model ? (model.name || "未命名") : ""
-                            color: "#ffffff"
-                            font: parent.font
-                            leftPadding: parent.indicator.width + parent.spacing
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: parent.leftPadding
-                            y: (parent.height - height) / 2
-                            radius: 3
-                            color: parent.checked ? "#00aaff" : "#333"
-                            border.color: parent.checked ? "#00aaff" : "#555"
+                        height: 88
+                        radius: 6
+                        color: isSelected(model.productIndex) ? "#2a3a4a" : "#2c2c2c"
+                        border.color: isSelected(model.productIndex) ? "#5a9aca" : "#444"
+                        border.width: isSelected(model.productIndex) ? 2 : 1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 10
+
                             Rectangle {
-                                visible: parent.parent.checked
-                                anchors.centerIn: parent
-                                width: 10
-                                height: 10
-                                radius: 2
-                                color: "#ffffff"
+                                width: 22
+                                height: 22
+                                radius: 3
+                                color: isSelected(model.productIndex) ? "#00aaff" : "#333"
+                                border.color: isSelected(model.productIndex) ? "#00aaff" : "#555"
+                                Layout.alignment: Qt.AlignTop
+                                Layout.topMargin: 4
+                                Rectangle {
+                                    visible: isSelected(model.productIndex)
+                                    anchors.centerIn: parent
+                                    width: 10
+                                    height: 10
+                                    radius: 2
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            Rectangle {
+                                width: 72
+                                height: 72
+                                radius: 4
+                                color: "#1a1a1a"
+                                border.color: "#555"
+                                Layout.alignment: Qt.AlignVCenter
+                                Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    fillMode: Image.PreserveAspectFit
+                                    source: photoUrl(model.photoPath)
+                                    visible: !!(model.photoPath && String(model.photoPath).length > 0)
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "无图"
+                                    color: "#666"
+                                    font.pixelSize: 11
+                                    visible: !(model.photoPath && String(model.photoPath).length > 0)
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 4
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        text: model.name || "未命名"
+                                        color: "#ffffff"
+                                        font.pixelSize: 15
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Text {
+                                        text: model.priceText !== "" ? ("¥" + model.priceText) : "价格未填"
+                                        color: model.priceText !== "" ? "#7ec0ff" : "#888"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: model.usage || "（无功能说明）"
+                                    color: model.usage ? "#b0b0b0" : "#666"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
                             }
                         }
-                        onClicked: if (model) toggleSelected(model.productIndex)
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: toggleSelected(model.productIndex)
+                        }
                     }
                 }
             }

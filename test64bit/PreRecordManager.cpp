@@ -105,7 +105,7 @@ QVariantList PreRecordManager::getProducts() const
         if (!photoPath.isEmpty() && !QDir::isAbsolutePath(photoPath))
             photoPath = QDir(appDir).filePath(photoPath);
         row["photoPath"] = photoPath;
-        row["price"] = m.value("price");
+        row["price"] = m.value("price").toDouble();
         row["usage"] = m.value("usage");
         out.append(row);
     }

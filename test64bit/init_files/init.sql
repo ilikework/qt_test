@@ -41,15 +41,6 @@ CREATE TABLE IF NOT EXISTS T_CaptureSetting (
   , Gender INTEGER -- 1:Male,2:Female
 );
 
---4,
-CREATE TABLE IF NOT EXISTS T_Offering ( 
-  IX INTEGER PRIMARY KEY AUTOINCREMENT
-  , Type  INTEGER   -- 1:Product,2:Service
-  , Name  TEXT
-  , Price REAL
-  , Des TEXT
-);
-
 --5,
 CREATE TABLE IF NOT EXISTS T_Customers( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
@@ -146,6 +137,9 @@ CREATE TABLE IF NOT EXISTS T_Report_Offerings_Template (
 --13,
 CREATE TABLE IF NOT EXISTS T_Report_Main ( 
   IX INTEGER PRIMARY KEY AUTOINCREMENT
+  , Cust_ID  TEXT   
+  , Group_ID  INTEGER   
+  , Photo_ID  INTEGER      -- -1 for Total report
   , Report_Type  INTEGER   -- 1:RGB-Pore;2:UV-Acne;3:PL-DeepSpots;4:NPL-SurfaceSpot;5:GRAY-Wrinkle;6:RED-Sensitivity;7:BROWN-DarkSpot;8:WHOLE-Moisture;100:Total
   , Report_LEVEL INTEGER   -- 10:Bad,20:Normal,30:Good
   , MEMO TEXT

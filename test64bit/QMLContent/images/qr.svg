@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <path d="M64,64h128v128h-128z M96,96v64h64v-64z M320,64h128v128h-128z M352,96v64h64v-64z M64,320h128v128h-128z M96,352v64h64v-64z M256,64h32v32h-32z M256,160h32v32h-32z M256,256h32v32h-32z M256,352h32v32h-32z M256,448h32v32h-32z M64,256h32v32h-32z M160,256h32v32h-32z M352,256h32v32h-32z M448,256h32v32h-32z M320,320h32v32h-32z M416,320h32v32h-32z M320,416h32v32h-32z M416,416h32v32h-32z" fill="#FFFFFF"/>
+</svg>

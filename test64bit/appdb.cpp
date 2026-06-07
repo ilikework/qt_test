@@ -1,6 +1,8 @@
 #include "AppDb.h"
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
+#include <QSet>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlRecord>
@@ -906,4 +908,156 @@ bool AppDb::setOfferingsForReportIx(int reportIx, const QVector<int> &offeringIx
             return false;
     }
     return true;
+}
+
+bool AppDb::ensureCustomerReportTables()
+{
+    const char *mainSql =
+        "CREATE TABLE IF NOT EXISTS T_Report_Main ("
+        "IX INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "Cust_ID TEXT,"
+        "Group_ID INTEGER,"
+        "Photo_ID INTEGER,"
+        "Report_Type INTEGER,"
+        "Report_LEVEL INTEGER,"
+        "MEMO TEXT,"
+        "EditTime DATETIME"
+        ")";
+    const char *offeringSql =
+        "CREATE TABLE IF NOT EXISTS T_Report_Offering ("
+        "IX INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "Report_IX INTEGER,"
+        "Offering_IX INTEGER"
+        ")";
+
+    if (!exec(mainSql) || !exec(offeringSql))
+        return false;
+
+    bool needRecreate = false;
+    if (m_db.isOpen()) {
+        QSqlQuery q(m_db);
+        QSet<QString> cols;
+        if (q.exec("PRAGMA table_info(T_Report_Main)")) {
+            while (q.next())
+                cols.insert(q.value(1).toString());
+        }
+        const QStringList required = {
+            "Cust_ID", "Group_ID", "Photo_ID", "Report_Type", "Report_LEVEL", "MEMO", "EditTime"
+        };
+        for (const QString &c : required) {
+            if (!cols.contains(c)) {
+                needRecreate = true;
+                break;
+            }
+        }
+    }
+    if (needRecreate) {
+        if (!exec("DROP TABLE IF EXISTS T_Report_Offering")
+            || !exec("DROP TABLE IF EXISTS T_Report_Main")
+            || !exec(mainSql)
+            || !exec(offeringSql))
+            return false;
+    }
+
+    exec("DROP TABLE IF EXISTS T_Offering");
+    return true;
+}
+
+bool AppDb::findCustomerReportMain(const QString &custId, int groupId, int photoId, int reportType,
+                                   int &outIx, QString &outMemo, int &outLevel)
+{
+    outIx = 0;
+    outMemo.clear();
+    outLevel = 0;
+    if (!ensureCustomerReportTables())
+        return false;
+
+    QVector<QVariantMap> rows = select(
+        "SELECT IX, MEMO, Report_LEVEL FROM T_Report_Main "
+        "WHERE Cust_ID = ? AND Group_ID = ? AND Photo_ID = ? AND Report_Type = ? LIMIT 1",
+        { custId, groupId, photoId, reportType });
+    if (rows.isEmpty())
+        return false;
+
+    outIx = rows.at(0).value("IX").toInt();
+    outMemo = rows.at(0).value("MEMO").toString();
+    outLevel = rows.at(0).value("Report_LEVEL").toInt();
+    return outIx > 0;
+}
+
+int AppDb::upsertCustomerReportMain(const QString &custId, int groupId, int photoId, int reportType,
+                                    int reportLevel, const QString &memo)
+{
+    if (!ensureCustomerReportTables())
+        return -1;
+
+    const QString editTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    int existingIx = 0;
+    QString existingMemo;
+    int existingLevel = 0;
+    if (findCustomerReportMain(custId, groupId, photoId, reportType, existingIx, existingMemo, existingLevel)) {
+        if (exec("UPDATE T_Report_Main SET Report_LEVEL = ?, MEMO = ?, EditTime = ? WHERE IX = ?",
+                 { reportLevel, memo, editTime, existingIx }))
+            return existingIx;
+        return -1;
+    }
+
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return -1;
+    }
+    QSqlQuery q(m_db);
+    if (!q.prepare(
+            "INSERT INTO T_Report_Main (Cust_ID, Group_ID, Photo_ID, Report_Type, Report_LEVEL, MEMO, EditTime) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+        m_lastError = q.lastError().text();
+        return -1;
+    }
+    q.addBindValue(custId);
+    q.addBindValue(groupId);
+    q.addBindValue(photoId);
+    q.addBindValue(reportType);
+    q.addBindValue(reportLevel);
+    q.addBindValue(memo);
+    q.addBindValue(editTime);
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return -1;
+    }
+    m_lastError.clear();
+    return q.lastInsertId().toInt();
+}
+
+QVector<int> AppDb::getCustomerReportOfferings(int reportMainIx)
+{
+    QVector<int> out;
+    QVector<QVariantMap> rows = select(
+        "SELECT Offering_IX FROM T_Report_Offering WHERE Report_IX = ? ORDER BY IX ASC",
+        { reportMainIx });
+    for (const QVariantMap &m : rows)
+        out.append(m.value("Offering_IX").toInt());
+    return out;
+}
+
+bool AppDb::setCustomerReportOfferings(int reportMainIx, const QVector<int> &offeringIxs)
+{
+    if (!begin())
+        return false;
+
+    bool ok = exec("DELETE FROM T_Report_Offering WHERE Report_IX = ?", { reportMainIx });
+    for (int oix : offeringIxs) {
+        if (oix <= 0)
+            continue;
+        if (!exec("INSERT INTO T_Report_Offering (Report_IX, Offering_IX) VALUES (?, ?)",
+                  { reportMainIx, oix })) {
+            ok = false;
+            break;
+        }
+    }
+
+    if (ok)
+        ok = commit();
+    else
+        rollback();
+    return ok;
 }

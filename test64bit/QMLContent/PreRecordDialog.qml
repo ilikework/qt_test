@@ -23,6 +23,8 @@ Window {
     ]
     // 9 个报告 × 3 档，每档选中的产品索引 [index, index, ...]
     property var selectedOfferings: []
+    /// 递增以强制已选产品 Repeater 在深层数组更新后刷新
+    property int selectedOfferingsRevision: 0
 
     ListModel { id: productsModel }
     /// 暴露给子组件（如 OfferingPickerDialog）：子组件里 host.productsModel 取不到 id，需用 host 上的属性
@@ -35,6 +37,17 @@ Window {
         while (selectedOfferings.length < 9) {
             selectedOfferings.push([[], [], []])
         }
+    }
+    function bumpSelectedOfferingsView() {
+        selectedOfferingsRevision++
+    }
+    function selectedTierCount(reportIdx, tier) {
+        var _rev = selectedOfferingsRevision
+        ensureSelectedOfferings()
+        if (reportIdx < 0 || reportIdx >= selectedOfferings.length)
+            return 0
+        var arr = selectedOfferings[reportIdx][tier]
+        return (arr && arr.length) ? arr.length : 0
     }
     function reportLabel(i) { return (reportModel.count > i) ? reportModel.get(i).label : "" }
     function reportGoodMemo(i) { return (reportModel.count > i) ? reportModel.get(i).goodMemo : "" }
@@ -56,7 +69,15 @@ Window {
         var i = arr.indexOf(productIdx)
         if (i >= 0) arr.splice(i, 1)
         selectedOfferings = next
+        bumpSelectedOfferingsView()
         preRecordDirty = true
+    }
+    function formatProductPrice(priceVal) {
+        if (priceVal === undefined || priceVal === null || priceVal === "")
+            return ""
+        if (typeof priceVal === "number")
+            return priceVal % 1 === 0 ? String(priceVal) : priceVal.toFixed(2)
+        return String(priceVal)
     }
     function getSelectedProductName(reportIdx, tier, slotIndex) {
         ensureSelectedOfferings()
@@ -66,6 +87,21 @@ Window {
         var ix = arr[slotIndex]
         if (ix < 0 || ix >= productsModel.count) return ""
         return productsModel.get(ix).name || "未命名"
+    }
+    function getSelectedProductPrice(reportIdx, tier, slotIndex) {
+        ensureSelectedOfferings()
+        if (reportIdx < 0 || reportIdx >= selectedOfferings.length) return ""
+        var arr = selectedOfferings[reportIdx][tier]
+        if (!arr || slotIndex < 0 || slotIndex >= arr.length) return ""
+        var ix = arr[slotIndex]
+        if (ix < 0 || ix >= productsModel.count) return ""
+        return formatProductPrice(productsModel.get(ix).price)
+    }
+    function getSelectedProductSummary(reportIdx, tier, slotIndex) {
+        var name = getSelectedProductName(reportIdx, tier, slotIndex)
+        if (!name) return ""
+        var price = getSelectedProductPrice(reportIdx, tier, slotIndex)
+        return price !== "" ? (name + "  ¥" + price) : name
     }
     function getSelectedProductIx(reportIdx, tier, slotIndex) {
         ensureSelectedOfferings()
@@ -90,6 +126,7 @@ Window {
         }
         next[rIdx][tIdx] = (indices && indices.slice) ? indices.slice() : (indices || [])
         selectedOfferings = next
+        bumpSelectedOfferingsView()
         if (markDirty) preRecordDirty = true
     }
 
@@ -131,14 +168,28 @@ Window {
         preRecordDirty = false
         var products = preRecordManager.getProducts()
         productsModel.clear()
-        for (var i = 0; i < products.length; i++)
-            productsModel.append(products[i])
+        for (var i = 0; i < products.length; i++) {
+            var p = products[i]
+            var priceVal = p.price
+            var priceNum = (priceVal !== undefined && priceVal !== null && priceVal !== "")
+                ? (typeof priceVal === "number" ? priceVal : Number(priceVal))
+                : 0
+            if (isNaN(priceNum) || priceNum < 0) priceNum = 0
+            productsModel.append({
+                IX: p.IX || 0,
+                name: (p.name !== undefined && p.name !== null) ? String(p.name) : "",
+                price: priceNum,
+                usage: (p.usage !== undefined && p.usage !== null) ? String(p.usage) : "",
+                photoPath: (p.photoPath !== undefined && p.photoPath !== null) ? String(p.photoPath) : ""
+            })
+        }
         var suggestions = preRecordManager.getReportSuggestions()
         reportModel.clear()
         for (var s = 0; s < suggestions.length; s++)
             reportModel.append(suggestions[s])
-        ensureSelectedOfferings()
+        var next = []
         for (var r = 0; r < 9; r++) {
+            next[r] = [[], [], []]
             for (var t = 0; t < 3; t++) {
                 var ixs = preRecordManager.getReportOfferings(r, t)
                 var indices = []
@@ -150,10 +201,11 @@ Window {
                         }
                     }
                 }
-                selectedOfferings[r][t] = indices
+                next[r][t] = indices
             }
         }
-        selectedOfferings = selectedOfferings
+        selectedOfferings = next
+        bumpSelectedOfferingsView()
         Qt.callLater(function() { _suppressDirtyFromLoad = false })
     }
 
@@ -658,43 +710,45 @@ Window {
                                                 }
                                                 Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
-                                                    property int rIdx: (reportIdx >= 0) ? reportIdx : 0
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 68
+                                                    Layout.preferredHeight: 88
                                                     Flow {
                                                         anchors.fill: parent
                                                         spacing: 6
                                                         Repeater {
-                                                            model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][0] ? selectedOfferings[parent.parent.rIdx][0].length : 0
-                                                            delegate: Row {
-                                                                spacing: 2
-                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
-                                                                Rectangle {
-                                                                    width: 120
-                                                                    height: 22
-                                                                    radius: 4
-                                                                    color: "#3a3a3a"
-                                                                    border.color: "#555"
+                                                            model: selectedTierCount(reportIdx, 0)
+                                                            delegate: Rectangle {
+                                                                height: 28
+                                                                radius: 4
+                                                                color: "#3a3a3a"
+                                                                border.color: "#555"
+                                                                width: chipRowG.implicitWidth + 12
+                                                                RowLayout {
+                                                                    id: chipRowG
+                                                                    anchors.centerIn: parent
+                                                                    spacing: 6
                                                                     Text {
-                                                                        text: getSelectedProductName(rIdx, 0, index)
+                                                                        text: getSelectedProductName(reportIdx, 0, index)
                                                                         color: "#ffffff"
                                                                         font.pixelSize: 12
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.left: parent.left
-                                                                        anchors.right: parent.right
-                                                                        anchors.leftMargin: 6
-                                                                        anchors.rightMargin: 20
                                                                         elide: Text.ElideRight
+                                                                        Layout.maximumWidth: 140
+                                                                    }
+                                                                    Text {
+                                                                        text: {
+                                                                            var p = getSelectedProductPrice(reportIdx, 0, index)
+                                                                            return p !== "" ? ("¥" + p) : ""
+                                                                        }
+                                                                        color: "#7ec0ff"
+                                                                        font.pixelSize: 12
+                                                                        visible: text !== ""
                                                                     }
                                                                     TextButton {
-                                                                        width: 16
-                                                                        height: 16
-                                                                        anchors.right: parent.right
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 3
+                                                                        Layout.preferredWidth: 18
+                                                                        Layout.preferredHeight: 18
                                                                         text: "×"
                                                                         font.pixelSize: 11
-                                                                        onClicked: removeProductSelected(rIdx, 0, getSelectedProductIx(rIdx, 0, index))
+                                                                        onClicked: removeProductSelected(reportIdx, 0, getSelectedProductIx(reportIdx, 0, index))
                                                                     }
                                                                 }
                                                             }
@@ -750,43 +804,45 @@ Window {
                                                 }
                                                 Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
-                                                    property int rIdx: (reportIdx >= 0) ? reportIdx : 0
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 68
+                                                    Layout.preferredHeight: 88
                                                     Flow {
                                                         anchors.fill: parent
                                                         spacing: 6
                                                         Repeater {
-                                                            model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][1] ? selectedOfferings[parent.parent.rIdx][1].length : 0
-                                                            delegate: Row {
-                                                                spacing: 2
-                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
-                                                                Rectangle {
-                                                                    width: 120
-                                                                    height: 22
-                                                                    radius: 4
-                                                                    color: "#3a3a3a"
-                                                                    border.color: "#555"
+                                                            model: selectedTierCount(reportIdx, 1)
+                                                            delegate: Rectangle {
+                                                                height: 28
+                                                                radius: 4
+                                                                color: "#3a3a3a"
+                                                                border.color: "#555"
+                                                                width: chipRowM.implicitWidth + 12
+                                                                RowLayout {
+                                                                    id: chipRowM
+                                                                    anchors.centerIn: parent
+                                                                    spacing: 6
                                                                     Text {
-                                                                        text: getSelectedProductName(rIdx, 1, index)
+                                                                        text: getSelectedProductName(reportIdx, 1, index)
                                                                         color: "#ffffff"
                                                                         font.pixelSize: 12
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.left: parent.left
-                                                                        anchors.right: parent.right
-                                                                        anchors.leftMargin: 6
-                                                                        anchors.rightMargin: 20
                                                                         elide: Text.ElideRight
+                                                                        Layout.maximumWidth: 140
+                                                                    }
+                                                                    Text {
+                                                                        text: {
+                                                                            var p = getSelectedProductPrice(reportIdx, 1, index)
+                                                                            return p !== "" ? ("¥" + p) : ""
+                                                                        }
+                                                                        color: "#7ec0ff"
+                                                                        font.pixelSize: 12
+                                                                        visible: text !== ""
                                                                     }
                                                                     TextButton {
-                                                                        width: 16
-                                                                        height: 16
-                                                                        anchors.right: parent.right
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 3
+                                                                        Layout.preferredWidth: 18
+                                                                        Layout.preferredHeight: 18
                                                                         text: "×"
                                                                         font.pixelSize: 11
-                                                                        onClicked: removeProductSelected(rIdx, 1, getSelectedProductIx(rIdx, 1, index))
+                                                                        onClicked: removeProductSelected(reportIdx, 1, getSelectedProductIx(reportIdx, 1, index))
                                                                     }
                                                                 }
                                                             }
@@ -842,43 +898,45 @@ Window {
                                                 }
                                                 Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
-                                                    property int rIdx: (reportIdx >= 0) ? reportIdx : 0
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 68
+                                                    Layout.preferredHeight: 88
                                                     Flow {
                                                         anchors.fill: parent
                                                         spacing: 6
                                                         Repeater {
-                                                            model: selectedOfferings[parent.parent.rIdx] && selectedOfferings[parent.parent.rIdx][2] ? selectedOfferings[parent.parent.rIdx][2].length : 0
-                                                            delegate: Row {
-                                                                spacing: 2
-                                                                property int rIdx: (parent && parent.parent && parent.parent.parent && typeof parent.parent.parent.rIdx === "number") ? parent.parent.parent.rIdx : 0
-                                                                Rectangle {
-                                                                    width: 120
-                                                                    height: 22
-                                                                    radius: 4
-                                                                    color: "#3a3a3a"
-                                                                    border.color: "#555"
+                                                            model: selectedTierCount(reportIdx, 2)
+                                                            delegate: Rectangle {
+                                                                height: 28
+                                                                radius: 4
+                                                                color: "#3a3a3a"
+                                                                border.color: "#555"
+                                                                width: chipRowB.implicitWidth + 12
+                                                                RowLayout {
+                                                                    id: chipRowB
+                                                                    anchors.centerIn: parent
+                                                                    spacing: 6
                                                                     Text {
-                                                                        text: getSelectedProductName(rIdx, 2, index)
+                                                                        text: getSelectedProductName(reportIdx, 2, index)
                                                                         color: "#ffffff"
                                                                         font.pixelSize: 12
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.left: parent.left
-                                                                        anchors.right: parent.right
-                                                                        anchors.leftMargin: 6
-                                                                        anchors.rightMargin: 20
                                                                         elide: Text.ElideRight
+                                                                        Layout.maximumWidth: 140
+                                                                    }
+                                                                    Text {
+                                                                        text: {
+                                                                            var p = getSelectedProductPrice(reportIdx, 2, index)
+                                                                            return p !== "" ? ("¥" + p) : ""
+                                                                        }
+                                                                        color: "#7ec0ff"
+                                                                        font.pixelSize: 12
+                                                                        visible: text !== ""
                                                                     }
                                                                     TextButton {
-                                                                        width: 16
-                                                                        height: 16
-                                                                        anchors.right: parent.right
-                                                                        anchors.verticalCenter: parent.verticalCenter
-                                                                        anchors.rightMargin: 3
+                                                                        Layout.preferredWidth: 18
+                                                                        Layout.preferredHeight: 18
                                                                         text: "×"
                                                                         font.pixelSize: 11
-                                                                        onClicked: removeProductSelected(rIdx, 2, getSelectedProductIx(rIdx, 2, index))
+                                                                        onClicked: removeProductSelected(reportIdx, 2, getSelectedProductIx(reportIdx, 2, index))
                                                                     }
                                                                 }
                                                             }
