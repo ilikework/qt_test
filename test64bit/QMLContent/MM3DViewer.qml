@@ -1412,7 +1412,7 @@ Item {
                     anchors.centerIn: parent
                     width: 34
                     height: 34
-                    source: "./images/light_drag_sun.svg"
+                    source: "qrc:/images/light_drag_sun.svg"
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true

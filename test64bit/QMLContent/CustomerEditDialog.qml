@@ -44,9 +44,9 @@ Window {
 
         // 2. 根据性别返回默认图 (假设 1是男, 2是女)
         switch(gender) {
-            case 1:  return "images/male.png";
-            case 2:  return "images/female.png";
-            default: return "images/user_icon.svg";
+            case 1:  return "qrc:/images/male.png";
+            case 2:  return "qrc:/images/female.png";
+            default: return "qrc:/images/user_icon.svg";
         }
     }
     function setCustomer(data) {

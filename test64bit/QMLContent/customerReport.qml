@@ -11,9 +11,12 @@ Item {
     //height: 1080
 
     signal loadPage(string page, var params)
-    property int customerID: -1
+    property string customerID: ""
+    property int currentGroupID: 0
     property int curIndex: 0   // ⭐ 当前展开的缩略图编号
 
+    property var mainphotoes: []
+    property var subphotoes: []
 
     property var reportLabels:[
                            "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
@@ -36,25 +39,12 @@ Item {
                             {name: "混合彩斑",res:[74, 61, 51, 53, 64]},
                             {name: "综合报告",res:[30,55, 42, 88, 74]}
                           ]
-    property var mainphotoes: [
-        {photoL:"customers/0000001/0000001_01_01_L.jpg", photoR:"customers/0000001/0000001_01_01_R.jpg"},
-    ]
 
-    //ListModel {
-    //    id: mainphotoes
-    //    ListElement { photoL: "customers/0000001/0000001_01_01_L.jp"; photoR: "customers/0000001/0000001_01_01_R.jpg" }
-    //}
-
-    property var subphotoes: [
-        {photoL:"customers/0000001/0000001_01_01_L.jpg", photoR:"customers/0000001/0000001_01_01_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_02_L.jpg", photoR:"customers/0000001/0000001_01_02_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_03_L.jpg", photoR:"customers/0000001/0000001_01_03_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_04_L.jpg", photoR:"customers/0000001/0000001_01_04_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_05_L.jpg", photoR:"customers/0000001/0000001_01_05_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_06_L.jpg", photoR:"customers/0000001/0000001_01_06_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_07_L.jpg", photoR:"customers/0000001/0000001_01_07_R.jpg"},
-        {photoL:"customers/0000001/0000001_01_08_L.jpg", photoR:"customers/0000001/0000001_01_08_R.jpg"},
-    ]
+    Component.onCompleted: {
+        if (customerID !== "") {
+            subphotoes = analyseModule.loadSub(currentGroupID)
+        }
+    }
 
 
     // 单个图例项
@@ -75,21 +65,21 @@ Item {
                 //height: 150
 
                 Rectangle {
-                    width: 150; height: 150
-                    radius: 10
-                    border.color: "#6aaaff"
-                    color: "transparent"
+                        width: 150; height: 150
+                        radius: 10
+                        border.color: "#6aaaff"
+                        color: "transparent"
 
-                    Image {
-                        anchors.fill: parent
-                        source: ""       // 用户头像
-                        fillMode: Image.PreserveAspectFit
+                        Image {
+                            anchors.fill: parent
+                            //source: subphotoes.length > 0 ? subphotoes[0].photoL : ""
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
-                }
 
                 Text {
                     id: userName
-                    text: "aaa"
+                    text: customerID
                     color: "white"
                     font.pixelSize: 42
                     verticalAlignment: Text.AlignVCenter
@@ -325,13 +315,21 @@ Item {
                             id:mainImgL
                             width: (viewStack.height -10)/4*3; height: viewStack.height -10
                             radius: 8; color: "#222"; border.color: "#ffb300"
-                            Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; source: subphotoes[tabButtons.selectedIndex].photoL}
+                            Image { 
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectFit
+                                source: (subphotoes && tabButtons.selectedIndex < subphotoes.length) ? subphotoes[tabButtons.selectedIndex].photoL : ""
+                            }
                         }
                         Rectangle {
                             id:mainImgR
                             width: (viewStack.height -10)/4*3; height: viewStack.height -10
                             radius: 8; color: "#222"; border.color: "#ffb300"
-                            Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; source: subphotoes[tabButtons.selectedIndex].photoR }
+                            Image { 
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectFit
+                                source: (subphotoes && tabButtons.selectedIndex < subphotoes.length) ? subphotoes[tabButtons.selectedIndex].photoR : ""
+                            }
                         }
                         ChartView {
                             id: chartBar
@@ -396,11 +394,11 @@ Item {
 
                 Repeater {
                     model: [
-                        {text: "二维码", icon: "qr.png" },
-                        {text: "邮件", icon: "mail.png" },
-                        {text: "彩点显示", icon: "spot.png" },
-                        {text: "A4打印", icon: "print.png" },
-                        {text: "HOME", icon: "print.png" }
+                        {text: "二维码", icon: "qrc:/images/qr.svg" },
+                        {text: "邮件", icon: "qrc:/images/mail.svg" },
+                        {text: "彩点显示", icon: "qrc:/images/spot.svg" },
+                        {text: "A4打印", icon: "qrc:/images/print.svg" },
+                        {text: "HOME", icon: "qrc:/images/exit_icon.svg" }
                     ]
 
                     delegate: Column {

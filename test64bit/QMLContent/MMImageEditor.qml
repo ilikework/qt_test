@@ -373,7 +373,7 @@ Item {
             Image {
                 id: eraserCursor
                 visible: root.currentMode === MMImageEditor.EditMode.Eraser && interactionArea.containsMouse
-                source: Qt.resolvedUrl("images/eraser_cursor.svg")
+                source: "qrc:/images/eraser_cursor.svg"
                 width: 56; height: 56
                 z: 2000
                 // position relative to interactionArea (interactionArea.mouseX/Y are local)

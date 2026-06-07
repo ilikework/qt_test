@@ -42,7 +42,7 @@ Item {
             width: 100
             height: 100
             id:userButton
-            source: "./images/user_icon.svg"
+            source: "qrc:/images/user_icon.svg"
             ToolTip.text: "用户管理"
             onClicked: {
                 //pageLoader.source = "customerManager.qml"
@@ -53,7 +53,7 @@ Item {
             width: 100
             height: 100
             id:bakcupButton
-            source: "./images/backup_icon.svg"
+            source: "qrc:/images/backup_icon.svg"
             ToolTip.text: "资料备份"
             onClicked: {
                 bkrs.modality = Qt.WindowModal
@@ -64,7 +64,7 @@ Item {
             width: 100
             height: 100
             id: preRecordButton
-            source: "./images/prerecord_icon.svg"
+            source: "qrc:/images/prerecord_icon.svg"
             ToolTip.text: "预录"
             onClicked: {
                 preRecordDlg.modality = Qt.WindowModal
@@ -75,7 +75,7 @@ Item {
             width: 100
             height: 100
             id:exitButton
-            source: "./images/exit_icon.svg"
+            source: "qrc:/images/exit_icon.svg"
             ToolTip.text: "退出程序"
             onClicked: {
                 Qt.quit()

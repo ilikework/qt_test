@@ -82,7 +82,7 @@ Item {
             IconButton {
                 Layout.preferredWidth: 44
                 Layout.preferredHeight: 87
-                source: "./images/left_icon.svg"
+                source: "qrc:/images/left_icon.svg"
                 enabled: thumbBar.thumbCurrentPage > 1
                 opacity: enabled ? 1 : 0.4
                 onClicked: {
@@ -161,7 +161,7 @@ Item {
             IconButton {
                 Layout.preferredWidth: 44
                 Layout.preferredHeight: 87
-                source: "./images/right_icon.svg"
+                source: "qrc:/images/right_icon.svg"
                 enabled: thumbBar.thumbCurrentPage < thumbBar.thumbTotalPages
                 opacity: enabled ? 1 : 0.4
                 onClicked: {
@@ -246,24 +246,6 @@ Item {
                     }
                     CheckButton
                     {
-                        id:btn9face
-                        text: "九画面"
-                        onClicked:
-                        {
-                            viewStack.currentIndex = 3
-                            btnMain.checked = false
-                            btn3D.checked = false
-                            btnCamera.checked = false
-                        }
-                    }
-
-                    CheckButton {
-                        checked: false
-
-                        text: "系统工具"
-                    }
-                    CheckButton
-                    {
                         id: btnCamera
                         text: "拍摄"
                         onClicked:
@@ -271,7 +253,6 @@ Item {
                             viewStack.currentIndex = 2
                             btnMain.checked = false
                             btn3D.checked = false
-                            btn9face.checked = false
                         }
                     }
                     CheckButton {
@@ -279,7 +260,7 @@ Item {
                         text: "报告"
                         onClicked:
                         {
-                            loadPage("customerReport.qml", { customerID: customerID })
+                            loadPage("customerReport.qml", { customerID: customerID, currentGroupID: currentGroupID })
 
                         }
                     }
@@ -478,9 +459,6 @@ Item {
                     loadsubphotoes(curIndex)
                 }
             }
-
-            /* 3: 九画面 */
-            Rectangle { color: "#18181b"; Label { anchors.centerIn: parent; text: "九画面" } }
         }
     }
 }
