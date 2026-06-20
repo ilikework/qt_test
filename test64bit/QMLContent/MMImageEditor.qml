@@ -14,11 +14,15 @@ Item {
     enum EditMode { None, View, Line, Circle, Eraser, ShowSmooth, EditSmooth }
     property int currentMode: MMImageEditor.EditMode.None
     property real minScale: 1.0
+    property real maxScale: 4.0
     property var points: []
     // 用于手动拖拽的坐标记录
     property point lastMousePos: Qt.point(0, 0)
     property int selectedItemIx: -1   // 存储当前正在编辑的 Item 的索引 (C++ 数组索引)
     property int selectedPointIdx: -1  // 存储当前正在拖拽的点的索引
+    property real eraserHitRadius: 24
+    property bool smoothEditActive: false
+    property string smoothEditHoverType: "none"
 
     function init(ix,dir) { internalEditor.init(ix,dir); }
 
@@ -37,49 +41,27 @@ Item {
     }
 
     function applyZoomCentered(factor) {
-        let oldScale = container.scale
-        let newScale = Math.max(minScale, Math.min(oldScale * factor, 1.0))
-        if (Math.abs(newScale - oldScale) < 0.0001) return
-
-        let centerXInImage = (flick.contentX + flick.width / 2) / oldScale
-        let centerYInImage = (flick.contentY + flick.height / 2) / oldScale
-
-        container.scale = newScale
-        flick.contentX = centerXInImage * newScale - flick.width / 2
-        flick.contentY = centerYInImage * newScale - flick.height / 2
+        applyZoomAtMouse(factor, flick.width / 2, flick.height / 2)
     }
 
     function applyZoomAtMouse(factor, mouseX, mouseY) {
         let oldScale = container.scale
-        let newScale = Math.max(minScale, Math.min(oldScale * factor, 4.0))
+        let newScale = Math.max(minScale, Math.min(oldScale * factor, maxScale))
         if (Math.abs(newScale - oldScale) < 0.0001) return
 
-        // 1. 记录缩放前的状态
-        // 关键：暂时关闭 interactive 避免 Flickable 内部逻辑干扰坐标补偿
-        let wasInteractive = flick.interactive
-        flick.interactive = false
-
-        // 2. 计算鼠标点在原始图像（scale=1.0）时的逻辑坐标
         let logicX = (flick.contentX + mouseX) / oldScale
         let logicY = (flick.contentY + mouseY) / oldScale
 
-        // 3. 应用新缩放
         container.scale = newScale
 
-        // 4. 强制补偿 contentX/Y
-        // 计算缩放后，该逻辑点在新的 content 尺寸下应该在的位置
         let targetX = logicX * newScale - mouseX
         let targetY = logicY * newScale - mouseY
 
-        // 5. 手动进行边界限定，防止“露白”
         flick.contentX = Math.max(0, Math.min(targetX, flick.contentWidth - flick.width))
         flick.contentY = Math.max(0, Math.min(targetY, flick.contentHeight - flick.height))
-
-        // 6. 恢复交互状态
-        flick.interactive = wasInteractive
     }
 
-    function calculateCircle(p1, p2, p3) {
+    function calculateCircle(p1, p2, p3) {
         let x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, x3 = p3.x, y3 = p3.y;
         let denom = 2 * (x1 * (y2 - y3) - y1 * (x2 - x3) + x2 * y3 - x3 * y2);
         if (Math.abs(denom) < 0.001) return null;
@@ -91,11 +73,16 @@ Item {
 
     // 当 mode 变化时，确保 C++ 端的编辑标记与 UI 同步
     onCurrentModeChanged: {
+        if (root.smoothEditActive) {
+            internalEditor.endSmoothEdit()
+            root.smoothEditActive = false
+        }
         if (root.currentMode === MMImageEditor.EditMode.EditSmooth) {
             internalEditor.setAllItemsEditMode(true);
         } else {
             internalEditor.setAllItemsEditMode(false);
             internalEditor.clearAllEditStates();
+            root.smoothEditHoverType = "none"
         }
     }
 
@@ -294,24 +281,26 @@ Item {
 
                 cursorShape: {
                     if (root.currentMode === MMImageEditor.EditMode.View) return Qt.OpenHandCursor;
-                    if (root.currentMode === MMImageEditor.EditMode.Eraser) return Qt.BlankCursor; // hide system cursor, show custom image
+                    if (root.currentMode === MMImageEditor.EditMode.Eraser) return Qt.BlankCursor;
+                    if (root.currentMode === MMImageEditor.EditMode.EditSmooth) {
+                        if (root.smoothEditHoverType === "scale") return Qt.SizeFDiagCursor;
+                        if (root.smoothEditHoverType === "rotate") return Qt.CrossCursor;
+                        if (root.smoothEditHoverType === "move") return Qt.SizeAllCursor;
+                        if (root.smoothEditHoverType === "point") return Qt.PointingHandCursor;
+                    }
                     return Qt.CrossCursor;
                 }
 
                 onPressed: (mouse) => {
                     if (root.currentMode === MMImageEditor.EditMode.EditSmooth) {
-                       // 1. 调用 C++ 检测是否点中了某个点的“黄色方块”
-                       // 注意：这里传入的是图片像素坐标
-                       let hit = internalEditor.hitTestPoint(mouse.x, mouse.y);
-
-                       if (hit.pointIndex !== -1) {
-                           // 记录当前操作的 Item 索引和点索引
-                           root.selectedItemIx = hit.internalIdx;
-                           root.selectedPointIdx = hit.pointIndex;
-
-                           // 此时可以给选中的这个 Item 特殊颜色反馈（可选）
-                           internalEditor.setEditState(root.selectedItemIx, true);
-                       }
+                        let hit = internalEditor.hitTestSmoothEdit(mouse.x, mouse.y)
+                        if (hit.hitType !== "none") {
+                            root.selectedItemIx = hit.internalIdx
+                            root.selectedPointIdx = hit.pointIndex
+                            root.smoothEditActive = true
+                            internalEditor.beginSmoothEdit(
+                                hit.internalIdx, hit.hitType, hit.pointIndex, mouse.x, mouse.y)
+                        }
                     }
                     else if (root.currentMode === MMImageEditor.EditMode.View) {
                         // 记录拖拽起始点（这是屏幕坐标）
@@ -320,11 +309,12 @@ Item {
                 }
 
                 onPositionChanged: (mouse) => {
-                   if (root.currentMode === MMImageEditor.EditMode.EditSmooth && root.selectedPointIdx !== -1) {
-                       // 2. 实时拖拽：将新坐标同步回 C++ Item
-                       internalEditor.updatePoint(root.selectedItemIx, root.selectedPointIdx, mouse.x, mouse.y);
-                       // 触发 C++ 重绘
-                       internalEditor.update();
+                   if (root.currentMode === MMImageEditor.EditMode.EditSmooth && root.smoothEditActive) {
+                       internalEditor.updateSmoothEdit(mouse.x, mouse.y)
+                    }
+                   else if (root.currentMode === MMImageEditor.EditMode.EditSmooth) {
+                       let hit = internalEditor.hitTestSmoothEdit(mouse.x, mouse.y)
+                       root.smoothEditHoverType = hit.hitType
                     }
                     else if (root.currentMode === MMImageEditor.EditMode.View && interactionArea.pressed) {
                         // 计算偏移量
@@ -337,6 +327,8 @@ Item {
                         flick.contentY = Math.max(0, Math.min(flick.contentY - dy, flick.contentHeight - flick.height));
 
                         root.lastMousePos = currentPos;
+                    } else if (root.currentMode === MMImageEditor.EditMode.Eraser && interactionArea.pressed) {
+                        internalEditor.eraseAt(mouse.x, mouse.y, root.eraserHitRadius);
                     } else if (points.length > 0) {
                         previewCanvas.requestPaint();
                     }
@@ -344,7 +336,7 @@ Item {
 
                 onClicked: (mouse) => {
                     if (root.currentMode === MMImageEditor.EditMode.Eraser) {
-                        internalEditor.eraseAt(mouse.x, mouse.y);
+                        internalEditor.eraseAt(mouse.x, mouse.y, root.eraserHitRadius);
                     } else if (root.currentMode === MMImageEditor.EditMode.Line || root.currentMode === MMImageEditor.EditMode.Circle) {
                         // ... 执行添加逻辑 ...
                         points.push(Qt.point(mouse.x, mouse.y));
@@ -359,12 +351,10 @@ Item {
                     previewCanvas.requestPaint();
                 }
                 onReleased: (mouse) => {
-                    if (root.currentMode === MMImageEditor.EditMode.EditSmooth && root.selectedPointIdx !== -1) {
-                        // 抬起鼠标时同步到数据库
-                        //internalEditor.syncItemToDb(root.selectedItemIx);
-
-                        // 重置选中状态，但保持 EditSmooth 模式（依然显示所有方块）
-                        root.selectedPointIdx = -1;
+                    if (root.currentMode === MMImageEditor.EditMode.EditSmooth && root.smoothEditActive) {
+                        internalEditor.endSmoothEdit()
+                        root.smoothEditActive = false
+                        root.selectedPointIdx = -1
                     }
                 }
             }
@@ -381,31 +371,20 @@ Item {
                 y: interactionArea.mouseY - height/2
                 smooth: true
                 opacity: visible ? 1 : 0
+                onWidthChanged: root.eraserHitRadius = width / 2
+                Component.onCompleted: root.eraserHitRadius = width / 2
             }
         }
     }
 
-    // WheelHandler {
-    //     acceptedModifiers: Qt.ControlModifier // 修正：按住 Ctrl 滚动才缩放
-    //     onWheel: (event) => {
-    //         let factor = event.angleDelta.y > 0 ? 1.1 : 0.9;
-    //         applyZoomCentered(factor);
-    //     }
-    // }
-
-    // Ctrl + 滚轮缩放
+    // 滚轮缩放（以鼠标位置为中心）
     WheelHandler {
-        acceptedModifiers: Qt.ControlModifier
         target: flick
         onWheel: (event) => {
-            let factor = event.angleDelta.y > 0 ? 1.1 : 0.9;
-            applyZoomCentered(factor);
-            // 修复错误：增加对 event.point 的安全性检查
-            // 如果 event.point 存在，则使用鼠标位置；否则使用窗口中心 (width/2, height/2)
-            // let mX = (event.point && event.point.position) ? event.point.position.x : root.width / 2;
-            // let mY = (event.point && event.point.position) ? event.point.position.y : root.height / 2;
-
-            // applyZoomAtMouse(factor, mX, mY);
+            let factor = event.angleDelta.y > 0 ? 1.12 : 0.89
+            let mX = (event.point && event.point.position) ? event.point.position.x : flick.width / 2
+            let mY = (event.point && event.point.position) ? event.point.position.y : flick.height / 2
+            applyZoomAtMouse(factor, mX, mY)
         }
     }
 

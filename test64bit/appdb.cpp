@@ -750,6 +750,28 @@ bool AppDb::deleteDrawInfoByIX(int ix) {
     return true;
 }
 
+bool AppDb::updateDrawInfo(int ix, const QString &jsonInfo)
+{
+    if (ix < 0)
+        return false;
+    if (!m_db.isOpen()) {
+        m_lastError = "DB not open";
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE T_FacePhoto_DrawInfo SET Info = ?, EditTime = DATETIME('now', 'localtime') WHERE IX = ?");
+    query.addBindValue(jsonInfo);
+    query.addBindValue(ix);
+    if (!query.exec()) {
+        qDebug() << "updateDrawInfo Error:" << query.lastError().text();
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    m_lastError.clear();
+    return true;
+}
+
 QList<QPair<int, QString>> AppDb::getAllDrawInfos(int facePhotoIx) {
     QList<QPair<int, QString>> results;
     if (!m_db.isOpen()) {

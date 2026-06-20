@@ -73,9 +73,10 @@ public:
     }
 
     bool isHit(const QPointF &pos, qreal threshold) override {
-        // 判断点击位置到圆心的距离是否接近半径
-        qreal dist = QLineF(pos, center).length();
-        return qAbs(dist - radius) < threshold;
+        // 橡皮擦落在圆内即命中（含线宽与橡皮擦半径容差）
+        const qreal dist = QLineF(pos, center).length();
+        const qreal hitRadius = radius + qMax<qreal>(width, 1.0) / 2.0;
+        return dist <= hitRadius + threshold;
     }
 
     QJsonObject toJson() const override {
@@ -114,6 +115,19 @@ private:
 
 class SmoothCurveItem : public BaseDrawingItem {
 public:
+    enum SmoothEditHitType {
+        EditHitNone = 0,
+        EditHitPoint = 1,
+        EditHitMove = 2,
+        EditHitScale = 3,
+        EditHitRotate = 4
+    };
+
+    struct SmoothEditHit {
+        SmoothEditHitType type = EditHitNone;
+        int pointIndex = -1;
+    };
+
     QVector<QPointF> points; // 已经转换好的、直接对应图片像素的坐标
     bool isClosed;
     bool showControlPoints= false;
@@ -150,6 +164,13 @@ public:
     }
 
     void paint(QPainter *painter) override;
+
+    QPointF centroid() const;
+    QRectF pointsBounds(qreal padding = 12.0) const;
+    SmoothEditHit hitTestEdit(const QPointF &pos, qreal threshold = 10.0) const;
+    void translatePoints(const QPointF &delta);
+    void scalePointsUniform(qreal factor, const QPointF &origin);
+    void rotatePoints(qreal radians, const QPointF &origin);
 
     // 3. 碰撞检测：同样基于实际像素坐标，逻辑更直观
     bool isHit(const QPointF &pos, qreal threshold) override {

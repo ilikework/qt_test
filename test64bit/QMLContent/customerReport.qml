@@ -1005,6 +1005,7 @@ Item {
                         { text: "彩点显示", icon: "qrc:/images/spot.svg" },
                         { text: "A4打印", icon: "qrc:/images/print.svg" },
                         { text: "保存", icon: "" },
+                        { text: "返回", icon: "qrc:/images/left_icon.svg" },
                         { text: "HOME", icon: "qrc:/images/exit_icon.svg" }
                     ]
 
@@ -1042,6 +1043,11 @@ Item {
                                     else if (index === 4)
                                         saveActiveReport()
                                     else if (index === 5)
+                                        loadPage("customerAnalyse.qml", {
+                                            customerID: customerID,
+                                            currentGroupID: currentGroupID
+                                        })
+                                    else if (index === 6)
                                         loadPage("logo.qml", {})
                                 }
                             }

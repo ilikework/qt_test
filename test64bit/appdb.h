@@ -125,6 +125,7 @@ public:
 
     // 根据主键 IX 物理删除单条记录
     bool deleteDrawInfoByIX(int ix);
+    bool updateDrawInfo(int ix, const QString &jsonInfo);
 
     // 一次性获取某张图片关联的所有绘图信息
     // 返回值：QList<QPair<主键IX, JSON字符串>>

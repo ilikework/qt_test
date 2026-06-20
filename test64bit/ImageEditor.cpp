@@ -3,6 +3,7 @@
 #include "QJsonArray"
 #include "QJsonDocument"
 #include "AppDb.h"
+#include <QtMath>
 
 void ImageEditor::init(const int IX, const QString &dirType)
 {
@@ -86,6 +87,133 @@ QVariantMap ImageEditor::hitTestPoint(qreal x, qreal y)
     return result;
 }
 
+SmoothCurveItem* ImageEditor::smoothCurveAt(int internalIdx)
+{
+    if (internalIdx < 0 || internalIdx >= static_cast<int>(m_items.size()))
+        return nullptr;
+    return dynamic_cast<SmoothCurveItem*>(m_items[internalIdx].get());
+}
+
+QString ImageEditor::smoothHitTypeName(SmoothCurveItem::SmoothEditHitType type)
+{
+    switch (type) {
+    case SmoothCurveItem::EditHitPoint: return QStringLiteral("point");
+    case SmoothCurveItem::EditHitMove: return QStringLiteral("move");
+    case SmoothCurveItem::EditHitScale: return QStringLiteral("scale");
+    case SmoothCurveItem::EditHitRotate: return QStringLiteral("rotate");
+    default: return QStringLiteral("none");
+    }
+}
+
+QVariantMap ImageEditor::hitTestSmoothEdit(qreal x, qreal y)
+{
+    QVariantMap result;
+    result["internalIdx"] = -1;
+    result["hitType"] = QStringLiteral("none");
+    result["pointIndex"] = -1;
+
+    const QPointF pos(x, y);
+    const qreal threshold = 10.0;
+
+    for (int i = static_cast<int>(m_items.size()) - 1; i >= 0; --i) {
+        auto *curve = dynamic_cast<SmoothCurveItem*>(m_items[i].get());
+        if (!curve || !curve->showControlPoints)
+            continue;
+
+        const auto hit = curve->hitTestEdit(pos, threshold);
+        if (hit.type == SmoothCurveItem::EditHitNone)
+            continue;
+
+        result["internalIdx"] = i;
+        result["hitType"] = smoothHitTypeName(hit.type);
+        result["pointIndex"] = hit.pointIndex;
+        break;
+    }
+    return result;
+}
+
+void ImageEditor::beginSmoothEdit(int internalIdx, const QString &hitType, int pointIndex, qreal x, qreal y)
+{
+    auto *curve = smoothCurveAt(internalIdx);
+    if (!curve)
+        return;
+
+    clearAllEditStates();
+    curve->isBeingEdited = true;
+
+    m_editItemIdx = internalIdx;
+    m_editHitType = hitType;
+    m_editPointIdx = pointIndex;
+    m_editSnapshot = curve->points;
+    m_editPivot = curve->centroid();
+    m_editPressPos = QPointF(x, y);
+
+    if (hitType == QStringLiteral("scale")) {
+        m_editStartDistance = QLineF(m_editPivot, m_editPressPos).length();
+        if (m_editStartDistance < 1.0)
+            m_editStartDistance = 1.0;
+    } else if (hitType == QStringLiteral("rotate")) {
+        const QPointF v = m_editPressPos - m_editPivot;
+        m_editStartAngle = std::atan2(v.y(), v.x());
+    }
+}
+
+void ImageEditor::updateSmoothEdit(qreal x, qreal y)
+{
+    auto *curve = smoothCurveAt(m_editItemIdx);
+    if (!curve)
+        return;
+
+    const QPointF pos(x, y);
+    if (m_editHitType == QStringLiteral("point")) {
+        if (m_editPointIdx >= 0 && m_editPointIdx < curve->points.size())
+            curve->points[m_editPointIdx] = pos;
+    } else if (m_editHitType == QStringLiteral("move")) {
+        curve->points = m_editSnapshot;
+        curve->translatePoints(pos - m_editPressPos);
+    } else if (m_editHitType == QStringLiteral("scale")) {
+        const qreal dist = QLineF(m_editPivot, pos).length();
+        qreal factor = dist / m_editStartDistance;
+        factor = qBound(0.05, factor, 20.0);
+        curve->points = m_editSnapshot;
+        curve->scalePointsUniform(factor, m_editPivot);
+    } else if (m_editHitType == QStringLiteral("rotate")) {
+        const QPointF v = pos - m_editPivot;
+        const qreal angle = std::atan2(v.y(), v.x());
+        curve->points = m_editSnapshot;
+        curve->rotatePoints(angle - m_editStartAngle, m_editPivot);
+    }
+    update();
+}
+
+void ImageEditor::endSmoothEdit()
+{
+    if (m_editItemIdx >= 0)
+        syncItemToDb(m_editItemIdx);
+
+    if (auto *curve = smoothCurveAt(m_editItemIdx))
+        curve->isBeingEdited = false;
+
+    m_editItemIdx = -1;
+    m_editHitType.clear();
+    m_editPointIdx = -1;
+    m_editSnapshot.clear();
+    update();
+}
+
+bool ImageEditor::syncItemToDb(int internalIdx)
+{
+    if (internalIdx < 0 || internalIdx >= static_cast<int>(m_items.size()))
+        return false;
+
+    BaseDrawingItem *item = m_items[internalIdx].get();
+    if (!item || item->ix < 0)
+        return false;
+
+    const QString json = QJsonDocument(item->toJson()).toJson(QJsonDocument::Compact);
+    return AppDb::instance().updateDrawInfo(item->ix, json);
+}
+
 void ImageEditor::setEditState(int internalIdx, bool editing)
 {
     // 1. 基础范围检查
@@ -136,14 +264,15 @@ void ImageEditor::paint(QPainter *painter)
         }
     }
 }
-void ImageEditor::eraseAt(qreal x, qreal y)
+void ImageEditor::eraseAt(qreal x, qreal y, qreal eraserRadius)
 {
     QPointF pos(x, y);
-    qreal threshold = 5.0; // 橡皮擦的灵敏度
+    if (eraserRadius <= 0.0)
+        eraserRadius = 24.0;
 
     // 逆序遍历，从最上层开始检测
     for (auto it = m_items.rbegin(); it != m_items.rend(); ++it) {
-        if ((*it)->isHit(pos, threshold)) {
+        if ((*it)->isHit(pos, eraserRadius)) {
 
             // --- 核心逻辑：检查是否为不可删除的平滑曲线 ---
             // 尝试转换为 SmoothCurveItem

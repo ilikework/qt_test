@@ -28,6 +28,12 @@ public:
 
     // 检测是否点中了某个 Item 的控制点，返回包含 itemIx 和 pointIndex 的 Map
     Q_INVOKABLE QVariantMap hitTestPoint(qreal x, qreal y);
+    // 精修轮廓：点 / 整体移动 / 缩放 / 旋转
+    Q_INVOKABLE QVariantMap hitTestSmoothEdit(qreal x, qreal y);
+    Q_INVOKABLE void beginSmoothEdit(int internalIdx, const QString &hitType, int pointIndex, qreal x, qreal y);
+    Q_INVOKABLE void updateSmoothEdit(qreal x, qreal y);
+    Q_INVOKABLE void endSmoothEdit();
+    Q_INVOKABLE bool syncItemToDb(int internalIdx);
     // 实时更新点坐标
     Q_INVOKABLE void updatePoint(int itemIx, int pointIdx, qreal x, qreal y);
     // 设置某个 Item 的编辑状态（是否变黄显示方块）
@@ -42,7 +48,7 @@ public:
     // 在 ImageEditor 类中添加
     Q_INVOKABLE void addCircle(qreal x1, qreal y1, qreal x2, qreal y2, qreal x3, qreal y3);
 
-    Q_INVOKABLE void eraseAt(qreal x, qreal y);
+    Q_INVOKABLE void eraseAt(qreal x, qreal y, qreal eraserRadius = 24.0);
 
 
     Q_INVOKABLE bool save(const QString &path);
@@ -69,6 +75,8 @@ signals:
 private:
     void loadFromDb(int facePhotoIx, const QString &dirType);
     std::unique_ptr<BaseDrawingItem> createItemFromJson(const QJsonObject &obj, bool scaleFromStandard);
+    SmoothCurveItem* smoothCurveAt(int internalIdx);
+    static QString smoothHitTypeName(SmoothCurveItem::SmoothEditHitType type);
 
     QImage m_image;
     QString m_sourcePath;
@@ -77,6 +85,15 @@ private:
     int m_facePhotoIx = -1;
     bool m_shapesVisible = true;
     std::vector<std::unique_ptr<BaseDrawingItem>> m_items; // 存储所有画上去的对象
+
+    int m_editItemIdx = -1;
+    QString m_editHitType;
+    int m_editPointIdx = -1;
+    QVector<QPointF> m_editSnapshot;
+    QPointF m_editPivot;
+    QPointF m_editPressPos;
+    qreal m_editStartDistance = 1.0;
+    qreal m_editStartAngle = 0.0;
 };
 
 #endif // IMAGEEDITOR_H
