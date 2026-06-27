@@ -1,14 +1,25 @@
 #include "ImageEditor.h"
+#include "AppDb.h"
+#include "FaceContourMath.h"
 #include "QJsonObject"
 #include "QJsonArray"
 #include "QJsonDocument"
 #include "AppDb.h"
 #include <QtMath>
+#include <QImageReader>
 
 void ImageEditor::init(const int IX, const QString &dirType)
 {
     m_facePhotoIx = IX;
-    loadFromDb(IX, dirType);
+    m_dirType = dirType;
+    if (!m_image.isNull())
+        loadFromDb(IX, dirType);
+}
+
+void ImageEditor::reloadDrawings()
+{
+    if (m_facePhotoIx >= 0)
+        loadFromDb(m_facePhotoIx, m_dirType);
 }
 
 void ImageEditor::clear()
@@ -26,14 +37,44 @@ bool ImageEditor::save(const QString &path)
 void ImageEditor::setSource(const QString &path)
 {
     m_sourcePath = path;
-    if (m_image.load(QUrl(path).toLocalFile())) {
-
-        // 设置图片的原始像素大小
+    QImageReader reader(QUrl(path).toLocalFile());
+    reader.setAutoTransform(false);
+    if (reader.read(&m_image)) {
         setImplicitWidth(m_image.width());
         setImplicitHeight(m_image.height());
-        update();
-        emit sourceChanged(); // 触发 QML 的逻辑
+        setWidth(m_image.width());
+        setHeight(m_image.height());
+        if (m_facePhotoIx >= 0)
+            loadFromDb(m_facePhotoIx, m_dirType);
+        else
+            update();
+        emit sourceChanged();
     }
+}
+
+qreal ImageEditor::imageToViewScaleX() const
+{
+    if (m_image.isNull() || m_image.width() <= 0 || width() <= 0)
+        return 1.0;
+    return width() / static_cast<qreal>(m_image.width());
+}
+
+qreal ImageEditor::imageToViewScaleY() const
+{
+    if (m_image.isNull() || m_image.height() <= 0 || height() <= 0)
+        return 1.0;
+    return height() / static_cast<qreal>(m_image.height());
+}
+
+QPointF ImageEditor::mapViewToImage(qreal x, qreal y) const
+{
+    const qreal sx = imageToViewScaleX();
+    const qreal sy = imageToViewScaleY();
+    if (qFuzzyCompare(sx, 1.0) && qFuzzyCompare(sy, 1.0))
+        return QPointF(x, y);
+    if (qFuzzyCompare(sx, 0.0) || qFuzzyCompare(sy, 0.0))
+        return QPointF(x, y);
+    return QPointF(x / sx, y / sy);
 }
 
 void ImageEditor::addLine(qreal x1, qreal y1, qreal x2, qreal y2)
@@ -67,8 +108,8 @@ QVariantMap ImageEditor::hitTestPoint(qreal x, qreal y)
     QVariantMap result;
     result["itemIx"] = -1;
     result["pointIndex"] = -1;
-    QPointF pos(x, y);
-    qreal threshold = 10.0; // 点击方块的容错范围
+    QPointF pos = mapViewToImage(x, y);
+    qreal threshold = 10.0 * qMax(imageToViewScaleX(), imageToViewScaleY());
 
     // 逆序遍历，优先检测最上层的图形
     for (int i = m_items.size() - 1; i >= 0; --i) {
@@ -112,8 +153,8 @@ QVariantMap ImageEditor::hitTestSmoothEdit(qreal x, qreal y)
     result["hitType"] = QStringLiteral("none");
     result["pointIndex"] = -1;
 
-    const QPointF pos(x, y);
-    const qreal threshold = 10.0;
+    const QPointF pos = mapViewToImage(x, y);
+    const qreal threshold = 10.0 * qMax(imageToViewScaleX(), imageToViewScaleY());
 
     for (int i = static_cast<int>(m_items.size()) - 1; i >= 0; --i) {
         auto *curve = dynamic_cast<SmoothCurveItem*>(m_items[i].get());
@@ -146,7 +187,7 @@ void ImageEditor::beginSmoothEdit(int internalIdx, const QString &hitType, int p
     m_editPointIdx = pointIndex;
     m_editSnapshot = curve->points;
     m_editPivot = curve->centroid();
-    m_editPressPos = QPointF(x, y);
+    m_editPressPos = mapViewToImage(x, y);
 
     if (hitType == QStringLiteral("scale")) {
         m_editStartDistance = QLineF(m_editPivot, m_editPressPos).length();
@@ -164,7 +205,7 @@ void ImageEditor::updateSmoothEdit(qreal x, qreal y)
     if (!curve)
         return;
 
-    const QPointF pos(x, y);
+    const QPointF pos = mapViewToImage(x, y);
     if (m_editHitType == QStringLiteral("point")) {
         if (m_editPointIdx >= 0 && m_editPointIdx < curve->points.size())
             curve->points[m_editPointIdx] = pos;
@@ -201,8 +242,50 @@ void ImageEditor::endSmoothEdit()
     update();
 }
 
+bool ImageEditor::syncGroupContourToAnchor()
+{
+    if (m_groupContourInternalIdx < 0 || m_image.isNull())
+        return false;
+
+    auto *curve = smoothCurveAt(m_groupContourInternalIdx);
+    if (!curve)
+        return false;
+
+    QString custId;
+    int groupId = 0;
+    QString dirType;
+    if (!AppDb::instance().resolveFacePhotoContext(m_facePhotoIx, &custId, &groupId, &dirType))
+        return false;
+
+    const QJsonArray pixelPts = FaceContourMath::pixelsToJson(curve->points);
+
+    QString source = QStringLiteral("manual");
+    const auto existing = AppDb::instance().getGroupContourDrawInfo(custId, groupId, dirType);
+    if (existing.first >= 0) {
+        const QJsonObject oldObj = QJsonDocument::fromJson(existing.second.toUtf8()).object();
+        const QString oldSource = oldObj.value(QStringLiteral("source")).toString();
+        if (oldSource == QStringLiteral("auto") || oldSource == QStringLiteral("template"))
+            source = QStringLiteral("manual");
+        else if (!oldSource.isEmpty())
+            source = oldSource;
+    }
+
+    const QJsonObject json = FaceContourMath::makeGroupContourJson(
+        source, pixelPts, curve->color, curve->width);
+    const QString compact = QString::fromUtf8(QJsonDocument(json).toJson(QJsonDocument::Compact));
+    if (!AppDb::instance().upsertGroupContourOnAnchor(custId, groupId, dirType, compact))
+        return false;
+
+    const auto updated = AppDb::instance().getGroupContourDrawInfo(custId, groupId, dirType);
+    curve->ix = updated.first;
+    return true;
+}
+
 bool ImageEditor::syncItemToDb(int internalIdx)
 {
+    if (internalIdx == m_groupContourInternalIdx)
+        return syncGroupContourToAnchor();
+
     if (internalIdx < 0 || internalIdx >= static_cast<int>(m_items.size()))
         return false;
 
@@ -243,7 +326,7 @@ void ImageEditor::updatePoint(int internalIdx, int pointIdx, qreal x, qreal y)
     if (internalIdx >= 0 && internalIdx < m_items.size()) {
         auto curve = dynamic_cast<SmoothCurveItem*>(m_items[internalIdx].get());
         if (curve && pointIdx >= 0 && pointIdx < curve->points.size()) {
-            curve->points[pointIdx] = QPointF(x, y);
+            curve->points[pointIdx] = mapViewToImage(x, y);
             update(); // 触发界面重绘
         }
     }
@@ -252,23 +335,35 @@ void ImageEditor::updatePoint(int internalIdx, int pointIdx, qreal x, qreal y)
 void ImageEditor::paint(QPainter *painter)
 {
     if (m_image.isNull()) return;
-    QRectF rect(0, 0, width(), height());
+    const qreal iw = m_image.width();
+    const qreal ih = m_image.height();
+    const QRectF dest(0, 0, width(), height());
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
-    painter->drawImage(rect, m_image);
+    painter->drawImage(dest, m_image);
 
-    // 2. 根据开关决定是否绘制线条和圆
-    if (m_shapesVisible) {
-        painter->setRenderHint(QPainter::Antialiasing);
-        for (const auto& item : m_items) {
+    if (!m_shapesVisible)
+        return;
+
+    painter->setRenderHint(QPainter::Antialiasing);
+    const qreal sx = imageToViewScaleX();
+    const qreal sy = imageToViewScaleY();
+    if (!qFuzzyCompare(sx, 1.0) || !qFuzzyCompare(sy, 1.0)) {
+        painter->save();
+        painter->scale(sx, sy);
+        for (const auto &item : m_items)
             item->paint(painter);
-        }
+        painter->restore();
+    } else {
+        for (const auto &item : m_items)
+            item->paint(painter);
     }
 }
 void ImageEditor::eraseAt(qreal x, qreal y, qreal eraserRadius)
 {
-    QPointF pos(x, y);
+    QPointF pos = mapViewToImage(x, y);
     if (eraserRadius <= 0.0)
         eraserRadius = 24.0;
+    eraserRadius *= qMax(imageToViewScaleX(), imageToViewScaleY());
 
     // 逆序遍历，从最上层开始检测
     for (auto it = m_items.rbegin(); it != m_items.rend(); ++it) {
@@ -302,48 +397,83 @@ void ImageEditor::eraseAt(qreal x, qreal y, qreal eraserRadius)
 void ImageEditor::loadFromDb(int facePhotoIx, const QString &dirType)
 {
     m_items.clear();
-    bool hasSmoothCurve = false;
+    m_groupContourInternalIdx = -1;
 
-    // 1. 先尝试从正式绘图表获取该照片的所有图形
+    QString custId;
+    int groupId = 0;
+    QString photoDirType;
+    AppDb::instance().resolveFacePhotoContext(facePhotoIx, &custId, &groupId, &photoDirType);
+    const QString side = photoDirType.isEmpty() ? dirType : photoDirType;
+
     auto results = AppDb::instance().getAllDrawInfos(facePhotoIx);
     for (const auto& res : results) {
         QJsonObject obj = QJsonDocument::fromJson(res.second.toUtf8()).object();
-        if (obj["type"].toString() == "smooth_curve") hasSmoothCurve = true;
+        if (FaceContourMath::isSmoothCurve(obj))
+            continue;
 
-        // 这里 createItemFromJson 内部会处理从 768x1024 到实际像素的转换（如果需要）
-        // 假设正式表存的已经是图片像素坐标，这里缩放比例应为 1:1
-        auto item = createItemFromJson(obj, false); // 增加一个参数控制是否需要初始缩放
+        auto item = createItemFromJson(obj, false);
         if (item) {
             item->ix = res.first;
             m_items.push_back(std::move(item));
         }
     }
 
-    // 2. 如果没有找到平滑曲线，则从模板加载并“像素化”后存入正式表
-    if (!hasSmoothCurve) {
-        QString templateJson = AppDb::instance().getTemplateInfo(dirType);
-        if (!templateJson.isEmpty()) {
-            QJsonObject TmplObj = QJsonDocument::fromJson(templateJson.toUtf8()).object();
+    if (!custId.isEmpty() && groupId > 0)
+        loadGroupContourFromAnchor(custId, groupId, side);
 
-            // A. 先按模板逻辑（768x1024 -> 实际像素）创建 Item
-            auto templateItem = createItemFromJson(TmplObj, true);
+    update();
+}
 
-            if (templateItem) {
-                // B. 将这个已经缩放到实际像素的 Item 转化为 JSON 字符串
-                // 此时 toJson() 生成的点坐标就是 3000x4000 这种实际像素了
-                QString finalJson = QJsonDocument(templateItem->toJson()).toJson(QJsonDocument::Compact);
+bool ImageEditor::loadGroupContourFromAnchor(const QString &custId, int groupId, const QString &dirType)
+{
+    // Group face contour lives on anchor FacePhoto_IX only. See design_doc/group_contour_storage.md
+    const auto pair = AppDb::instance().getGroupContourDrawInfo(custId, groupId, dirType);
+    if (pair.first < 0 || m_image.isNull())
+        return false;
 
-                // C. 将这个针对当前图片的“定制化”JSON 存入正式表，获取 IX
-                int newIx = AppDb::instance().insertDrawInfo(facePhotoIx, finalJson);
+    QJsonObject obj = QJsonDocument::fromJson(pair.second.toUtf8()).object();
+    if (!FaceContourMath::isGroupSmoothCurve(obj))
+        return false;
 
-                if (newIx != -1) {
-                    templateItem->ix = newIx;
-                    m_items.push_back(std::move(templateItem));
-                }
+    const QJsonArray ptsArray = obj.value(QStringLiteral("points")).toArray();
+    const QColor color(obj.value(QStringLiteral("color")).toString());
+    const int weight = obj.value(QStringLiteral("weight")).toInt(3);
+
+    QVector<QPointF> pts;
+    const QString source = obj.value(QStringLiteral("source")).toString();
+    const QString coordSpace = obj.value(QStringLiteral("coordSpace")).toString();
+    if (coordSpace.isEmpty() || coordSpace == QLatin1String(FaceContourMath::kCoordPixel)) {
+        pts = FaceContourMath::jsonToPixels(ptsArray);
+        // 旧版误把 LibFA logical768 当像素写入 source=auto 时的一次性修正
+        if (source == QLatin1String("auto") && !pts.isEmpty() && m_image.width() > 1200) {
+            int maxCoord = 0;
+            for (const QPointF &p : pts) {
+                maxCoord = qMax(maxCoord, static_cast<int>(qMax(p.x(), p.y())));
             }
+            if (maxCoord <= 768)
+                pts = FaceContourMath::logicalJsonToPixels(ptsArray, m_image.width(), m_image.height());
+        }
+    } else if (coordSpace == QLatin1String(FaceContourMath::kCoordLogical768)) {
+        // 旧数据：LibFA logical768 → 当前图像素
+        pts = FaceContourMath::logicalJsonToPixels(ptsArray, m_image.width(), m_image.height());
+    } else {
+        // 更早期：768×1024 模板坐标或已是像素
+        const QString source = obj.value(QStringLiteral("source")).toString();
+        if (source.isEmpty()) {
+            pts = FaceContourMath::templateTopLeft1024JsonToPixels(
+                ptsArray, m_image.width(), m_image.height());
+        } else {
+            pts = FaceContourMath::jsonToPixels(ptsArray);
         }
     }
-    update();
+    if (pts.isEmpty())
+        return false;
+
+    auto item = std::make_unique<SmoothCurveItem>(pts, color, weight);
+    item->ix = pair.first;
+    m_items.push_back(std::move(item));
+    m_groupContourInternalIdx = static_cast<int>(m_items.size()) - 1;
+    return true;
 }
 
 std::unique_ptr<BaseDrawingItem> ImageEditor::createItemFromJson(const QJsonObject &obj, bool scaleFromStandard)

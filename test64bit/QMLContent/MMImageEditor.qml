@@ -26,6 +26,16 @@ Item {
 
     function init(ix,dir) { internalEditor.init(ix,dir); }
 
+    function reloadDrawings() { internalEditor.reloadDrawings(); }
+
+    function enterShowContour() {
+        currentMode = MMImageEditor.EditMode.ShowSmooth
+    }
+
+    function enterEditContour() {
+        currentMode = MMImageEditor.EditMode.EditSmooth
+    }
+
     function fitToWindow() {
         if (internalEditor.implicitWidth > 0 && internalEditor.implicitHeight > 0) {
             let scaleX = root.width / internalEditor.implicitWidth
@@ -207,7 +217,10 @@ Item {
 
             ImageEditor {
                 id: internalEditor
-                anchors.fill: parent
+                x: 0
+                y: 0
+                width: implicitWidth > 0 ? implicitWidth : 1
+                height: implicitHeight > 0 ? implicitHeight : 1
                 // 图像始终显示，但图形绘制通过 internalEditor 内部逻辑控制
                 // 假设 C++ 端有此属性控制 paint 函数里的图形绘制循环
                 // 如果 C++ 端没写该属性，可以先用 opacity 模拟：

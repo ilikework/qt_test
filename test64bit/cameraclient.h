@@ -54,6 +54,7 @@ class CameraClient : public QObject {
     Q_PROPERTY(QVariantList settings READ settings NOTIFY settingsChanged)
     Q_PROPERTY(QVariantList left_pics READ left_pics NOTIFY left_picsChanged)
     Q_PROPERTY(QVariantList right_pics READ right_pics NOTIFY right_picsChanged)
+    Q_PROPERTY(int lastSavedGroupId READ lastSavedGroupId NOTIFY lastSavedGroupIdChanged)
 
 public:
     explicit CameraClient(CameraImageProvider* provider, QObject* parent = nullptr);
@@ -88,6 +89,7 @@ public:
     QVariantList settings() ;
     QVariantList left_pics() const;
     QVariantList right_pics() const;
+    int lastSavedGroupId() const { return lastSavedGroupId_; }
 
     void addleft(const QString& str);
     void addright(const QString& str);
@@ -108,6 +110,9 @@ signals:
     void settingsChanged();
     void left_picsChanged();
     void right_picsChanged();
+    void lastSavedGroupIdChanged();
+    /// 保存写入 DB 后发出，参数为刚保存的组号（内部 GroupID_ 已清零）
+    void photoGroupSaved(int groupId);
 
     void fatalError(const QString& msg);
     void log(const QString& msg);
@@ -164,6 +169,7 @@ private:
 
     QString CustomerID_ = ""; // not valuable 0.
     int GroupID_ = 0;
+    int lastSavedGroupId_ = 0;
     QVariantList  left_pics_;
     QVariantList  right_pics_;
 };

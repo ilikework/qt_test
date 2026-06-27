@@ -1,6 +1,8 @@
 #include "MM3DManager.h"
 #include "appconfig.h"
 #include "MMLogger.h"
+#include <QGuiApplication>
+#include <QCursor>
 #include <QFileInfo>
 #include <QDir>
 #include <QJsonDocument>
@@ -29,6 +31,10 @@ void MM3DManager::setRunning(bool on)
 {
     if (running_ == on) return;
     running_ = on;
+    if (on)
+        QGuiApplication::setOverrideCursor(QCursor(Qt::ForbiddenCursor));
+    else
+        QGuiApplication::restoreOverrideCursor();
     emit runningChanged();
 }
 

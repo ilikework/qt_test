@@ -322,6 +322,7 @@ CaptureParameter CameraClient::get_camera_params(const QString & capType) const
 void CameraClient::save()
 {
     stopPreview();
+    const int savedGroupId = GroupID_;
     QStringList cap_types = {MM_RGB,MM_UV,MM_PL,MM_NPL,MM_GRAY,MM_RED,MM_BROWN,MM_WHOLE};
 
     // add information to db and clear them.
@@ -365,7 +366,13 @@ void CameraClient::save()
     right_pics_.clear();
     emit left_picsChanged();
     emit right_picsChanged();
-    GroupID_ =0;
+
+    if (savedGroupId > 0) {
+        lastSavedGroupId_ = savedGroupId;
+        emit lastSavedGroupIdChanged();
+        emit photoGroupSaved(savedGroupId);
+    }
+    GroupID_ = 0;
 }
 
 void CameraClient::cancel()

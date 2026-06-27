@@ -788,6 +788,16 @@ Item {
 
     Connections {
         target: mm3dManager
+        function onRunningChanged() {
+            if (!mm3dManager.running)
+                return
+            morphSurfaceDragging = false
+            morphSingleAxisLineDragging = false
+            morphDragTargetHovered = false
+            lightDragOnMainView = false
+            magnifierDragging = false
+            mainViewLightDragToggle.dragging = false
+        }
         function onFinished(success, outputDir) {
             console.log("[MM3D] onFinished success:", success, "outputDir:", outputDir)
             if (success)

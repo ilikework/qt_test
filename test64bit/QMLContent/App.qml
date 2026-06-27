@@ -1,5 +1,6 @@
 import QtQuick
 //import testQML
+import "components"
 
 Window {
     id: root
@@ -38,6 +39,12 @@ Window {
             pageLoader.setSource(page, params)
             //pageLoader.source = page         // 加载新页面
         }
+    }
+
+    /// 3D 模型生成期间：exe 级鼠标漏斗，拦截全窗口（含 customerAnalyse 顶栏/左栏等父级 UI）
+    InputFunnelBlocker {
+        active: (mm3dManager ? mm3dManager.running : false)
+             || (faceAnalyseManager ? faceAnalyseManager.busy : false)
     }
 }
 

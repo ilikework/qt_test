@@ -1,7 +1,11 @@
 #include "AppDb.h"
+#include "FaceContourMath.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -796,6 +800,212 @@ QList<QPair<int, QString>> AppDb::getAllDrawInfos(int facePhotoIx) {
     }
 
     return results;
+}
+
+static QString normalizedDirTypeForTemplate(const QString &dirType)
+{
+    if (dirType == LEFT || dirType == QStringLiteral("L"))
+        return LEFT;
+    if (dirType == RIGHT || dirType == QStringLiteral("R"))
+        return RIGHT;
+    return dirType;
+}
+
+bool AppDb::findFacePhotoByIx(int facePhotoIx, FacePhoto *out) const
+{
+    if (!out || facePhotoIx < 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery query(m_db);
+    query.prepare(R"(
+        SELECT IX, Cust_ID, Photo_CapType, Photo_DirType, Group_ID, Photo_ID, Photo_Name
+        FROM T_Customers_FacePhoto WHERE IX = ?
+    )");
+    query.addBindValue(facePhotoIx);
+    if (!query.exec() || !query.next())
+        return false;
+
+    out->IX = query.value(0).toInt();
+    out->Cust_ID = query.value(1).toString();
+    out->Photo_CapType = query.value(2).toString();
+    out->Photo_DirType = query.value(3).toString();
+    out->Group_ID = query.value(4).toInt();
+    out->Photo_ID = query.value(5).toInt();
+    out->Photo_Name = query.value(6).toString();
+    return true;
+}
+
+int AppDb::resolveAnchorIx(const QString &custId, int groupId, const QString &dirType) const
+{
+    if (custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return -1;
+
+    const QString side = normalizedDirTypeForTemplate(dirType);
+    QSqlQuery query(m_db);
+    query.prepare(R"(
+        SELECT IX FROM T_Customers_FacePhoto
+        WHERE Cust_ID = ? AND Group_ID = ? AND Photo_DirType = ?
+          AND Photo_CapType = ? AND Photo_ID = 1
+        LIMIT 1
+    )");
+    query.addBindValue(custId);
+    query.addBindValue(groupId);
+    query.addBindValue(side);
+    query.addBindValue(QStringLiteral(MM_RGB));
+    if (!query.exec() || !query.next())
+        return -1;
+    return query.value(0).toInt();
+}
+
+bool AppDb::resolveFacePhotoContext(int facePhotoIx, QString *custId, int *groupId, QString *dirType) const
+{
+    FacePhoto photo;
+    if (!findFacePhotoByIx(facePhotoIx, &photo))
+        return false;
+    if (custId)
+        *custId = photo.Cust_ID;
+    if (groupId)
+        *groupId = photo.Group_ID;
+    if (dirType)
+        *dirType = photo.Photo_DirType;
+    return true;
+}
+
+QPair<int, QString> AppDb::getGroupContourDrawInfo(const QString &custId, int groupId, const QString &dirType) const
+{
+    const int anchorIx = resolveAnchorIx(custId, groupId, dirType);
+    if (anchorIx < 0)
+        return qMakePair(-1, QString());
+
+    const auto rows = const_cast<AppDb *>(this)->getAllDrawInfos(anchorIx);
+    for (const auto &row : rows) {
+        const QJsonObject obj = QJsonDocument::fromJson(row.second.toUtf8()).object();
+        if (FaceContourMath::isGroupSmoothCurve(obj))
+            return qMakePair(row.first, row.second);
+    }
+    return qMakePair(-1, QString());
+}
+
+GroupContourMeta AppDb::getGroupContourMeta(const QString &custId, int groupId, const QString &dirType) const
+{
+    GroupContourMeta meta;
+    const auto pair = getGroupContourDrawInfo(custId, groupId, dirType);
+    if (pair.first < 0)
+        return meta;
+
+    const QJsonObject obj = QJsonDocument::fromJson(pair.second.toUtf8()).object();
+    meta.hasContour = true;
+    meta.source = obj.value(QStringLiteral("source")).toString();
+    // 旧字段迁移：autoMarkFailed=true 等价于 source=template
+    if (meta.source.isEmpty() && obj.value(QStringLiteral("autoMarkFailed")).toBool(false))
+        meta.source = QStringLiteral("template");
+    meta.coordSpace = obj.value(QStringLiteral("coordSpace")).toString();
+    return meta;
+}
+
+bool AppDb::upsertGroupContourOnAnchor(const QString &custId, int groupId, const QString &dirType, const QString &jsonInfo)
+{
+    const int anchorIx = resolveAnchorIx(custId, groupId, dirType);
+    if (anchorIx < 0) {
+        m_lastError = QStringLiteral("anchor FacePhoto_IX not found");
+        return false;
+    }
+
+    const auto existing = getGroupContourDrawInfo(custId, groupId, dirType);
+    if (existing.first >= 0)
+        return updateDrawInfo(existing.first, jsonInfo);
+
+    return insertDrawInfo(anchorIx, jsonInfo) >= 0;
+}
+
+QString AppDb::anchorPhotoLocalPath(const QString &custId, int groupId, const QString &dirType) const
+{
+    FacePhoto anchor;
+    const int anchorIx = resolveAnchorIx(custId, groupId, dirType);
+    if (anchorIx < 0 || !findFacePhotoByIx(anchorIx, &anchor))
+        return QString();
+
+    const QString folder = QCoreApplication::applicationDirPath()
+            + SLASH + DIR_CUSTOMERS + SLASH + custId + SLASH
+            + QStringLiteral("%1").arg(groupId, 2, 10, QChar('0'));
+    return QDir(folder).filePath(anchor.Photo_Name);
+}
+
+bool AppDb::deleteGroup(const QString &custId, int groupId)
+{
+    if (custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return false;
+
+    if (!begin())
+        return false;
+
+    QVector<int> photoIxs;
+    {
+        QSqlQuery q(m_db);
+        q.prepare("SELECT IX FROM T_Customers_FacePhoto WHERE Cust_ID = ? AND Group_ID = ?");
+        q.addBindValue(custId);
+        q.addBindValue(groupId);
+        if (!q.exec()) {
+            rollback();
+            m_lastError = q.lastError().text();
+            return false;
+        }
+        while (q.next())
+            photoIxs.append(q.value(0).toInt());
+    }
+
+    for (int ix : photoIxs) {
+        QSqlQuery q(m_db);
+        q.prepare("DELETE FROM T_FacePhoto_DrawInfo WHERE FacePhoto_IX = ?");
+        q.addBindValue(ix);
+        if (!q.exec()) {
+            rollback();
+            m_lastError = q.lastError().text();
+            return false;
+        }
+        q.prepare("DELETE FROM T_FacePhoto_AnalyseInfo WHERE FacePhoto_IX = ?");
+        q.addBindValue(ix);
+        if (!q.exec()) {
+            rollback();
+            m_lastError = q.lastError().text();
+            return false;
+        }
+    }
+
+    {
+        QSqlQuery q(m_db);
+        q.prepare("DELETE FROM T_Customers_FacePhoto WHERE Cust_ID = ? AND Group_ID = ?");
+        q.addBindValue(custId);
+        q.addBindValue(groupId);
+        if (!q.exec()) {
+            rollback();
+            m_lastError = q.lastError().text();
+            return false;
+        }
+    }
+
+    {
+        QSqlQuery q(m_db);
+        q.prepare("DELETE FROM T_Report_Main WHERE Cust_ID = ? AND Group_ID = ?");
+        q.addBindValue(custId);
+        q.addBindValue(groupId);
+        q.exec();
+    }
+
+    if (!commit()) {
+        rollback();
+        return false;
+    }
+
+    const QString folder = QCoreApplication::applicationDirPath()
+            + SLASH + DIR_CUSTOMERS + SLASH + custId + SLASH
+            + QStringLiteral("%1").arg(groupId, 2, 10, QChar('0'));
+    QDir dir(folder);
+    if (dir.exists())
+        dir.removeRecursively();
+
+    m_lastError.clear();
+    return true;
 }
 
 QString AppDb::getTemplateInfo(const QString &dirType)

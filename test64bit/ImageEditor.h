@@ -43,6 +43,7 @@ public:
     Q_INVOKABLE void setAllItemsEditMode(bool enabled);
 
     Q_INVOKABLE void init(const int IX, const QString &dirType);
+    Q_INVOKABLE void reloadDrawings();
     Q_INVOKABLE void clear();
     Q_INVOKABLE void addLine(qreal x1, qreal y1, qreal x2, qreal y2);
     // 在 ImageEditor 类中添加
@@ -74,15 +75,22 @@ signals:
 
 private:
     void loadFromDb(int facePhotoIx, const QString &dirType);
+    bool loadGroupContourFromAnchor(const QString &custId, int groupId, const QString &dirType);
+    bool syncGroupContourToAnchor();
     std::unique_ptr<BaseDrawingItem> createItemFromJson(const QJsonObject &obj, bool scaleFromStandard);
     SmoothCurveItem* smoothCurveAt(int internalIdx);
     static QString smoothHitTypeName(SmoothCurveItem::SmoothEditHitType type);
+    QPointF mapViewToImage(qreal x, qreal y) const;
+    qreal imageToViewScaleX() const;
+    qreal imageToViewScaleY() const;
 
     QImage m_image;
     QString m_sourcePath;
     QColor m_penColor;
     int m_penWidth;
     int m_facePhotoIx = -1;
+    QString m_dirType;
+    int m_groupContourInternalIdx = -1;
     bool m_shapesVisible = true;
     std::vector<std::unique_ptr<BaseDrawingItem>> m_items; // 存储所有画上去的对象
 

@@ -4,6 +4,14 @@
 #include <QVariantMap>
 #include <QVector>
 
+struct GroupContourMeta {
+    bool hasContour = false;
+    /// auto | manual | template（template = 自动定位失败后的默认轮廓，不再重试）
+    QString source;
+    /// 仅读旧数据：logical768 等；新数据无此字段，点坐标即为锚点图像素
+    QString coordSpace;
+};
+
 #define ISO          "iso"
 #define EXPOSURETIME "exposuretime"
 #define APERTURE     "aperture"
@@ -131,6 +139,16 @@ public:
     // 返回值：QList<QPair<主键IX, JSON字符串>>
     QList<QPair<int, QString>> getAllDrawInfos(int facePhotoIx);
     QString getTemplateInfo(const QString &dirType);
+
+    bool findFacePhotoByIx(int facePhotoIx, FacePhoto *out) const;
+  /// Group face contour anchor: RGB + Photo_ID=1 + L/R. See design_doc/group_contour_storage.md
+    int resolveAnchorIx(const QString &custId, int groupId, const QString &dirType) const;
+    bool resolveFacePhotoContext(int facePhotoIx, QString *custId, int *groupId, QString *dirType) const;
+    QPair<int, QString> getGroupContourDrawInfo(const QString &custId, int groupId, const QString &dirType) const;
+    GroupContourMeta getGroupContourMeta(const QString &custId, int groupId, const QString &dirType) const;
+    bool upsertGroupContourOnAnchor(const QString &custId, int groupId, const QString &dirType, const QString &jsonInfo);
+    QString anchorPhotoLocalPath(const QString &custId, int groupId, const QString &dirType) const;
+    bool deleteGroup(const QString &custId, int groupId);
 
     // 预录：T_Report_Template 建议文字（Report_Type 1-8,100；Report_LEVEL 10=差,20=中,30=好）
     QString getReportTemplateMemo(int reportType, int reportLevel);

@@ -4,7 +4,7 @@ project(test64bit VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D PrintSupport)
+find_package(Qt6 REQUIRED COMPONENTS Core Sql Gui Quick Charts Quick3D PrintSupport Concurrent)
 
 qt_standard_project_setup()
 
@@ -39,6 +39,8 @@ qt_add_executable(apptest64bit
     CustomerReportManager.h CustomerReportManager.cpp
     BaseDrawingItem.h BaseDrawingItem.cpp
     ImageEditor.h ImageEditor.cpp
+    FaceContourMath.h FaceContourMath.cpp
+    FaceAnalyseManager.h FaceAnalyseManager.cpp
     MM3DManager.h MM3DManager.cpp
     MMLogger.h MMLogger.cpp
     PrintHelper.h PrintHelper.cpp
@@ -104,8 +106,14 @@ if(MSVC)
     target_compile_options(apptest64bit PRIVATE /wd4828)
 endif()
 
-# --- 1. 指定头文件搜索路径 (为了能找到 dllProc.h) ---
-target_include_directories(apptest64bit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/libs")
+# --- 1. 指定头文件搜索路径 ---
+set(LIBFA64_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../LibFA64")
+set(LIBFA64_LIB_RELEASE "${LIBFA64_ROOT}/build/lib/Release/LibFA64.lib")
+set(LIBFA64_LIB_DEBUG "${LIBFA64_ROOT}/build/Desktop_Qt_6_10_2_MSVC2022_64bit-Debug/lib/LibFA64.lib")
+target_include_directories(apptest64bit PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs"
+    "${LIBFA64_ROOT}/include"
+)
 
 # --- リンク設定 ---
 # 実行ファイルに両方のモジュールターゲットと必要なQtライブラリをリンク
@@ -132,7 +140,9 @@ target_link_libraries(apptest64bit
     Qt6::Charts
     Qt6::Quick3D
     Qt6::PrintSupport
+    Qt6::Concurrent
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/dllProc.lib"
+    "${LIBFA64_LIB_RELEASE}"
 )
 
 # target_link_libraries(apptest64bit_module
@@ -155,5 +165,10 @@ add_custom_command(TARGET apptest64bit POST_BUILD
 add_custom_command(TARGET apptest64bit POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/libs/opencv_world343.dll"
+        $<TARGET_FILE_DIR:apptest64bit>
+)
+add_custom_command(TARGET apptest64bit POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${LIBFA64_ROOT}/build/bin/Release/LibFA64.dll"
         $<TARGET_FILE_DIR:apptest64bit>
 )

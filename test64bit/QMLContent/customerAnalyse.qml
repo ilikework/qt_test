@@ -27,6 +27,10 @@ Item {
     property var mainphotoes:  analyseModule.thumbphotoes
     property var subphotoes:[]
     property int currentGroupID: 0
+    /// 用户选择「做分析」后进入；控制自动定位与精修引导
+    property bool analyseWorkflowActive: false
+    /// 主画面右侧「分析」按钮触发（自动定位后不弹精修选择，直接占位分析）
+    property bool analyseFromMainButton: false
     /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
     property int subListSelectedIndex: 0
 
@@ -49,11 +53,90 @@ Item {
         {
             // Let the list render first, then load the main editing area in the next frame
             Qt.callLater(() => {
-                leftMain.source = subphotoes[0].photoL; // Assuming photoL is a URL or path
                 leftMain.init(subphotoes[0].IXL, "_L");
-                rightMain.source = subphotoes[0].photoR; // Assuming photoR is a URL or path
+                leftMain.source = subphotoes[0].photoL;
                 rightMain.init(subphotoes[0].IXR, "_R");
+                rightMain.source = subphotoes[0].photoR;
             })
+        }
+    }
+
+    function selectGroupById(groupId) {
+        for (var i = 0; i < mainphotoes.length; i++) {
+            if (mainphotoes[i].GROUPID === groupId) {
+                curIndex = i
+                if (thumbBar.thumbPageSize > 0)
+                    thumbBar.thumbCurrentPage = Math.floor(i / thumbBar.thumbPageSize) + 1
+                loadsubphotoes(i)
+                return true
+            }
+        }
+        if (mainphotoes.length > 0) {
+            curIndex = mainphotoes.length - 1
+            loadsubphotoes(curIndex)
+        }
+        return false
+    }
+
+    function showContourAndAskRefine(message) {
+        leftMain.reloadDrawings()
+        rightMain.reloadDrawings()
+        leftMain.enterShowContour()
+        rightMain.enterShowContour()
+        postAutoMarkDialog.boxMessage = message || "请选择下一步："
+        postAutoMarkDialog.open()
+    }
+
+    function beginAnalyseWorkflow() {
+        if (!analyseWorkflowActive || currentGroupID <= 0)
+            return
+        analyseFromMainButton = false
+        if (!faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)) {
+            showContourAndAskRefine("左右脸轮廓已就绪，请选择下一步：")
+            return
+        }
+        autoMarkDialog.open()
+    }
+
+    function runAnalysePlaceholder() {
+        leftMain.reloadDrawings()
+        rightMain.reloadDrawings()
+        leftMain.enterShowContour()
+        rightMain.enterShowContour()
+        statusMsgBox.boxTitle = "提示"
+        statusMsgBox.boxMessage = "图片分析功能开发中，轮廓已就绪。"
+        statusMsgBox.open()
+        analyseWorkflowActive = false
+        analyseFromMainButton = false
+    }
+
+    /// 主画面右侧「分析」：无轮廓则自动定位，完成后进入占位分析
+    function startGroupAnalyse() {
+        if (!faceAnalyseManager) {
+            console.warn("faceAnalyseManager not available")
+            return
+        }
+        if (currentGroupID <= 0 || subphotoes.length === 0) {
+            statusMsgBox.boxTitle = "提示"
+            statusMsgBox.boxMessage = "请先选择要分析的照片组。"
+            statusMsgBox.open()
+            return
+        }
+        if (faceAnalyseManager.busy)
+            return
+
+        analyseFromMainButton = true
+        analyseWorkflowActive = true
+
+        if (faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)) {
+            if (!faceAnalyseManager.ensureDetector()) {
+                analyseWorkflowActive = false
+                analyseFromMainButton = false
+                return
+            }
+            faceAnalyseManager.autoMarkGroup(customerID, currentGroupID)
+        } else {
+            showContourAndAskRefine("左右脸轮廓已就绪，请选择下一步：")
         }
     }
 
@@ -228,7 +311,6 @@ Item {
                         {
                             viewStack.currentIndex = 0
                             btn3D.checked = false
-                            btn9face.checked = false
                             btnCamera.checked = false
                         }
                     }
@@ -240,7 +322,6 @@ Item {
                         {
                             viewStack.currentIndex = 1
                             btnMain.checked = false
-                            btn9face.checked = false
                             btnCamera.checked = false
                         }
                     }
@@ -360,14 +441,29 @@ Item {
                     radius: 8
                     border.color: "#333"
 
-                    // ListView 部分保持不变...
-                    ListView {
-                        id: subListView
+                    ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 5
-                        model: subphotoes
-                        clip: true
-                        spacing: 10
+                        spacing: 8
+
+                        TextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            preferredFontPixelSize: 16
+                            preferredRadius: 8
+                            text: "分析"
+                            enabled: currentGroupID > 0 && subphotoes.length > 0
+                                    && !(faceAnalyseManager && faceAnalyseManager.busy)
+                            onClicked: customerDetail.startGroupAnalyse()
+                        }
+
+                        ListView {
+                            id: subListView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            model: subphotoes
+                            clip: true
+                            spacing: 10
 
                         delegate: Item {
                             width: ListView.view.width
@@ -420,14 +516,14 @@ Item {
 
                                     onClicked: {
                                         customerDetail.subListSelectedIndex = index
-                                        // 强制触发 UI 刷新（如果模型没自动发信号）
+                                        leftMain.init(modelData.IXL, "_L")
                                         leftMain.source = modelData.photoL
-                                        leftMain.init(modelData.IXL,"_L")
+                                        rightMain.init(modelData.IXR, "_R")
                                         rightMain.source = modelData.photoR
-                                        rightMain.init(modelData.IXR,"_R")
                                     }
                                 } // MouseArea
                             }
+                        }
                         }
                     }
                 }
@@ -452,13 +548,91 @@ Item {
                     btnMain.checked = true
                     btnCamera.checked = false
                 }
-                onPhotoSaved: {
-                    // 照片保存成功，重新加载缩略图
+                onPhotoSaved: function(groupId, startAnalyse) {
                     analyseModule.init(customerID)
-                    curIndex = 0;
-                    loadsubphotoes(curIndex)
+                    selectGroupById(groupId)
+                    analyseWorkflowActive = startAnalyse
+                    if (startAnalyse)
+                        Qt.callLater(beginAnalyseWorkflow)
                 }
             }
+        }
+    }
+
+    Connections {
+        target: faceAnalyseManager
+        function onAutoMarkFinished(success, message) {
+            if (success) {
+                showContourAndAskRefine(message)
+            } else {
+                statusMsgBox.boxTitle = "定位失败"
+                statusMsgBox.boxMessage = message
+                statusMsgBox.open()
+                analyseWorkflowActive = false
+                analyseFromMainButton = false
+            }
+        }
+        function onErrorMessage(msg) {
+            statusMsgBox.boxTitle = "错误"
+            statusMsgBox.boxMessage = msg
+            statusMsgBox.open()
+        }
+    }
+
+    ModalChoicePanel {
+        id: autoMarkDialog
+        anchors.fill: parent
+        boxTitle: "自动定位"
+        boxMessage: "是否现在对左右脸做自动轮廓定位？"
+        choices: [
+            { id: "start", text: "开始" },
+            { id: "later", text: "稍后" }
+        ]
+        onChoiceMade: function(choiceId) {
+            if (choiceId === "start") {
+                if (faceAnalyseManager.ensureDetector())
+                    faceAnalyseManager.autoMarkGroup(customerID, currentGroupID)
+            } else {
+                analyseWorkflowActive = false
+            }
+        }
+    }
+
+    ModalChoicePanel {
+        id: postAutoMarkDialog
+        anchors.fill: parent
+        boxTitle: "轮廓定位结果"
+        boxMessage: "请选择下一步："
+        choices: [
+            { id: "analyse", text: "继续分析" },
+            { id: "refine", text: "手动精修轮廓" }
+        ]
+        onChoiceMade: function(choiceId) {
+            if (choiceId === "refine") {
+                leftMain.enterEditContour()
+                rightMain.enterEditContour()
+            } else {
+                runAnalysePlaceholder()
+            }
+        }
+    }
+
+    MessageBox {
+        id: statusMsgBox
+    }
+
+    /// 定位进行中提示（InputFunnelBlocker 在 App 层拦截点击）
+    Rectangle {
+        anchors.fill: parent
+        visible: faceAnalyseManager && faceAnalyseManager.busy
+        color: "#66000000"
+        z: 1500
+        Text {
+            anchors.centerIn: parent
+            text: "正在自动定位轮廓…"
+            color: "#ffffff"
+            font.pixelSize: 22
+            font.bold: true
         }
     }
 }

@@ -13,6 +13,7 @@
 #include "PrintHelper.h"
 #include "ImageEditor.h"
 #include "MM3DManager.h"
+#include "FaceAnalyseManager.h"
 #include <QCoreApplication> // For applicationDirPath
 
 int main(int argc, char *argv[])
@@ -57,6 +58,9 @@ int main(int argc, char *argv[])
 
     MM3DManager mm3dManager;
     engine.rootContext()->setContextProperty("mm3dManager", &mm3dManager);
+
+    FaceAnalyseManager faceAnalyseManager;
+    engine.rootContext()->setContextProperty("faceAnalyseManager", &faceAnalyseManager);
 
     // Register custom QML types
     qmlRegisterType<ImageEditor>("com.magicmirror.components", 1, 0, "ImageEditor");

@@ -19,7 +19,10 @@ Item   {
     }
 
     signal requestShowMain()   // 请求返回主画面
-    signal photoSaved()      // 照片保存成功信号
+    /// groupId: 刚保存的组号；startAnalyse: 是否进入分析工作流
+    signal photoSaved(int groupId, bool startAnalyse)
+
+    property int pendingSavedGroupId: 0
 
     // 进入拍摄页时：若已连接相机则直接进入预录（开预览）；未连接则显示“请连接相机”，用户连上后点「预览」即可
     onIsCameraViewActiveChanged: {
@@ -311,8 +314,8 @@ Item   {
                             text: "保存"
                             onClicked: {
                                 camClient.save()
-                                cameraRoot.photoSaved()
-                                cameraRoot.requestShowMain()
+                                cameraRoot.pendingSavedGroupId = camClient.lastSavedGroupId
+                                postSaveDialog.open()
                             }
                         }
                     }
@@ -483,6 +486,34 @@ Item   {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    ModalChoicePanel {
+        id: postSaveDialog
+        anchors.fill: parent
+        boxTitle: "保存成功"
+        boxMessage: "请选择下一步操作："
+        choices: [
+            { id: "analyse", text: "做分析" },
+            { id: "retake", text: "重新拍摄" },
+            { id: "exit", text: "保存后退出" }
+        ]
+        onChoiceMade: function(choiceId) {
+            var gid = cameraRoot.pendingSavedGroupId
+            if (choiceId === "analyse") {
+                cameraRoot.photoSaved(gid, true)
+                cameraRoot.requestShowMain()
+            } else if (choiceId === "retake") {
+                if (gid > 0)
+                    faceAnalyseManager.deleteCustomerGroup(cameraRoot.customerID, gid)
+                cameraRoot.pendingSavedGroupId = 0
+                if (camClient.connected)
+                    camClient.startPreview()
+            } else if (choiceId === "exit") {
+                cameraRoot.photoSaved(gid, false)
+                cameraRoot.requestShowMain()
             }
         }
     }
