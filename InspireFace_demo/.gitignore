@@ -1,10 +1,12 @@
 third_party/
-models/
 cpp/build/
 demo_output/
 *.zip
-*.onnx
 *.dll
 *.lib
 *.pdb
 *.exe
+
+# Keep only the two demo models in git (via LFS)
+models/*.onnx
+!models/buffalo_l/*.onnx
