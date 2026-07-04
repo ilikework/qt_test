@@ -127,6 +127,13 @@ public:
     bool addPhoto(FacePhoto &photo);
     bool findPhotoesbyCustomID(const QString &CustomID, QVector<FacePhoto> &photoList);
     bool findPhotoesbyCustomIDandGropuID(const QString &CustomID, const int nGroupID, QVector<FacePhoto> &photoList);
+    bool findCustomerByCustId(const QString &custId, Customer *out) const;
+    bool findPhotoInGroup(const QString &custId, int groupId, const QString &dirType,
+                          const QString &capType, int photoId, FacePhoto *out) const;
+    QString groupFolderPath(const QString &custId, int groupId) const;
+    QString photoFilePath(const FacePhoto &photo) const;
+    bool upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent);
+    bool deleteGroupAnalyseInfo(const QString &custId, int groupId);
 
     // 插入单条绘图信息，并返回该条记录的 IX (主键)
     int insertDrawInfo(int facePhotoIx, const QString& jsonInfo);

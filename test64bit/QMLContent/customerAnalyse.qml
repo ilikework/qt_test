@@ -29,8 +29,16 @@ Item {
     property int currentGroupID: 0
     /// 用户选择「做分析」后进入；控制自动定位与精修引导
     property bool analyseWorkflowActive: false
-    /// 主画面右侧「分析」按钮触发（自动定位后不弹精修选择，直接占位分析）
-    property bool analyseFromMainButton: false
+    /// 切换组 / 定位完成后刷新，供 groupRegionReady 绑定
+    property int regionReadyRevision: 0
+    readonly property bool groupRegionReady: {
+        var _ = regionReadyRevision
+        return currentGroupID > 0 && faceAnalyseManager
+                && !faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)
+    }
+    /// 自动定位完成后逐侧确认：left → right
+    property string autoMarkSideStep: ""
+    property bool skinAnalyseRunning: false
     /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
     property int subListSelectedIndex: 0
 
@@ -49,6 +57,7 @@ Item {
         currentGroupID = mainphotoes[index].GROUPID
         subphotoes = analyseModule.loadSub(mainphotoes[index].GROUPID)
         subListSelectedIndex = subphotoes.length > 0 ? 0 : -1
+        refreshRegionReadyState()
         if(subphotoes.length>0)
         {
             // Let the list render first, then load the main editing area in the next frame
@@ -87,57 +96,56 @@ Item {
         postAutoMarkDialog.open()
     }
 
+    function refreshRegionReadyState() {
+        regionReadyRevision++
+    }
+
     function beginAnalyseWorkflow() {
         if (!analyseWorkflowActive || currentGroupID <= 0)
             return
-        analyseFromMainButton = false
         if (!faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)) {
+            refreshRegionReadyState()
             showContourAndAskRefine("左右脸轮廓已就绪，请选择下一步：")
             return
         }
         autoMarkDialog.open()
     }
 
-    function runAnalysePlaceholder() {
-        leftMain.reloadDrawings()
-        rightMain.reloadDrawings()
-        leftMain.enterShowContour()
-        rightMain.enterShowContour()
-        statusMsgBox.boxTitle = "提示"
-        statusMsgBox.boxMessage = "图片分析功能开发中，轮廓已就绪。"
-        statusMsgBox.open()
-        analyseWorkflowActive = false
-        analyseFromMainButton = false
+    /// 主画面右侧「皮肤分析」
+    function startSkinAnalyse() {
+        if (!groupRegionReady) {
+            statusMsgBox.boxTitle = "提示"
+            statusMsgBox.boxMessage = "请先完成自动区域定位。"
+            statusMsgBox.open()
+            return
+        }
+        if (!faceAnalyseManager || faceAnalyseManager.busy)
+            return
+        if (!faceAnalyseManager.ensureDetector()) {
+            skinAnalyseRunning = false
+            return
+        }
+        skinAnalyseRunning = true
+        faceAnalyseManager.analyseGroup(customerID, currentGroupID)
     }
 
-    /// 主画面右侧「分析」：无轮廓则自动定位，完成后进入占位分析
-    function startGroupAnalyse() {
+    /// 主画面右侧「自动区域定位」：LibFA64 左右脸轮廓定位（可重复执行）
+    function startAutoRegionMark() {
         if (!faceAnalyseManager) {
             console.warn("faceAnalyseManager not available")
             return
         }
         if (currentGroupID <= 0 || subphotoes.length === 0) {
             statusMsgBox.boxTitle = "提示"
-            statusMsgBox.boxMessage = "请先选择要分析的照片组。"
+            statusMsgBox.boxMessage = "请先选择要定位的照片组。"
             statusMsgBox.open()
             return
         }
         if (faceAnalyseManager.busy)
             return
-
-        analyseFromMainButton = true
-        analyseWorkflowActive = true
-
-        if (faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)) {
-            if (!faceAnalyseManager.ensureDetector()) {
-                analyseWorkflowActive = false
-                analyseFromMainButton = false
-                return
-            }
-            faceAnalyseManager.autoMarkGroup(customerID, currentGroupID)
-        } else {
-            showContourAndAskRefine("左右脸轮廓已就绪，请选择下一步：")
-        }
+        if (!faceAnalyseManager.ensureDetector())
+            return
+        faceAnalyseManager.autoMarkGroup(customerID, currentGroupID, false)
     }
 
 
@@ -451,10 +459,21 @@ Item {
                             Layout.preferredHeight: 36
                             preferredFontPixelSize: 16
                             preferredRadius: 8
-                            text: "分析"
+                            text: "自动区域定位"
                             enabled: currentGroupID > 0 && subphotoes.length > 0
                                     && !(faceAnalyseManager && faceAnalyseManager.busy)
-                            onClicked: customerDetail.startGroupAnalyse()
+                            onClicked: customerDetail.startAutoRegionMark()
+                        }
+
+                        TextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            preferredFontPixelSize: 16
+                            preferredRadius: 8
+                            text: "皮肤分析"
+                            enabled: customerDetail.groupRegionReady && subphotoes.length > 0
+                                    && !(faceAnalyseManager && faceAnalyseManager.busy)
+                            onClicked: customerDetail.startSkinAnalyse()
                         }
 
                         ListView {
@@ -561,20 +580,36 @@ Item {
 
     Connections {
         target: faceAnalyseManager
-        function onAutoMarkFinished(success, message) {
+        function onAutoMarkFinished(success, message, needsResultChoice) {
             if (success) {
-                showContourAndAskRefine(message)
+                refreshRegionReadyState()
+                leftMain.reloadDrawings()
+                rightMain.reloadDrawings()
+                leftMain.enterShowContour()
+                rightMain.enterShowContour()
+                if (analyseWorkflowActive) {
+                    showContourAndAskRefine(message)
+                } else if (needsResultChoice) {
+                    autoMarkSideStep = "left"
+                    autoMarkResultDialog.openForSide("left")
+                }
             } else {
                 statusMsgBox.boxTitle = "定位失败"
                 statusMsgBox.boxMessage = message
                 statusMsgBox.open()
                 analyseWorkflowActive = false
-                analyseFromMainButton = false
             }
         }
         function onErrorMessage(msg) {
             statusMsgBox.boxTitle = "错误"
             statusMsgBox.boxMessage = msg
+            statusMsgBox.open()
+        }
+        function onGroupAnalyseFinished(success, message) {
+            skinAnalyseRunning = false
+            analyseWorkflowActive = false
+            statusMsgBox.boxTitle = success ? "分析完成" : "分析失败"
+            statusMsgBox.boxMessage = message
             statusMsgBox.open()
         }
     }
@@ -591,9 +626,63 @@ Item {
         onChoiceMade: function(choiceId) {
             if (choiceId === "start") {
                 if (faceAnalyseManager.ensureDetector())
-                    faceAnalyseManager.autoMarkGroup(customerID, currentGroupID)
+                    faceAnalyseManager.autoMarkGroup(customerID, currentGroupID, true)
             } else {
                 analyseWorkflowActive = false
+            }
+        }
+    }
+
+    ModalChoicePanel {
+        id: autoMarkResultDialog
+        anchors.fill: parent
+        boxTitle: "定位结果"
+        boxMessage: ""
+        property var resultChoices: [
+            { id: "keep", text: "保留新定位结果" },
+            { id: "revert", text: "使用原定位结果" }
+        ]
+        choices: resultChoices
+        function openForSide(side) {
+            const isLeft = side === "left"
+            const succeeded = faceAnalyseManager.pendingAutoMarkSideSucceeded(isLeft)
+            const sideSummary = faceAnalyseManager.pendingAutoMarkSideSummary(isLeft)
+            boxTitle = isLeft ? "左脸定位结果" : "右脸定位结果"
+            if (succeeded) {
+                boxMessage = sideSummary + "\n请确认是否保留本次自动定位结果。"
+                resultChoices = [
+                    { id: "keep", text: "保留新定位结果" },
+                    { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
+                ]
+            } else {
+                boxMessage = sideSummary + "\n请" + faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) + "。"
+                resultChoices = [
+                    { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
+                ]
+            }
+            open()
+        }
+        onChoiceMade: function(choiceId) {
+            const isLeft = autoMarkSideStep === "left"
+            const succeeded = faceAnalyseManager.pendingAutoMarkSideSucceeded(isLeft)
+            const keepNew = succeeded && choiceId === "keep"
+            if (!faceAnalyseManager.confirmAutoMarkSideChoice(isLeft, keepNew)) {
+                statusMsgBox.boxTitle = "提示"
+                statusMsgBox.boxMessage = "恢复原定位或模板失败，请重试。"
+                statusMsgBox.open()
+            }
+            if (isLeft) {
+                leftMain.reloadDrawings()
+                autoMarkSideStep = "right"
+                openForSide("right")
+            } else {
+                faceAnalyseManager.finalizeAutoMarkChoice()
+                autoMarkSideStep = ""
+                leftMain.reloadDrawings()
+                rightMain.reloadDrawings()
+                leftMain.enterShowContour()
+                rightMain.enterShowContour()
+                refreshRegionReadyState()
             }
         }
     }
@@ -604,7 +693,7 @@ Item {
         boxTitle: "轮廓定位结果"
         boxMessage: "请选择下一步："
         choices: [
-            { id: "analyse", text: "继续分析" },
+            { id: "analyse", text: "皮肤分析" },
             { id: "refine", text: "手动精修轮廓" }
         ]
         onChoiceMade: function(choiceId) {
@@ -612,7 +701,7 @@ Item {
                 leftMain.enterEditContour()
                 rightMain.enterEditContour()
             } else {
-                runAnalysePlaceholder()
+                startSkinAnalyse()
             }
         }
     }
@@ -629,7 +718,7 @@ Item {
         z: 1500
         Text {
             anchors.centerIn: parent
-            text: "正在自动定位轮廓…"
+            text: customerDetail.skinAnalyseRunning ? "正在皮肤分析…" : "正在自动定位轮廓…"
             color: "#ffffff"
             font.pixelSize: 22
             font.bold: true

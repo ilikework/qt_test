@@ -714,6 +714,154 @@ bool AppDb::findPhotoesbyCustomIDandGropuID(const QString &CustomID, const int n
     return true;
 }
 
+bool AppDb::findCustomerByCustId(const QString &custId, Customer *out) const
+{
+    if (!out || custId.isEmpty() || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT IX, Cust_ID, Cust_Name, Cust_Gender, Cust_Birthday, Cust_EditTime,
+               Cust_Phone, Cust_Addr, Cust_EMail, Cust_Photo, Cust_Des
+        FROM T_Customers WHERE Cust_ID = ? LIMIT 1
+    )");
+    q.addBindValue(custId);
+    if (!q.exec() || !q.next())
+        return false;
+
+    out->IX = q.value(0).toInt();
+    out->Cust_ID = q.value(1).toString();
+    out->Cust_Name = q.value(2).toString();
+    out->Cust_Gender = q.value(3).toInt();
+    out->Cust_Birthday = q.value(4).toString();
+    out->Cust_EditTime = q.value(5).toString();
+    out->Cust_Phone = q.value(6).toString();
+    out->Cust_Addr = q.value(7).toString();
+    out->Cust_EMail = q.value(8).toString();
+    out->Cust_Photo = q.value(9).toString();
+    out->Cust_Des = q.value(10).toString();
+    return true;
+}
+
+bool AppDb::findPhotoInGroup(const QString &custId, int groupId, const QString &dirType,
+                             const QString &capType, int photoId, FacePhoto *out) const
+{
+    if (!out || custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT IX, Cust_ID, Photo_CapType, Photo_DirType, Group_ID, Photo_ID, Photo_Name
+        FROM T_Customers_FacePhoto
+        WHERE Cust_ID = ? AND Group_ID = ? AND Photo_DirType = ?
+          AND Photo_CapType = ? AND Photo_ID = ?
+        LIMIT 1
+    )");
+    q.addBindValue(custId);
+    q.addBindValue(groupId);
+    q.addBindValue(dirType);
+    q.addBindValue(capType);
+    q.addBindValue(photoId);
+    if (!q.exec() || !q.next())
+        return false;
+
+    out->IX = q.value(0).toInt();
+    out->Cust_ID = q.value(1).toString();
+    out->Photo_CapType = q.value(2).toString();
+    out->Photo_DirType = q.value(3).toString();
+    out->Group_ID = q.value(4).toInt();
+    out->Photo_ID = q.value(5).toInt();
+    out->Photo_Name = q.value(6).toString();
+    return true;
+}
+
+QString AppDb::groupFolderPath(const QString &custId, int groupId) const
+{
+    if (custId.isEmpty() || groupId <= 0)
+        return QString();
+    return QCoreApplication::applicationDirPath()
+            + SLASH + DIR_CUSTOMERS + SLASH + custId + SLASH
+            + QStringLiteral("%1").arg(groupId, 2, 10, QChar('0'));
+}
+
+QString AppDb::photoFilePath(const FacePhoto &photo) const
+{
+    const QString folder = groupFolderPath(photo.Cust_ID, photo.Group_ID);
+    if (folder.isEmpty() || photo.Photo_Name.isEmpty())
+        return QString();
+    return QDir(folder).filePath(photo.Photo_Name);
+}
+
+bool AppDb::upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent)
+{
+    if (facePhotoIx < 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery sel(m_db);
+    sel.prepare(R"(
+        SELECT IX FROM T_FacePhoto_AnalyseInfo
+        WHERE FacePhoto_IX = ? AND Analyse_Function = ?
+        LIMIT 1
+    )");
+    sel.addBindValue(facePhotoIx);
+    sel.addBindValue(analyseFunction);
+    if (!sel.exec()) {
+        m_lastError = sel.lastError().text();
+        return false;
+    }
+
+    QSqlQuery q(m_db);
+    if (sel.next()) {
+        const int ix = sel.value(0).toInt();
+        q.prepare(R"(
+            UPDATE T_FacePhoto_AnalyseInfo
+            SET Analyse_Result = ?, Analyse_Precent = ?, EditTime = DATETIME('now', 'localtime')
+            WHERE IX = ?
+        )");
+        q.addBindValue(analyseResult);
+        q.addBindValue(analysePercent);
+        q.addBindValue(ix);
+    } else {
+        q.prepare(R"(
+            INSERT INTO T_FacePhoto_AnalyseInfo
+                (FacePhoto_IX, Analyse_Function, Analyse_Result, Analyse_Precent, EditTime)
+            VALUES (?, ?, ?, ?, DATETIME('now', 'localtime'))
+        )");
+        q.addBindValue(facePhotoIx);
+        q.addBindValue(analyseFunction);
+        q.addBindValue(analyseResult);
+        q.addBindValue(analysePercent);
+    }
+
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool AppDb::deleteGroupAnalyseInfo(const QString &custId, int groupId)
+{
+    if (custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        DELETE FROM T_FacePhoto_AnalyseInfo
+        WHERE FacePhoto_IX IN (
+            SELECT IX FROM T_Customers_FacePhoto
+            WHERE Cust_ID = ? AND Group_ID = ?
+        )
+    )");
+    q.addBindValue(custId);
+    q.addBindValue(groupId);
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
 int AppDb::insertDrawInfo(int facePhotoIx, const QString& jsonInfo) {
     if (!m_db.isOpen()) {
         m_lastError = "DB not open";
