@@ -145,6 +145,119 @@ T_ANA_RESULT analyseEvennessByFile(...);  // nMin/nMax 传入但不参与算法
 
 ---
 
+## 皮肤分析与照片对应关系
+
+本节整理原 MagicFace / 新版 `test64bit` 的业务约定，便于集成时选对 **照片**、**轮廓 API** 与 **分析 API**。
+
+### 一组拍摄包含哪些照片
+
+每一组（`Cust_ID` + `Group_ID`）通常拍 **左、右各 8 张**，对应 8 种光源/通道（`Photo_ID` 1~8）：
+
+| Photo_ID | Photo_CapType | 含义 |
+|----------|---------------|------|
+| 1 | **RGB** | 自然光 / 白光 |
+| 2 | **UV** | 紫外（365nm；部分机型另有 405nm） |
+| 3 | **PL** | 偏振光（正偏振 +PL） |
+| 4 | **NPL** | 负偏振（-PL） |
+| 5 | **GRAY** | 灰度图 |
+| 6 | **RED** | 红色光谱图（常由 UV 等衍生） |
+| 7 | **BROWN** | 棕色光谱图 / 黑色素图（常由 UV 等衍生） |
+| 8 | **WHOLE** | 综合光谱图 |
+
+方向字段（`Photo_DirType`）：
+
+| 值 | 含义 |
+|----|------|
+| **L** / `_L` | 左脸颊位 |
+| **R** / `_R` | 右脸颊位 |
+| **M** | 正脸（老 MagicFace OCX 流程） |
+
+新版 Qt（`test64bit`）拍摄入库顺序见 `CameraClient::save()`：`RGB, UV, PL, NPL, GRAY, RED, BROWN, WHOLE` × 左/右。
+
+### 皮肤分析有哪几种
+
+MagicFace 统一分析类型（`DPolyLine.h` / `T_FacePhoto_AnalyseInfo.Analyse_Function`）：
+
+| 枚举（MagicFace） | 值 | 中文 | LibFA64 API |
+|-------------------|-----|------|-------------|
+| `M_SpotsType` | 1 | 色斑 | `analyseSpotsByFile` |
+| `M_PoresType` | 2 | 毛孔 | `analysePoresByFile` |
+| `M_EvennessType` | 3 | 均匀度（敏感度/粗糙度） | `analyseEvennessByFile` |
+| `M_WrinkleType` | 4 | 皱纹 | `analyseWrinkleByFile` |
+| `M_AcneType` | 5 | 痤疮 / 粉刺 | `analyseAcnesByFile` |
+| `M_MoistureTestType` | 21 | 水分 | 老 OCX 本地算法，**不在 LibFA64 五件套内** |
+
+LibFA 头文件 `source_type`（`setExtraInfo` 用，与光源类型对应）：
+
+| 常量 | 值 | 典型输入图 |
+|------|-----|-----------|
+| `SOURCE_RGB` | 0 | RGB |
+| `SOURCE_UV365` | 1 | UV |
+| `SOURCE_UV405` | 2 | UV405 |
+| `SOURCE_PL_POSITIVE` | 3 | PL |
+| `SOURCE_PL_NEGATIVE` | 4 | NPL |
+
+### 分析项 ↔ 输入照片（标准映射）
+
+来源：`test64bit/init_files/init.sql` 中 `T_FacePhoto_Map` / `T_Report_Template` 注释，与原 MagicFace 产品报告项一致。
+
+| 分析项 | 用哪张图 (CapType) | Photo_ID | LibFA64 API | Report_Type | 报告项 |
+|--------|-------------------|----------|-------------|-------------|--------|
+| **毛孔** | RGB | 1 | `analysePoresByFile` | 1 | RGB-Pore |
+| **痤疮** | UV | 2 | `analyseAcnesByFile` | 2 | UV-Acne |
+| **深层色斑** | PL | 3 | `analyseSpotsByFile` | 3 | PL-DeepSpots |
+| **表层色斑** | NPL | 4 | `analyseSpotsByFile` | 4 | NPL-SurfaceSpot |
+| **皱纹** | GRAY | 5 | `analyseWrinkleByFile` | 5 | GRAY-Wrinkle |
+| **均匀度** | RED | 6 | `analyseEvennessByFile` | 6 | RED-Sensitivity |
+| **棕色斑** | BROWN | 7 | `analyseSpotsByFile` | 7 | BROWN-DarkSpot |
+| **水分** | WHOLE | 8 | （非 LibFA64） | 8 | WHOLE-Moisture |
+
+说明：
+
+- **色斑**（`analyseSpotsByFile`）同一算法，输入图不同：PL / NPL / BROWN 各对应一种报告。
+- **RED / BROWN / WHOLE** 在老 OCX 中常为 **衍生图**（如 `Extract_Red_Skin`、`Extract_Melanin` 生成 `*_Analyse.bmp`），LibFA64 的 `generate*PictureByFile` 尚未实现，集成时需按产品流程先准备好分析用输入图。
+- 所有 `analyse*ByFile` 的 ROI（`pxl[]`）均为 **原图像素坐标**，且应使用 **同侧脸颊** 的 13 点轮廓（见下节）。
+
+### 轮廓定位 ↔ 照片
+
+| 照片 | 自动定位 API | 点数 | 用途 |
+|------|-------------|------|------|
+| 正脸 / `_M` | `autoMarkFaceByFile` | **36** | 整脸轮廓 |
+| 左脸 `_L` | `autoMarkLeftFaceByFile` | **13** | 左颊分析 ROI |
+| 右脸 `_R` | `autoMarkRightFaceByFile` | **13** | 右颊分析 ROI |
+
+**组级 ROI 约定（新版 test64bit）：**
+
+- 左脸 13 点：整组 **所有 L 侧 8 张图共用**，写在锚点 **RGB + Photo_ID=1 + L** 的 `DrawInfo` 上。
+- 右脸 13 点：整组 **所有 R 侧 8 张图共用**，写在锚点 **RGB + Photo_ID=1 + R** 的 `DrawInfo` 上。
+- 详细存储见 [`../test64bit/design_doc/group_contour_storage.md`](../test64bit/design_doc/group_contour_storage.md)。
+
+**常见误用：**
+
+- 侧脸 13 点 ROI 是 **脸颊分析区域**，不是整脸外框；需要框整脸时用 **正脸 36 点**（`autoMarkFaceByFile`）。
+- 请勿对 `01_L.jpg` 调 `autoMarkRightFaceByFile`，或对非 `_L`/`_R` 标准位姿的图硬套侧脸 API。
+- 文件名里的数字（如 `0000001_12.jpg`）与新版库表 **`Photo_ID`（1~8）** 不是同一套编号；以库中 `Photo_CapType` + `Photo_DirType` 为准。
+
+### 端到端流程（概念）
+
+```text
+拍摄一组
+  ├─ L: RGB, UV, PL, NPL, GRAY, RED, BROWN, WHOLE   (Photo_ID 1~8)
+  └─ R: 同上
+
+LibFA64 自动定位（锚点 RGB Photo_ID=1）
+  ├─ autoMarkLeftFaceByFile(左锚)  → 13 点 → 整组 L 图共用 ROI
+  └─ autoMarkRightFaceByFile(右锚) → 13 点 → 整组 R 图共用 ROI
+
+按 CapType 选图 + 转 full 像素 ROI + 调 analyse*ByFile
+  例：L 侧 UV  + 左脸 ROI → analyseAcnesByFile   → 痤疮
+  例：R 侧 RGB + 右脸 ROI → analysePoresByFile   → 毛孔
+```
+
+轮廓点若超出图像边界，LibFA64 会在输出前 **钳制到图片内**（logical 坐标最小为 1，最大为 767 等），避免负坐标传入分析。
+
+---
+
 ## 坐标系
 
 `autoMark*FaceByFile` 返回 **768 宽逻辑坐标**，Y 轴 **自下而上**（与 MagicFace 一致）。
@@ -212,12 +325,16 @@ LibFA64 内部还固定使用（与 MagicFace 默认 ini 一致）：
 
 ```text
 1. initFaceDetector()
-2. autoMark*FaceByFile()  →  T_CONTOUR（logical 坐标）
+2. 按 Photo_DirType 选 autoMark*FaceByFile()  →  T_CONTOUR（logical 坐标）
+   - 左/右 8 张分析图：用侧脸 13 点（锚点 RGB Photo_ID=1）
+   - 正脸：用 autoMarkFaceByFile（36 点）
 3. logical → full 像素  →  pxl[]
-4. setExtraInfo(age, gender, source_type)   // 可选
+4. 按 Photo_CapType 选 analyse*ByFile + setExtraInfo(..., source_type)
 5. analyse*ByFile(in, out, pxl, n, nMin, nMax)
 6. freeContour(&c)
 ```
+
+分析项与 CapType 对应表见上文 [皮肤分析与照片对应关系](#皮肤分析与照片对应关系)。
 
 ---
 

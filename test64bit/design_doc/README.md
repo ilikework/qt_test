@@ -5,6 +5,7 @@
 | [LibFA64_customerAnalyse_integration.md](./LibFA64_customerAnalyse_integration.md) | LibFA64 接入 `customerAnalyse`：拍摄后分析流程、自动/手动轮廓定位（确认版） |
 | [group_contour_storage.md](./group_contour_storage.md) | **组级轮廓**：锚点 + `DrawInfo`（不改表，`resolveAnchorIx`） |
 | [implementation_checklist.md](./implementation_checklist.md) | 实施任务清单（含 `deleteGroup`） |
+| [group_skin_analyse.md](./group_skin_analyse.md) | **组级皮肤分析**：LibFA64 14 项 + `T_FacePhoto_AnalyseInfo` |
 
 相关外部文档：
 

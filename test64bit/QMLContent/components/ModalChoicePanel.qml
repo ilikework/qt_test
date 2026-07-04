@@ -75,8 +75,9 @@ Item {
                         implicitHeight: 36
                         text: modelData.text
                         onClicked: {
-                            root.choiceMade(modelData.id)
+                            const choiceId = modelData.id
                             root.close()
+                            root.choiceMade(choiceId)
                         }
                     }
                 }

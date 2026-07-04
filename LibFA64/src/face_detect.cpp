@@ -453,6 +453,26 @@ static bool landmarksLookPlausible(const dlib::full_object_detection &shape, lon
     return faceW > minSpan && faceH > rows / 10 && faceW < cols && faceH < rows;
 }
 
+/* 轮廓点落在原图像素外时，钳到图片内（OpenCV 顶原点，与 faceMask 输出一致） */
+static void clampContourToImagePixels(float *pts, int count, int cols, int rows)
+{
+    const float minCoord = 1.0f;
+    const float maxX = static_cast<float>(cols - 1);
+    const float maxY = static_cast<float>(rows - 1);
+    for (int i = 0; i < count; ++i) {
+        float &x = pts[2 * i];
+        float &y = pts[2 * i + 1];
+        if (x < minCoord)
+            x = minCoord;
+        else if (x > maxX)
+            x = maxX;
+        if (y < minCoord)
+            y = minCoord;
+        else if (y > maxY)
+            y = maxY;
+    }
+}
+
 struct DetectAttempt {
     float fScale = 1.0f;
     bool mirror = false;
@@ -595,10 +615,30 @@ static int detectFacePoints(const cv::Mat &image, float *outPoints, FacePose pos
         break;
     }
 
+    clampContourToImagePixels(outPoints, pointCount, image.cols, image.rows);
+
     for (int pt = 0; pt < pointCount; ++pt) {
         outPoints[2 * pt] = fResize * outPoints[2 * pt];
         outPoints[2 * pt + 1] = static_cast<float>(image.rows) - outPoints[2 * pt + 1] - 1.0f;
         outPoints[2 * pt + 1] = fResize * outPoints[2 * pt + 1];
+    }
+
+    {
+        const float minLogical = 1.0f;
+        const float maxLogicalX = 767.0f;
+        const float maxLogicalY = 768.0f * static_cast<float>(image.rows) / static_cast<float>(image.cols) - 1.0f;
+        for (int pt = 0; pt < pointCount; ++pt) {
+            float &lx = outPoints[2 * pt];
+            float &ly = outPoints[2 * pt + 1];
+            if (lx < minLogical)
+                lx = minLogical;
+            else if (lx > maxLogicalX)
+                lx = maxLogicalX;
+            if (ly < minLogical)
+                ly = minLogical;
+            else if (ly > maxLogicalY)
+                ly = maxLogicalY;
+        }
     }
     return pointCount;
 }
