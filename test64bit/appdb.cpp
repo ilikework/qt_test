@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
@@ -916,6 +917,33 @@ bool AppDb::deleteGroupAnalyseInfo(const QString &custId, int groupId)
         return false;
     }
     return true;
+}
+
+bool AppDb::hasAnalyseInfo(int facePhotoIx) const
+{
+    if (facePhotoIx < 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT 1 FROM T_FacePhoto_AnalyseInfo WHERE FacePhoto_IX = ? LIMIT 1"));
+    q.addBindValue(facePhotoIx);
+    return q.exec() && q.next();
+}
+
+QString AppDb::analyseOverlayPathForPhoto(int facePhotoIx) const
+{
+    FacePhoto photo;
+    if (facePhotoIx < 0 || !findFacePhotoByIx(facePhotoIx, &photo))
+        return QString();
+
+    const QString groupDir = groupFolderPath(photo.Cust_ID, photo.Group_ID);
+    if (groupDir.isEmpty() || photo.Photo_Name.isEmpty())
+        return QString();
+
+    const QString base = QFileInfo(photo.Photo_Name).completeBaseName();
+    const QString path = QDir(groupDir).filePath(
+        QStringLiteral("analyse/") + base + QStringLiteral("_overlay.jpg"));
+    return QFile::exists(path) ? path : QString();
 }
 
 void AppDb::ensureFacePhotoAnalyseMapDefaults()

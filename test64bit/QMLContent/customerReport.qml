@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtCharts
+import com.magicmirror.components
 
 Item {
     id: customerReport
@@ -290,6 +291,108 @@ Item {
 
     property int printReportIdx: 8
 
+    /// 照片显示：0=分析图 1=原图 2=原图/分析图每秒切换（彩点按钮）
+    property int photoViewMode: 0
+    property bool blinkShowAnalysed: true
+    property int photoDisplayRevision: 0
+
+    function photoHasOverlay(facePhotoIx) {
+        return typeof faceAnalyseManager !== "undefined" && facePhotoIx > 0
+                && faceAnalyseManager.photoHasAnalyseOverlay(facePhotoIx)
+    }
+
+    function overlayUrlForIx(facePhotoIx) {
+        if (!photoHasOverlay(facePhotoIx))
+            return ""
+        const url = faceAnalyseManager.photoAnalyseOverlayUrl(facePhotoIx)
+        return url ? url.toString() : ""
+    }
+
+    function resolveEditorSource(originalUrl, facePhotoIx) {
+        const overlay = overlayUrlForIx(facePhotoIx)
+        if (!overlay)
+            return originalUrl
+        if (photoViewMode === 1)
+            return originalUrl
+        if (photoViewMode === 2)
+            return blinkShowAnalysed ? overlay : originalUrl
+        return overlay
+    }
+
+    function resolvePrintSource(originalUrl, facePhotoIx) {
+        const overlay = overlayUrlForIx(facePhotoIx)
+        return overlay || originalUrl
+    }
+
+    function reportHasAnyAnalyse() {
+        if (!subphotoes)
+            return false
+        for (var i = 0; i < subphotoes.length; i++) {
+            if (photoHasOverlay(subphotoes[i].IXL) || photoHasOverlay(subphotoes[i].IXR))
+                return true
+        }
+        return false
+    }
+
+    function currentReportPairHasAnalyse() {
+        if (tabButtons.selectedIndex === 8)
+            return reportHasAnyAnalyse()
+        if (!subphotoes || tabButtons.selectedIndex < 0 || tabButtons.selectedIndex >= subphotoes.length)
+            return false
+        var item = subphotoes[tabButtons.selectedIndex]
+        return photoHasOverlay(item.IXL) || photoHasOverlay(item.IXR)
+    }
+
+    function applyReportPhotoDisplay() {
+        photoDisplayRevision++
+        if (viewStack.currentIndex === 1) {
+            var idx = tabButtons.selectedIndex
+            if (idx >= 0 && idx < subphotoes.length) {
+                var item = subphotoes[idx]
+                reportEditorL.source = resolveEditorSource(item.photoL, item.IXL)
+                reportEditorR.source = resolveEditorSource(item.photoR, item.IXR)
+                reportEditorL.enterShowContour()
+                reportEditorR.enterShowContour()
+            }
+        }
+    }
+
+    function refreshSingleReportEditors() {
+        if (viewStack.currentIndex !== 1)
+            return
+        var idx = tabButtons.selectedIndex
+        if (idx < 0 || idx >= subphotoes.length)
+            return
+        var item = subphotoes[idx]
+        reportEditorL.init(item.IXL, "_L")
+        reportEditorR.init(item.IXR, "_R")
+        applyReportPhotoDisplay()
+    }
+
+    function cyclePhotoViewMode() {
+        if (!currentReportPairHasAnalyse())
+            return
+        photoViewMode = (photoViewMode + 1) % 3
+        if (photoViewMode === 2)
+            blinkShowAnalysed = true
+        applyReportPhotoDisplay()
+    }
+
+    function onReportTabChanged(index) {
+        tabButtons.selectedIndex = index
+        photoViewMode = 0
+        blinkShowAnalysed = true
+        if (index === 8) {
+            viewStack.currentIndex = 0
+        } else {
+            viewStack.currentIndex = 1
+            chartBar.updatebar()
+            Qt.callLater(refreshSingleReportEditors)
+        }
+        loadActiveReport()
+        applyReportPhotoDisplay()
+    }
+
     function reportTitle(idx) {
         if (idx < 0 || idx >= reportLabels.length)
             return "检测报告"
@@ -356,6 +459,7 @@ Item {
         initBarChartAxes()
         initPrintBarAxes()
         updateAllLineCharts()
+        Qt.callLater(applyReportPhotoDisplay)
     }
 
     function initBarChartAxes() {
@@ -436,16 +540,7 @@ Item {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                tabButtons.selectedIndex = index
-                                if (index === 8) {
-                                    viewStack.currentIndex = 0
-                                } else {
-                                    viewStack.currentIndex = 1
-                                    chartBar.updatebar()
-                                }
-                                loadActiveReport()
-                            }
+                            onClicked: customerReport.onReportTabChanged(index)
                         }
                     }
                 }
@@ -485,21 +580,44 @@ Item {
                                         radius: 8
                                         border.color: "#7ec0ff"
                                         color: "transparent"
-                                        Image {
-                                            x: 2
-                                            y: 2
-                                            width: 90
-                                            height: 120
-                                            source: modelData.photoL
-                                            fillMode: Image.PreserveAspectFit
-                                        }
-                                        Image {
-                                            x: 92
-                                            y: 2
-                                            width: 90
-                                            height: 120
-                                            source: modelData.photoR
-                                            fillMode: Image.PreserveAspectFit
+                                        Row {
+                                            spacing: 2
+                                            MMImageEditor {
+                                                width: 90
+                                                height: 120
+                                                property int _rev: customerReport.photoDisplayRevision
+                                                source: {
+                                                    var __ignore = _rev
+                                                    return customerReport.resolveEditorSource(
+                                                        modelData.photoL, modelData.IXL)
+                                                }
+                                                Component.onCompleted: {
+                                                    init(modelData.IXL, "_L")
+                                                    enterShowContour()
+                                                }
+                                                onSourceChanged: Qt.callLater(function() {
+                                                    reloadDrawings()
+                                                    enterShowContour()
+                                                })
+                                            }
+                                            MMImageEditor {
+                                                width: 90
+                                                height: 120
+                                                property int _rev: customerReport.photoDisplayRevision
+                                                source: {
+                                                    var __ignore = _rev
+                                                    return customerReport.resolveEditorSource(
+                                                        modelData.photoR, modelData.IXR)
+                                                }
+                                                Component.onCompleted: {
+                                                    init(modelData.IXR, "_R")
+                                                    enterShowContour()
+                                                }
+                                                onSourceChanged: Qt.callLater(function() {
+                                                    reloadDrawings()
+                                                    enterShowContour()
+                                                })
+                                            }
                                         }
                                     }
                                     Text {
@@ -747,38 +865,62 @@ Item {
                                     id: mainImgL
                                     Layout.preferredHeight: parent.height
                                     Layout.maximumHeight: parent.height
-                                    Layout.preferredWidth: imgL.width + singleTopArea.photoPad
-                                    Layout.maximumWidth: imgL.width + singleTopArea.photoPad
+                                    Layout.preferredWidth: reportEditorL.width + singleTopArea.photoPad
+                                    Layout.maximumWidth: reportEditorL.width + singleTopArea.photoPad
                                     radius: 8
                                     color: "#222"
                                     border.color: "#ffb300"
-                                    Image {
-                                        id: imgL
+                                    clip: true
+                                    MMImageEditor {
+                                        id: reportEditorL
                                         anchors.centerIn: parent
                                         height: parent.height - 2
                                         width: height * singleTopArea.photoAspect
-                                        fillMode: Image.PreserveAspectFit
-                                        source: (subphotoes && tabButtons.selectedIndex < subphotoes.length)
-                                            ? subphotoes[tabButtons.selectedIndex].photoL : ""
+                                        property int _rev: customerReport.photoDisplayRevision
+                                        source: {
+                                            var __ignore = _rev
+                                            var idx = tabButtons.selectedIndex
+                                            if (!subphotoes || idx < 0 || idx >= subphotoes.length)
+                                                return ""
+                                            return customerReport.resolveEditorSource(
+                                                subphotoes[idx].photoL, subphotoes[idx].IXL)
+                                        }
+                                        Component.onCompleted: customerReport.refreshSingleReportEditors()
+                                        onSourceChanged: Qt.callLater(function() {
+                                            reloadDrawings()
+                                            enterShowContour()
+                                        })
                                     }
                                 }
                                 Rectangle {
                                     id: mainImgR
                                     Layout.preferredHeight: parent.height
                                     Layout.maximumHeight: parent.height
-                                    Layout.preferredWidth: imgR.width + singleTopArea.photoPad
-                                    Layout.maximumWidth: imgR.width + singleTopArea.photoPad
+                                    Layout.preferredWidth: reportEditorR.width + singleTopArea.photoPad
+                                    Layout.maximumWidth: reportEditorR.width + singleTopArea.photoPad
                                     radius: 8
                                     color: "#222"
                                     border.color: "#ffb300"
-                                    Image {
-                                        id: imgR
+                                    clip: true
+                                    MMImageEditor {
+                                        id: reportEditorR
                                         anchors.centerIn: parent
                                         height: parent.height - 2
                                         width: height * singleTopArea.photoAspect
-                                        fillMode: Image.PreserveAspectFit
-                                        source: (subphotoes && tabButtons.selectedIndex < subphotoes.length)
-                                            ? subphotoes[tabButtons.selectedIndex].photoR : ""
+                                        property int _rev: customerReport.photoDisplayRevision
+                                        source: {
+                                            var __ignore = _rev
+                                            var idx = tabButtons.selectedIndex
+                                            if (!subphotoes || idx < 0 || idx >= subphotoes.length)
+                                                return ""
+                                            return customerReport.resolveEditorSource(
+                                                subphotoes[idx].photoR, subphotoes[idx].IXR)
+                                        }
+                                        Component.onCompleted: customerReport.refreshSingleReportEditors()
+                                        onSourceChanged: Qt.callLater(function() {
+                                            reloadDrawings()
+                                            enterShowContour()
+                                        })
                                     }
                                 }
                                 ChartView {
@@ -1018,6 +1160,7 @@ Item {
                             color: "#204060"
                             border.color: (modelData.text === "保存" && reportDirty) ? "#ffcc66" : "#7cc0ff"
                             border.width: (modelData.text === "保存" && reportDirty) ? 2 : 1
+                            opacity: (modelData.text === "彩点显示" && !currentReportPairHasAnalyse()) ? 0.45 : 1
                             Image {
                                 visible: modelData.icon !== ""
                                 anchors.centerIn: parent
@@ -1037,8 +1180,11 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
+                                enabled: modelData.text !== "彩点显示" || currentReportPairHasAnalyse()
                                 onClicked: {
-                                    if (index === 3)
+                                    if (index === 2)
+                                        cyclePhotoViewMode()
+                                    else if (index === 3)
                                         printActiveReport()
                                     else if (index === 4)
                                         saveActiveReport()
@@ -1054,8 +1200,17 @@ Item {
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: modelData.text
-                            color: "white"
+                            text: {
+                                if (modelData.text === "彩点显示") {
+                                    if (photoViewMode === 1)
+                                        return "原图"
+                                    if (photoViewMode === 2)
+                                        return "对比"
+                                }
+                                return modelData.text
+                            }
+                            color: (modelData.text === "彩点显示" && !currentReportPairHasAnalyse())
+                                ? "#666" : "white"
                             font.pixelSize: 22
                         }
                     }
@@ -1125,12 +1280,12 @@ Item {
                                 color: "#fafafa"
                                 Image {
                                     x: 1; y: 1; width: 42; height: 58
-                                    source: modelData.photoL
+                                    source: customerReport.resolvePrintSource(modelData.photoL, modelData.IXL)
                                     fillMode: Image.PreserveAspectFit
                                 }
                                 Image {
                                     x: 45; y: 1; width: 42; height: 58
-                                    source: modelData.photoR
+                                    source: customerReport.resolvePrintSource(modelData.photoR, modelData.IXR)
                                     fillMode: Image.PreserveAspectFit
                                 }
                             }
@@ -1317,7 +1472,8 @@ Item {
                                 anchors.margins: 4
                                 fillMode: Image.PreserveAspectFit
                                 source: (subphotoes && printReportIdx < subphotoes.length)
-                                    ? subphotoes[printReportIdx].photoL : ""
+                                    ? customerReport.resolvePrintSource(
+                                        subphotoes[printReportIdx].photoL, subphotoes[printReportIdx].IXL) : ""
                             }
                         }
                         Rectangle {
@@ -1331,7 +1487,8 @@ Item {
                                 anchors.margins: 4
                                 fillMode: Image.PreserveAspectFit
                                 source: (subphotoes && printReportIdx < subphotoes.length)
-                                    ? subphotoes[printReportIdx].photoR : ""
+                                    ? customerReport.resolvePrintSource(
+                                        subphotoes[printReportIdx].photoR, subphotoes[printReportIdx].IXR) : ""
                             }
                         }
                     }
@@ -1454,5 +1611,16 @@ Item {
         host: customerReport
         preRecordManager: _usePreRecordManager ? preRecordManager : null
         transientParent: customerReport.Window.window
+    }
+
+    Timer {
+        id: reportPhotoBlinkTimer
+        interval: 1000
+        repeat: true
+        running: photoViewMode === 2 && currentReportPairHasAnalyse()
+        onTriggered: {
+            blinkShowAnalysed = !blinkShowAnalysed
+            applyReportPhotoDisplay()
+        }
     }
 }

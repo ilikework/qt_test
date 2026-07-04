@@ -144,6 +144,8 @@ public:
     QString photoFilePath(const FacePhoto &photo) const;
     bool upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent);
     bool deleteGroupAnalyseInfo(const QString &custId, int groupId);
+    bool hasAnalyseInfo(int facePhotoIx) const;
+    QString analyseOverlayPathForPhoto(int facePhotoIx) const;
 
     // 插入单条绘图信息，并返回该条记录的 IX (主键)
     int insertDrawInfo(int facePhotoIx, const QString& jsonInfo);

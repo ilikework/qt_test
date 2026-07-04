@@ -18,6 +18,7 @@
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QtConcurrent>
+#include <QUrl>
 
 Q_LOGGING_CATEGORY(lcFaceAnalyse, "FaceAnalyse")
 
@@ -758,4 +759,17 @@ void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId)
 void FaceAnalyseManager::notifyGroupAnalyseProgress(int done, int total, const QString &label)
 {
     emit groupAnalyseProgress(done, total, label);
+}
+
+bool FaceAnalyseManager::photoHasAnalyseOverlay(int facePhotoIx) const
+{
+    return !AppDb::instance().analyseOverlayPathForPhoto(facePhotoIx).isEmpty();
+}
+
+QUrl FaceAnalyseManager::photoAnalyseOverlayUrl(int facePhotoIx) const
+{
+    const QString path = AppDb::instance().analyseOverlayPathForPhoto(facePhotoIx);
+    if (path.isEmpty())
+        return QUrl();
+    return QUrl::fromLocalFile(path);
 }

@@ -39,8 +39,86 @@ Item {
     /// 自动定位完成后逐侧确认：left → right
     property string autoMarkSideStep: ""
     property bool skinAnalyseRunning: false
+    /// 主图显示：0=分析图 1=原图 2=原图/分析图每秒切换
+    property int photoViewMode: 0
+    property bool blinkShowAnalysed: true
+    property int analyseDisplayRevision: 0
     /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
     property int subListSelectedIndex: 0
+
+    readonly property string photoViewModeLabel: {
+        if (photoViewMode === 1)
+            return "显示：原图"
+        if (photoViewMode === 2)
+            return "显示：对比"
+        return "显示：分析图"
+    }
+
+    function currentSubPhotoItem() {
+        if (subListSelectedIndex < 0 || subListSelectedIndex >= subphotoes.length)
+            return null
+        return subphotoes[subListSelectedIndex]
+    }
+
+    function photoHasOverlay(facePhotoIx) {
+        return faceAnalyseManager && facePhotoIx > 0
+                && faceAnalyseManager.photoHasAnalyseOverlay(facePhotoIx)
+    }
+
+    function currentPairHasAnalyse() {
+        const item = currentSubPhotoItem()
+        if (!item)
+            return false
+        return photoHasOverlay(item.IXL) || photoHasOverlay(item.IXR)
+    }
+
+    function overlayUrlForIx(facePhotoIx) {
+        if (!photoHasOverlay(facePhotoIx))
+            return ""
+        const url = faceAnalyseManager.photoAnalyseOverlayUrl(facePhotoIx)
+        return url ? url.toString() : ""
+    }
+
+    function resolveEditorSource(originalUrl, facePhotoIx) {
+        const overlay = overlayUrlForIx(facePhotoIx)
+        if (!overlay)
+            return originalUrl
+        if (photoViewMode === 1)
+            return originalUrl
+        if (photoViewMode === 2)
+            return blinkShowAnalysed ? overlay : originalUrl
+        return overlay
+    }
+
+    function applyMainPhotoDisplay() {
+        const item = currentSubPhotoItem()
+        if (!item)
+            return
+        leftMain.source = resolveEditorSource(item.photoL, item.IXL)
+        rightMain.source = resolveEditorSource(item.photoR, item.IXR)
+        leftMain.enterShowContour()
+        rightMain.enterShowContour()
+    }
+
+    function loadMainEditorsForIndex(index) {
+        if (index < 0 || index >= subphotoes.length)
+            return
+        const item = subphotoes[index]
+        leftMain.init(item.IXL, "_L")
+        rightMain.init(item.IXR, "_R")
+        photoViewMode = 0
+        blinkShowAnalysed = true
+        applyMainPhotoDisplay()
+    }
+
+    function cyclePhotoViewMode() {
+        if (!currentPairHasAnalyse())
+            return
+        photoViewMode = (photoViewMode + 1) % 3
+        if (photoViewMode === 2)
+            blinkShowAnalysed = true
+        applyMainPhotoDisplay()
+    }
 
     Component.onCompleted:
     {
@@ -60,13 +138,7 @@ Item {
         refreshRegionReadyState()
         if(subphotoes.length>0)
         {
-            // Let the list render first, then load the main editing area in the next frame
-            Qt.callLater(() => {
-                leftMain.init(subphotoes[0].IXL, "_L");
-                leftMain.source = subphotoes[0].photoL;
-                rightMain.init(subphotoes[0].IXR, "_R");
-                rightMain.source = subphotoes[0].photoR;
-            })
+            Qt.callLater(() => loadMainEditorsForIndex(0))
         }
     }
 
@@ -476,6 +548,17 @@ Item {
                             onClicked: customerDetail.startSkinAnalyse()
                         }
 
+                        TextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            preferredFontPixelSize: 16
+                            preferredRadius: 8
+                            text: photoViewModeLabel
+                            enabled: customerDetail.currentPairHasAnalyse()
+                            opacity: enabled ? 1 : 0.45
+                            onClicked: customerDetail.cyclePhotoViewMode()
+                        }
+
                         ListView {
                             id: subListView
                             Layout.fillWidth: true
@@ -535,10 +618,7 @@ Item {
 
                                     onClicked: {
                                         customerDetail.subListSelectedIndex = index
-                                        leftMain.init(modelData.IXL, "_L")
-                                        leftMain.source = modelData.photoL
-                                        rightMain.init(modelData.IXR, "_R")
-                                        rightMain.source = modelData.photoR
+                                        customerDetail.loadMainEditorsForIndex(index)
                                     }
                                 } // MouseArea
                             }
@@ -608,9 +688,26 @@ Item {
         function onGroupAnalyseFinished(success, message) {
             skinAnalyseRunning = false
             analyseWorkflowActive = false
+            analyseDisplayRevision++
+            if (success) {
+                photoViewMode = 0
+                blinkShowAnalysed = true
+                applyMainPhotoDisplay()
+            }
             statusMsgBox.boxTitle = success ? "分析完成" : "分析失败"
             statusMsgBox.boxMessage = message
             statusMsgBox.open()
+        }
+    }
+
+    Timer {
+        id: photoBlinkTimer
+        interval: 1000
+        repeat: true
+        running: customerDetail.photoViewMode === 2 && customerDetail.currentPairHasAnalyse()
+        onTriggered: {
+            customerDetail.blinkShowAnalysed = !customerDetail.blinkShowAnalysed
+            customerDetail.applyMainPhotoDisplay()
         }
     }
 

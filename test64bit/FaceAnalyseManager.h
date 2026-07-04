@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QUrl>
 
 class FaceAnalyseManager : public QObject
 {
@@ -29,6 +30,8 @@ public:
     Q_INVOKABLE void finalizeAutoMarkChoice();
     Q_INVOKABLE void analyseGroup(const QString &customerId, int groupId);
     Q_INVOKABLE void notifyGroupAnalyseProgress(int done, int total, const QString &label);
+    Q_INVOKABLE bool photoHasAnalyseOverlay(int facePhotoIx) const;
+    Q_INVOKABLE QUrl photoAnalyseOverlayUrl(int facePhotoIx) const;
 
 signals:
     void busyChanged();
