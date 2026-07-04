@@ -12,6 +12,13 @@ struct GroupContourMeta {
     QString coordSpace;
 };
 
+/// T_FacePhoto_Map：Photo_CapType → Analyse_Function / Report_Type
+struct FacePhotoAnalyseMapEntry {
+    QString capType;
+    int analyseFunction = 0;
+    int reportType = 0;
+};
+
 #define ISO          "iso"
 #define EXPOSURETIME "exposuretime"
 #define APERTURE     "aperture"
@@ -130,6 +137,9 @@ public:
     bool findCustomerByCustId(const QString &custId, Customer *out) const;
     bool findPhotoInGroup(const QString &custId, int groupId, const QString &dirType,
                           const QString &capType, int photoId, FacePhoto *out) const;
+    bool findPhotoInGroupByCapType(const QString &custId, int groupId, const QString &dirType,
+                                   const QString &capType, FacePhoto *out) const;
+    QVector<FacePhotoAnalyseMapEntry> getFacePhotoAnalyseMap() const;
     QString groupFolderPath(const QString &custId, int groupId) const;
     QString photoFilePath(const FacePhoto &photo) const;
     bool upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent);
@@ -191,6 +201,8 @@ private:
     bool begin();
     bool commit();
     bool rollback();
+
+    void ensureFacePhotoAnalyseMapDefaults();
 
     QSqlDatabase m_db;
     QString m_connName;

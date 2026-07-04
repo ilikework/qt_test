@@ -416,3 +416,13 @@ insert into "T_CaptureSetting"(IX,"Series","ImageSize","ImageQuality",RGB_ISO,"R
 
 INSERT INTO T_FacePhoto_DrawInfo_Template (Photo_DirType,Info,EditTime) VALUES ('_L','{"width": 768, "height": 1024, "version": "1", "points": [{"x": 328.0, "y": 445.0}, {"x": 288.0, "y": 415.0}, {"x": 265.0, "y": 369.0}, {"x": 192.0, "y": 354.0}, {"x": 179.0, "y": 527.0}, {"x": 191.0, "y": 614.0}, {"x": 277.0, "y": 711.0}, {"x": 389.0, "y": 691.0}, {"x": 515.0, "y": 557.0}, {"x": 613.0, "y": 557.0}, {"x": 562.0, "y": 420.0}, {"x": 464.0, "y": 463.0}, {"x": 402.0, "y": 459.0}], "color": "#ff0000", "type":"smooth_curve", "weight": 3}',CURRENT_TIMESTAMP);
 INSERT INTO T_FacePhoto_DrawInfo_Template (Photo_DirType,Info,EditTime) VALUES ('_R','{"width": 768, "height": 1024, "version": "1", "points": [{"x": 280.0, "y": 497.0}, {"x": 218.0, "y": 479.0}, {"x": 156.0, "y": 439.0}, {"x": 117.0, "y": 536.0}, {"x": 208.0, "y": 575.0}, {"x": 298.0, "y": 692.0}, {"x": 380.0, "y": 770.0}, {"x": 519.0, "y": 747.0}, {"x": 593.0, "y": 643.0}, {"x": 537.0, "y": 427.0}, {"x": 529.0, "y": 350.0}, {"x": 452.0, "y": 375.0}, {"x": 453.0, "y": 420.0}], "color": "#ff0000", "type":"smooth_curve", "weight": 3}',CURRENT_TIMESTAMP);
+
+-- CapType → Analyse_Function（LibFA64 组分析读取此表；修改行即可变更某光型对应的分析模块）
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('RGB', 2, 1);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('UV', 5, 2);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('PL', 1, 3);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('NPL', 1, 4);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('GRAY', 4, 5);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('RED', 3, 6);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('BROWN', 1, 7);
+INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type) VALUES ('WHOLE', 21, 8);

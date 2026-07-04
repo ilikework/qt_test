@@ -435,25 +435,17 @@ void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, b
 
 namespace {
 
-struct SkinAnalyseSpec {
-    const char *capType;
-    int photoId;
-    int analyseFunction;
-    int sourceType;
-    int nMin;
-    int nMax;
-    const char *itemLabel;
-    T_ANA_RESULT (*run)(char *, char *, int *, int, int, int);
-};
+using AnalyseByFileFn = T_ANA_RESULT (*)(char *, char *, int *, int, int, int);
 
-const SkinAnalyseSpec kSkinSpecs[] = {
-    { MM_RGB, 1, 2, SOURCE_RGB, 75, 125, "毛孔", analysePoresByFile },
-    { MM_UV, 2, 5, SOURCE_UV365, 75, 125, "痤疮", analyseAcnesByFile },
-    { MM_PL, 3, 1, SOURCE_PL_POSITIVE, 75, 125, "深层色斑", analyseSpotsByFile },
-    { MM_NPL, 4, 1, SOURCE_PL_NEGATIVE, 75, 125, "表层色斑", analyseSpotsByFile },
-    { MM_GRAY, 5, 4, SOURCE_RGB, 75, 125, "皱纹", analyseWrinkleByFile },
-    { MM_RED, 6, 3, SOURCE_RGB, 75, 125, "均匀度", analyseEvennessByFile },
-    { MM_BROWN, 7, 1, SOURCE_RGB, 75, 125, "棕色斑", analyseSpotsByFile },
+struct SkinAnalyseJob {
+    QString capType;
+    int analyseFunction = 0;
+    int reportType = 0;
+    int sourceType = SOURCE_RGB;
+    int nMin = 75;
+    int nMax = 125;
+    QString itemLabel;
+    AnalyseByFileFn run = nullptr;
 };
 
 struct GroupAnalyseResult {
@@ -462,6 +454,91 @@ struct GroupAnalyseResult {
     int okCount = 0;
     int failCount = 0;
 };
+
+AnalyseByFileFn apiForAnalyseFunction(int analyseFunction)
+{
+    switch (analyseFunction) {
+    case MM_ANALYSE_SPOTS:
+        return analyseSpotsByFile;
+    case MM_ANALYSE_PORES:
+        return analysePoresByFile;
+    case MM_ANALYSE_EVENNESS:
+        return analyseEvennessByFile;
+    case MM_ANALYSE_WRINKLE:
+        return analyseWrinkleByFile;
+    case MM_ANALYSE_ACNES:
+        return analyseAcnesByFile;
+    default:
+        return nullptr;
+    }
+}
+
+bool isLibFaAnalyseFunction(int analyseFunction)
+{
+    return analyseFunction >= MM_ANALYSE_SPOTS && analyseFunction <= MM_ANALYSE_ACNES;
+}
+
+int sourceTypeForCapType(const QString &capType)
+{
+    if (capType == MM_UV)
+        return SOURCE_UV365;
+    if (capType == MM_PL)
+        return SOURCE_PL_POSITIVE;
+    if (capType == MM_NPL)
+        return SOURCE_PL_NEGATIVE;
+    return SOURCE_RGB;
+}
+
+QString labelForAnalyseFunction(int analyseFunction)
+{
+    switch (analyseFunction) {
+    case MM_ANALYSE_SPOTS:
+        return QStringLiteral("色斑");
+    case MM_ANALYSE_PORES:
+        return QStringLiteral("毛孔");
+    case MM_ANALYSE_EVENNESS:
+        return QStringLiteral("均匀度");
+    case MM_ANALYSE_WRINKLE:
+        return QStringLiteral("皱纹");
+    case MM_ANALYSE_ACNES:
+        return QStringLiteral("痤疮");
+    case MM_ANALYSE_MOISTURE:
+        return QStringLiteral("水分");
+    default:
+        return QStringLiteral("分析");
+    }
+}
+
+QVector<SkinAnalyseJob> buildSkinAnalyseJobsFromDb(QString *errorOut)
+{
+    QVector<SkinAnalyseJob> jobs;
+    const QVector<FacePhotoAnalyseMapEntry> mapRows = AppDb::instance().getFacePhotoAnalyseMap();
+    if (mapRows.isEmpty()) {
+        if (errorOut)
+            *errorOut = QStringLiteral("T_FacePhoto_Map 未配置分析映射");
+        return jobs;
+    }
+
+    for (const FacePhotoAnalyseMapEntry &row : mapRows) {
+        if (!isLibFaAnalyseFunction(row.analyseFunction))
+            continue;
+
+        SkinAnalyseJob job;
+        job.capType = row.capType;
+        job.analyseFunction = row.analyseFunction;
+        job.reportType = row.reportType;
+        job.sourceType = sourceTypeForCapType(row.capType);
+        job.itemLabel = labelForAnalyseFunction(row.analyseFunction);
+        job.run = apiForAnalyseFunction(row.analyseFunction);
+        if (!job.run)
+            continue;
+        jobs.append(job);
+    }
+
+    if (jobs.isEmpty() && errorOut)
+        *errorOut = QStringLiteral("T_FacePhoto_Map 中没有可执行的 LibFA64 分析项");
+    return jobs;
+}
 
 int customerAgeYears(const Customer &customer)
 {
@@ -510,7 +587,7 @@ QString sideLabel(const QString &dirType)
     return dirType == LEFT ? QStringLiteral("左脸") : QStringLiteral("右脸");
 }
 
-bool runOneSkinAnalyse(const SkinAnalyseSpec &spec,
+bool runOneSkinAnalyse(const SkinAnalyseJob &job,
                        const QString &dirType,
                        const QVector<int> &pxl,
                        int age,
@@ -520,10 +597,10 @@ bool runOneSkinAnalyse(const SkinAnalyseSpec &spec,
                        QString *warnOut)
 {
     FacePhoto photo;
-    if (!AppDb::instance().findPhotoInGroup(
-            custId, groupId, dirType, QString::fromLatin1(spec.capType), spec.photoId, &photo)) {
+    if (!AppDb::instance().findPhotoInGroupByCapType(
+            custId, groupId, dirType, job.capType, &photo)) {
         if (warnOut)
-            *warnOut = QStringLiteral("%1 %2 未找到照片").arg(sideLabel(dirType), spec.capType);
+            *warnOut = QStringLiteral("%1 %2 未找到照片").arg(sideLabel(dirType), job.capType);
         return false;
     }
 
@@ -539,7 +616,7 @@ bool runOneSkinAnalyse(const SkinAnalyseSpec &spec,
         return false;
     }
 
-    setExtraInfo(age, gender, spec.sourceType);
+    setExtraInfo(age, gender, job.sourceType);
     const QString outPath = overlayOutputPath(
         AppDb::instance().groupFolderPath(custId, groupId), photo.Photo_Name);
 
@@ -547,10 +624,10 @@ bool runOneSkinAnalyse(const SkinAnalyseSpec &spec,
     QByteArray outBytes = outPath.toLocal8Bit();
     QVector<int> pxlCopy = pxl;
     const int pxlCount = pxlCopy.size();
-    T_ANA_RESULT r = spec.run(
-        inBytes.data(), outBytes.data(), pxlCopy.data(), pxlCount, spec.nMin, spec.nMax);
+    T_ANA_RESULT r = job.run(
+        inBytes.data(), outBytes.data(), pxlCopy.data(), pxlCount, job.nMin, job.nMax);
 
-    if (!AppDb::instance().upsertAnalyseInfo(photo.IX, spec.analyseFunction, r.value, r.percent)) {
+    if (!AppDb::instance().upsertAnalyseInfo(photo.IX, job.analyseFunction, r.value, r.percent)) {
         if (warnOut)
             *warnOut = QStringLiteral("保存分析结果失败：%1").arg(AppDb::instance().lastErrorText());
         return false;
@@ -558,7 +635,8 @@ bool runOneSkinAnalyse(const SkinAnalyseSpec &spec,
 
     qCInfo(lcFaceAnalyse) << "skinAnalyse ok"
                           << sideLabel(dirType)
-                          << spec.capType
+                          << job.capType
+                          << "function:" << job.analyseFunction
                           << "value:" << r.value
                           << "percent:" << r.percent
                           << "overlay:" << outPath;
@@ -570,7 +648,13 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
                                        int groupId)
 {
     GroupAnalyseResult out;
-    const int totalJobs = 2 * static_cast<int>(sizeof(kSkinSpecs) / sizeof(kSkinSpecs[0]));
+    QString mapError;
+    const QVector<SkinAnalyseJob> jobs = buildSkinAnalyseJobsFromDb(&mapError);
+    if (jobs.isEmpty()) {
+        out.message = mapError.isEmpty() ? QStringLiteral("未找到分析配置") : mapError;
+        return out;
+    }
+    const int totalJobs = jobs.size() * 2;
     int done = 0;
 
     Customer customer;
@@ -598,15 +682,15 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
 
     for (const QString &side : sides) {
         const QVector<int> &pxl = side == LEFT ? pxlL : pxlR;
-        for (const SkinAnalyseSpec &spec : kSkinSpecs) {
+        for (const SkinAnalyseJob &job : jobs) {
             ++done;
-            const QString progressLabel = sideLabel(side) + QStringLiteral(" ") + spec.capType
-                    + QStringLiteral("（") + QString::fromUtf8(spec.itemLabel) + QStringLiteral("）");
+            const QString progressLabel = sideLabel(side) + QStringLiteral(" ") + job.capType
+                    + QStringLiteral("（") + job.itemLabel + QStringLiteral("）");
             QMetaObject::invokeMethod(mgr, "notifyGroupAnalyseProgress", Qt::QueuedConnection,
                                       Q_ARG(int, done), Q_ARG(int, totalJobs), Q_ARG(QString, progressLabel));
 
             QString warn;
-            if (runOneSkinAnalyse(spec, side, pxl, age, gender, customerId, groupId, &warn)) {
+            if (runOneSkinAnalyse(job, side, pxl, age, gender, customerId, groupId, &warn)) {
                 ++out.okCount;
             } else {
                 ++out.failCount;

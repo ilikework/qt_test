@@ -47,6 +47,7 @@ bool AppDb::openDb()
     }
 
     m_lastError.clear();
+    ensureFacePhotoAnalyseMapDefaults();
     return true;
 }
 
@@ -775,6 +776,61 @@ bool AppDb::findPhotoInGroup(const QString &custId, int groupId, const QString &
     return true;
 }
 
+bool AppDb::findPhotoInGroupByCapType(const QString &custId, int groupId, const QString &dirType,
+                                      const QString &capType, FacePhoto *out) const
+{
+    if (!out || custId.isEmpty() || groupId <= 0 || capType.isEmpty() || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT IX, Cust_ID, Photo_CapType, Photo_DirType, Group_ID, Photo_ID, Photo_Name
+        FROM T_Customers_FacePhoto
+        WHERE Cust_ID = ? AND Group_ID = ? AND Photo_DirType = ? AND Photo_CapType = ?
+        LIMIT 1
+    )");
+    q.addBindValue(custId);
+    q.addBindValue(groupId);
+    q.addBindValue(dirType);
+    q.addBindValue(capType);
+    if (!q.exec() || !q.next())
+        return false;
+
+    out->IX = q.value(0).toInt();
+    out->Cust_ID = q.value(1).toString();
+    out->Photo_CapType = q.value(2).toString();
+    out->Photo_DirType = q.value(3).toString();
+    out->Group_ID = q.value(4).toInt();
+    out->Photo_ID = q.value(5).toInt();
+    out->Photo_Name = q.value(6).toString();
+    return true;
+}
+
+QVector<FacePhotoAnalyseMapEntry> AppDb::getFacePhotoAnalyseMap() const
+{
+    QVector<FacePhotoAnalyseMapEntry> rows;
+    if (!m_db.isOpen())
+        return rows;
+
+    QSqlQuery q(m_db);
+    if (!q.exec(R"(
+        SELECT Photo_CapType, Analyse_Function, Report_Type
+        FROM T_FacePhoto_Map
+        ORDER BY Report_Type ASC, Photo_CapType ASC
+    )"))
+        return rows;
+
+    while (q.next()) {
+        FacePhotoAnalyseMapEntry e;
+        e.capType = q.value(0).toString();
+        e.analyseFunction = q.value(1).toInt();
+        e.reportType = q.value(2).toInt();
+        if (!e.capType.isEmpty())
+            rows.append(e);
+    }
+    return rows;
+}
+
 QString AppDb::groupFolderPath(const QString &custId, int groupId) const
 {
     if (custId.isEmpty() || groupId <= 0)
@@ -860,6 +916,46 @@ bool AppDb::deleteGroupAnalyseInfo(const QString &custId, int groupId)
         return false;
     }
     return true;
+}
+
+void AppDb::ensureFacePhotoAnalyseMapDefaults()
+{
+    if (!m_db.isOpen())
+        return;
+
+    QSqlQuery countQ(m_db);
+    if (!countQ.exec(QStringLiteral("SELECT COUNT(*) FROM T_FacePhoto_Map"))
+        || !countQ.next() || countQ.value(0).toInt() > 0) {
+        return;
+    }
+
+    struct DefaultRow {
+        const char *capType;
+        int analyseFunction;
+        int reportType;
+    };
+    static const DefaultRow kDefaults[] = {
+        { MM_RGB, MM_ANALYSE_PORES, 1 },
+        { MM_UV, MM_ANALYSE_ACNES, 2 },
+        { MM_PL, MM_ANALYSE_SPOTS, 3 },
+        { MM_NPL, MM_ANALYSE_SPOTS, 4 },
+        { MM_GRAY, MM_ANALYSE_WRINKLE, 5 },
+        { MM_RED, MM_ANALYSE_EVENNESS, 6 },
+        { MM_BROWN, MM_ANALYSE_SPOTS, 7 },
+        { MM_WHOLE, MM_ANALYSE_MOISTURE, 8 },
+    };
+
+    for (const DefaultRow &row : kDefaults) {
+        QSqlQuery ins(m_db);
+        ins.prepare(R"(
+            INSERT INTO T_FacePhoto_Map (Photo_CapType, Analyse_Function, Report_Type)
+            VALUES (?, ?, ?)
+        )");
+        ins.addBindValue(QString::fromLatin1(row.capType));
+        ins.addBindValue(row.analyseFunction);
+        ins.addBindValue(row.reportType);
+        ins.exec();
+    }
 }
 
 int AppDb::insertDrawInfo(int facePhotoIx, const QString& jsonInfo) {
