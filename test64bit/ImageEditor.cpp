@@ -36,6 +36,11 @@ bool ImageEditor::save(const QString &path)
 
 void ImageEditor::setSource(const QString &path)
 {
+    if (path == m_sourcePath && !m_image.isNull())
+        return;
+
+    const QSize oldSize = m_image.size();
+    const bool hadDrawings = !m_items.empty();
     m_sourcePath = path;
     QImageReader reader(QUrl(path).toLocalFile());
     reader.setAutoTransform(false);
@@ -44,10 +49,15 @@ void ImageEditor::setSource(const QString &path)
         setImplicitHeight(m_image.height());
         setWidth(m_image.width());
         setHeight(m_image.height());
-        if (m_facePhotoIx >= 0)
-            loadFromDb(m_facePhotoIx, m_dirType);
-        else
+        if (m_facePhotoIx >= 0) {
+            // 原图/分析图切换时轮廓不变；仅首次或分辨率变化时查库
+            if (!hadDrawings || m_image.size() != oldSize)
+                loadFromDb(m_facePhotoIx, m_dirType);
+            else
+                update();
+        } else {
             update();
+        }
         emit sourceChanged();
     }
 }

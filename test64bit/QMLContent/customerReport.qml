@@ -294,8 +294,6 @@ Item {
     /// 照片显示：0=分析图 1=原图 2=原图/分析图每秒切换（彩点按钮）
     property int photoViewMode: 0
     property bool blinkShowAnalysed: true
-    property int photoDisplayRevision: 0
-
     function photoHasOverlay(facePhotoIx) {
         return typeof faceAnalyseManager !== "undefined" && facePhotoIx > 0
                 && faceAnalyseManager.photoHasAnalyseOverlay(facePhotoIx)
@@ -344,16 +342,9 @@ Item {
     }
 
     function applyReportPhotoDisplay() {
-        photoDisplayRevision++
         if (viewStack.currentIndex === 1) {
-            var idx = tabButtons.selectedIndex
-            if (idx >= 0 && idx < subphotoes.length) {
-                var item = subphotoes[idx]
-                reportEditorL.source = resolveEditorSource(item.photoL, item.IXL)
-                reportEditorR.source = resolveEditorSource(item.photoR, item.IXR)
-                reportEditorL.enterShowContour()
-                reportEditorR.enterShowContour()
-            }
+            reportEditorL.enterShowContour()
+            reportEditorR.enterShowContour()
         }
     }
 
@@ -375,7 +366,6 @@ Item {
         photoViewMode = (photoViewMode + 1) % 3
         if (photoViewMode === 2)
             blinkShowAnalysed = true
-        applyReportPhotoDisplay()
     }
 
     function onReportTabChanged(index) {
@@ -390,7 +380,6 @@ Item {
             Qt.callLater(refreshSingleReportEditors)
         }
         loadActiveReport()
-        applyReportPhotoDisplay()
     }
 
     function reportTitle(idx) {
@@ -459,7 +448,6 @@ Item {
         initBarChartAxes()
         initPrintBarAxes()
         updateAllLineCharts()
-        Qt.callLater(applyReportPhotoDisplay)
     }
 
     function initBarChartAxes() {
@@ -580,43 +568,34 @@ Item {
                                         radius: 8
                                         border.color: "#7ec0ff"
                                         color: "transparent"
+                                        clip: true
                                         Row {
                                             spacing: 2
-                                            MMImageEditor {
+                                            Image {
                                                 width: 90
                                                 height: 120
-                                                property int _rev: customerReport.photoDisplayRevision
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                cache: true
                                                 source: {
-                                                    var __ignore = _rev
+                                                    var _m = customerReport.photoViewMode
+                                                    var _b = customerReport.blinkShowAnalysed
                                                     return customerReport.resolveEditorSource(
                                                         modelData.photoL, modelData.IXL)
                                                 }
-                                                Component.onCompleted: {
-                                                    init(modelData.IXL, "_L")
-                                                    enterShowContour()
-                                                }
-                                                onSourceChanged: Qt.callLater(function() {
-                                                    reloadDrawings()
-                                                    enterShowContour()
-                                                })
                                             }
-                                            MMImageEditor {
+                                            Image {
                                                 width: 90
                                                 height: 120
-                                                property int _rev: customerReport.photoDisplayRevision
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                cache: true
                                                 source: {
-                                                    var __ignore = _rev
+                                                    var _m = customerReport.photoViewMode
+                                                    var _b = customerReport.blinkShowAnalysed
                                                     return customerReport.resolveEditorSource(
                                                         modelData.photoR, modelData.IXR)
                                                 }
-                                                Component.onCompleted: {
-                                                    init(modelData.IXR, "_R")
-                                                    enterShowContour()
-                                                }
-                                                onSourceChanged: Qt.callLater(function() {
-                                                    reloadDrawings()
-                                                    enterShowContour()
-                                                })
                                             }
                                         }
                                     }
@@ -876,9 +855,9 @@ Item {
                                         anchors.centerIn: parent
                                         height: parent.height - 2
                                         width: height * singleTopArea.photoAspect
-                                        property int _rev: customerReport.photoDisplayRevision
                                         source: {
-                                            var __ignore = _rev
+                                            var _m = customerReport.photoViewMode
+                                            var _b = customerReport.blinkShowAnalysed
                                             var idx = tabButtons.selectedIndex
                                             if (!subphotoes || idx < 0 || idx >= subphotoes.length)
                                                 return ""
@@ -886,10 +865,6 @@ Item {
                                                 subphotoes[idx].photoL, subphotoes[idx].IXL)
                                         }
                                         Component.onCompleted: customerReport.refreshSingleReportEditors()
-                                        onSourceChanged: Qt.callLater(function() {
-                                            reloadDrawings()
-                                            enterShowContour()
-                                        })
                                     }
                                 }
                                 Rectangle {
@@ -907,9 +882,9 @@ Item {
                                         anchors.centerIn: parent
                                         height: parent.height - 2
                                         width: height * singleTopArea.photoAspect
-                                        property int _rev: customerReport.photoDisplayRevision
                                         source: {
-                                            var __ignore = _rev
+                                            var _m = customerReport.photoViewMode
+                                            var _b = customerReport.blinkShowAnalysed
                                             var idx = tabButtons.selectedIndex
                                             if (!subphotoes || idx < 0 || idx >= subphotoes.length)
                                                 return ""
@@ -917,10 +892,6 @@ Item {
                                                 subphotoes[idx].photoR, subphotoes[idx].IXR)
                                         }
                                         Component.onCompleted: customerReport.refreshSingleReportEditors()
-                                        onSourceChanged: Qt.callLater(function() {
-                                            reloadDrawings()
-                                            enterShowContour()
-                                        })
                                     }
                                 }
                                 ChartView {
@@ -1618,9 +1589,6 @@ Item {
         interval: 1000
         repeat: true
         running: photoViewMode === 2 && currentReportPairHasAnalyse()
-        onTriggered: {
-            blinkShowAnalysed = !blinkShowAnalysed
-            applyReportPhotoDisplay()
-        }
+        onTriggered: blinkShowAnalysed = !blinkShowAnalysed
     }
 }
