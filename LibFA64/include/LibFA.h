@@ -34,6 +34,8 @@ typedef struct {
 
 LIBFA_API bool initFaceDetector();
 LIBFA_API void setExtraInfo(int age, int gender, int source_type);
+/** conVal/minArea/maxArea for sports/wrinkle/pores; call before analyse*ByFile (defaults 80/30/100). */
+LIBFA_API void setAnalyseRunOptions(int conVal, int minArea, int maxArea);
 
 LIBFA_API T_ANA_RESULT analysePoresByFile(char *inFile, char *outFile, int *pxl, int pxl_cnt, int nMin, int nMax);
 LIBFA_API T_ANA_RESULT analyseWrinkleByFile(char *inFile, char *outFile, int *pxl, int pxl_cnt, int nMin, int nMax);

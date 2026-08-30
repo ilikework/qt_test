@@ -34,6 +34,11 @@ LIBFA_API void setExtraInfo(int age, int gender, int source_type)
     libfa::internal::setExtraInfo(age, gender, source_type);
 }
 
+LIBFA_API void setAnalyseRunOptions(int conVal, int minArea, int maxArea)
+{
+    libfa::internal::setAnalyseRunOptions(conVal, minArea, maxArea);
+}
+
 LIBFA_API T_ANA_RESULT analysePoresByFile(char *inFile, char *outFile, int *pxl, int pxl_cnt, int nMin, int nMax)
 {
     return libfa::internal::analysePoresByFile(inFile, outFile, pxl, pxl_cnt, nMin, nMax);

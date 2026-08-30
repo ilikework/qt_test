@@ -3,7 +3,6 @@
   "CameraSeriesComment": "4:CanonEOS, 5:Aigo880",
   "CameraSeries": 5,
   "CameraDll": "kzdsc_880.dll",
-  
   "WaitForConnectCamera": 5000,
   "BeforeRGBShootInterval": 1,
   "AfterRGBShootInterval": 1,
@@ -17,5 +16,88 @@
   "RedCreateFrom": "NPL",
   "BrownCreateFrom": "UV",
   "WholeCreateFrom": "PL",
-  "FaceReconExePath": "D:/3D/FaceReconCPU/FaceReconCPU.exe"
+  "FaceReconExePath": "D:/3D/FaceReconCPU/FaceReconCPU.exe",
+  "Analyse": {
+    "Comment": "原 analysis.ini + Face.ini 分析参数；Sections 键名=段名+年龄档(10..70)",
+    "Sections": {
+      "RGBPores30": {
+        "FemaleMin": 120,
+        "FemaleMax": 130,
+        "MaleMin": 75,
+        "MaleMax": 125,
+        "ConVal": 80,
+        "MinArea": 30,
+        "MaxArea": 100,
+        "MaleGain": 92,
+        "FemaleGain": 93
+      },
+      "UVAcne30": {
+        "FemaleMin": 100,
+        "MaleMin": 100,
+        "ConVal": 80,
+        "MinArea": 30,
+        "MaxArea": 100,
+        "MaleGain": 230,
+        "FemaleGain": 230
+      },
+      "PLSpots30": {
+        "FemaleMin": 10,
+        "FemaleMax": 90,
+        "MaleMin": 10,
+        "MaleMax": 119,
+        "ConVal": 5,
+        "MinArea": 50,
+        "MaxArea": 500,
+        "MaleGain": 350,
+        "FemaleGain": 350
+      },
+      "UVSpots30": {
+        "FemaleMin": 20,
+        "FemaleMax": 86,
+        "MaleMin": 20,
+        "MaleMax": 86,
+        "ConVal": 30,
+        "MinArea": 50,
+        "MaxArea": 500,
+        "MaleGain": 400,
+        "FemaleGain": 400
+      },
+      "RGBWrinkle30": {
+        "FemaleMin": 89,
+        "FemaleMax": 89,
+        "MaleMin": 83,
+        "MaleMax": 89,
+        "ConVal": 80,
+        "MinArea": 40,
+        "MaxArea": 500,
+        "MaleGain": 40,
+        "FemaleGain": 30
+      },
+      "RGBEvenness30": {
+        "ConVal": 80,
+        "MinArea": 30,
+        "MaxArea": 100,
+        "MaleGain": 5,
+        "FemaleGain": 6
+      },
+      "BROWNEvenness30": {
+        "ConVal": 80,
+        "MinArea": 30,
+        "MaxArea": 100,
+        "MaleGain": 500,
+        "FemaleGain": 500
+      },
+      "REDSpots30": {
+        "ConVal": 5,
+        "MinArea": 50,
+        "MaxArea": 500,
+        "MaleGain": 180,
+        "FemaleGain": 180
+      },
+      "RGBMoisture30": {
+        "MaleGain": 10,
+        "FemaleGain": 11
+      }
+    }
+  }
 }

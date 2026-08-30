@@ -108,3 +108,46 @@ bool CustomerReportManager::saveReport(const QString &custId, int groupId, int r
     }
     return true;
 }
+
+QVariantMap CustomerReportManager::loadReportChartData(const QString &custId)
+{
+    QVariantMap out;
+    out[QStringLiteral("dates")] = QVariantList();
+    out[QStringLiteral("reports")] = QVariantList();
+
+    m_lastError.clear();
+    if (custId.isEmpty())
+        return out;
+
+    static const char *kReportNames[] = {
+        "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
+        "皱 纹", "敏感度", "褐色斑", "混合彩斑"
+    };
+
+    QStringList dates;
+    QVector<QVector<double>> scores;
+    if (!AppDb::instance().loadCustomerReportChartHistory(custId, &dates, &scores)) {
+        m_lastError = AppDb::instance().lastErrorText();
+        return out;
+    }
+
+    QVariantList dateList;
+    for (const QString &d : dates)
+        dateList.append(d);
+    out[QStringLiteral("dates")] = dateList;
+
+    QVariantList reportList;
+    for (int i = 0; i < 8; ++i) {
+        QVariantMap row;
+        row[QStringLiteral("name")] = QString::fromUtf8(kReportNames[i]);
+        QVariantList values;
+        if (i < scores.size()) {
+            for (double v : scores[i])
+                values.append(v);
+        }
+        row[QStringLiteral("values")] = values;
+        reportList.append(row);
+    }
+    out[QStringLiteral("reports")] = reportList;
+    return out;
+}

@@ -1,12 +1,15 @@
 #include "AppDb.h"
+#include "AppConfig.h"
 #include "FaceContourMath.h"
 #include <QCoreApplication>
+#include <QDate>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QSet>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -847,6 +850,109 @@ QString AppDb::photoFilePath(const FacePhoto &photo) const
     if (folder.isEmpty() || photo.Photo_Name.isEmpty())
         return QString();
     return QDir(folder).filePath(photo.Photo_Name);
+}
+
+namespace {
+
+QString formatReportChartDateLabel(const QString &editTime)
+{
+    QDateTime dt = QDateTime::fromString(editTime, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    if (!dt.isValid())
+        dt = QDateTime::fromString(editTime, Qt::ISODate);
+    if (!dt.isValid())
+        return editTime.left(10);
+    const QDate d = dt.date();
+    return QStringLiteral("%1/%2/%3").arg(d.year()).arg(d.month()).arg(d.day());
+}
+
+double displayScoreFromAnalysePercent(int rawPercent, int reportType, int gender, int ageYears)
+{
+    return AppConfig::instance().displayScoreFromRawPercent(rawPercent, reportType, gender, ageYears);
+}
+
+} // namespace
+
+bool AppDb::loadCustomerReportChartHistory(const QString &custId,
+                                           QStringList *groupDateLabels,
+                                           QVector<QVector<double>> *reportScores) const
+{
+    if (!groupDateLabels || !reportScores || custId.isEmpty() || !m_db.isOpen())
+        return false;
+
+    groupDateLabels->clear();
+    reportScores->clear();
+    reportScores->resize(8);
+
+    int chartGender = 1;
+    int chartAge = 30;
+    Customer chartCustomer;
+    if (findCustomerByCustId(custId, &chartCustomer)) {
+        chartGender = chartCustomer.Cust_Gender;
+        const QDate bd = QDate::fromString(chartCustomer.Cust_Birthday, QStringLiteral("yyyy-MM-dd"));
+        if (bd.isValid())
+            chartAge = qMax(1, bd.daysTo(QDate::currentDate()) / 365);
+    }
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT p.Group_ID, p.Photo_ID, p.Photo_DirType, p.Photo_EditTime,
+               a.Analyse_Precent
+        FROM T_Customers_FacePhoto p
+        LEFT JOIN T_FacePhoto_AnalyseInfo a ON a.FacePhoto_IX = p.IX
+        WHERE p.Cust_ID = ?
+        ORDER BY p.Group_ID ASC, p.Photo_ID ASC, p.Photo_DirType ASC
+    )");
+    q.addBindValue(custId);
+    if (!q.exec())
+        return false;
+
+    QVector<int> groupIds;
+    QMap<int, QString> groupDateById;
+    QMap<int, QMap<int, QVector<int>>> percentByGroupPhoto;
+
+    while (q.next()) {
+        const int groupId = q.value(0).toInt();
+        const int photoId = q.value(1).toInt();
+        const QString dirType = q.value(2).toString();
+        const QString editTime = q.value(3).toString();
+        const QVariant percentVar = q.value(4);
+
+        if (!groupIds.contains(groupId))
+            groupIds.append(groupId);
+
+        if (photoId == 1 && dirType == QLatin1String(LEFT) && !editTime.isEmpty())
+            groupDateById[groupId] = formatReportChartDateLabel(editTime);
+        else if (!groupDateById.contains(groupId) && !editTime.isEmpty())
+            groupDateById[groupId] = formatReportChartDateLabel(editTime);
+
+        if (photoId < 1 || photoId > 8 || percentVar.isNull())
+            continue;
+
+        percentByGroupPhoto[groupId][photoId].append(percentVar.toInt());
+    }
+
+    for (int groupId : groupIds) {
+        const QString label = groupDateById.value(
+            groupId, QStringLiteral("%1").arg(groupId, 2, 10, QChar('0')));
+        groupDateLabels->append(label);
+
+        const int groupIndex = groupDateLabels->size() - 1;
+        for (int reportIndex = 0; reportIndex < 8; ++reportIndex) {
+            const int photoId = reportIndex + 1;
+            const QVector<int> percents = percentByGroupPhoto.value(groupId).value(photoId);
+            double score = 0.0;
+            if (!percents.isEmpty()) {
+                double sum = 0.0;
+                for (int p : percents)
+                    sum += displayScoreFromAnalysePercent(p, photoId, chartGender, chartAge);
+                score = sum / percents.size();
+            }
+            (*reportScores)[reportIndex].resize(groupIds.size());
+            (*reportScores)[reportIndex][groupIndex] = score;
+        }
+    }
+
+    return true;
 }
 
 bool AppDb::upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent)

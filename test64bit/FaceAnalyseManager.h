@@ -32,6 +32,12 @@ public:
     Q_INVOKABLE void notifyGroupAnalyseProgress(int done, int total, const QString &label);
     Q_INVOKABLE bool photoHasAnalyseOverlay(int facePhotoIx) const;
     Q_INVOKABLE QUrl photoAnalyseOverlayUrl(int facePhotoIx) const;
+    /// 用左右分析叠加图（或一侧原图兜底）合成 3D UV 贴图（FaceRecon 布局），缓存到 analyse/{stem}_atlas.jpg
+    Q_INVOKABLE QUrl ensurePairAnalyseAtlasUrl(const QString &groupDir,
+                                              const QString &textureStem,
+                                              int facePhotoIxL,
+                                              int facePhotoIxR,
+                                              const QString &baseAtlasLocalPath) const;
 
 signals:
     void busyChanged();

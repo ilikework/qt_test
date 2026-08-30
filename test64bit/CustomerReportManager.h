@@ -15,6 +15,8 @@ public:
     // offeringIxs 为 T_Offerings_Template.IX 列表
     Q_INVOKABLE bool saveReport(const QString &custId, int groupId, int reportIndex,
                                 int tier, const QString &memo, const QVariantList &offeringIxs);
+    /// 返回 { dates: string[], reports: [{ name, values: number[] }] }，共 8 项单项报告曲线
+    Q_INVOKABLE QVariantMap loadReportChartData(const QString &custId);
     Q_INVOKABLE QString lastError() const { return m_lastError; }
 
 private:

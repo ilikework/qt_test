@@ -8,6 +8,7 @@ namespace internal {
 
 bool initFaceDetector();
 void setExtraInfo(int age, int gender, int source_type);
+void setAnalyseRunOptions(int conVal, int minArea, int maxArea);
 T_CONTOUR autoMarkFaceByFile(const char *fileName);
 T_CONTOUR autoMarkLeftFaceByFile(const char *fileName);
 T_CONTOUR autoMarkRightFaceByFile(const char *fileName);

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -135,14 +136,59 @@ static int runFaceDetect(const char *imagePath, FaceMode mode, std::vector<int> 
     return 0;
 }
 
-static void runPores(const char *inFile, const int *pxl, int pxl_cnt)
+static void runPores(const char *inFile, const int *pxl, int pxl_cnt, int nMin, int nMax)
 {
     char outFile[1024];
     std::strncpy(outFile, "demo_output/analyse_pores.jpg", sizeof(outFile) - 1);
     T_ANA_RESULT r = analysePoresByFile(const_cast<char *>(inFile), outFile,
-                                        const_cast<int *>(pxl), pxl_cnt, 75, 125);
-    std::printf("pores: value=%d percent=%d (percent/10000=%%) -> %s\n",
-                r.value, r.percent, outFile);
+                                        const_cast<int *>(pxl), pxl_cnt, nMin, nMax);
+    std::printf("pores: value=%d percent=%d chart=%.4f area%%=%.6f -> %s\n",
+                r.value, r.percent, r.percent / 100.0, r.percent / 10000.0, outFile);
+}
+
+static bool loadRoiFromFile(const char *path, std::vector<int> *outPxl)
+{
+    if (!outPxl)
+        return false;
+    outPxl->clear();
+
+    std::ifstream in(path);
+    if (!in) {
+        std::printf("FAIL: cannot open ROI file: %s\n", path);
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#')
+            continue;
+
+        std::istringstream iss(line);
+        std::vector<int> nums;
+        int v = 0;
+        while (iss >> v)
+            nums.push_back(v);
+
+        if (nums.size() >= 5) {
+            outPxl->push_back(nums[3]);
+            outPxl->push_back(nums[4]);
+        } else if (nums.size() >= 3) {
+            outPxl->push_back(nums[1]);
+            outPxl->push_back(nums[2]);
+        } else if (nums.size() >= 2) {
+            outPxl->push_back(nums[0]);
+            outPxl->push_back(nums[1]);
+        }
+    }
+
+    if (outPxl->size() < 6) {
+        std::printf("FAIL: ROI needs at least 3 points in %s\n", path);
+        outPxl->clear();
+        return false;
+    }
+    std::printf("ROI loaded: %d points from %s\n",
+                static_cast<int>(outPxl->size() / 2), path);
+    return true;
 }
 
 static void runAllAnalyses(const char *inFile, const int *pxl, int pxl_cnt)
@@ -175,32 +221,44 @@ static void printUsage()
 {
     std::printf(
         "usage:\n"
-        "  libfa64_demo.exe --image <path> [--front|--left|--right] [--analyse|--all]\n"
+        "  libfa64_demo.exe --image <path> [options]\n"
         "\n"
+        "  --roi <file>                 ROI from DB export (idx x y per line)\n"
+        "  --nmin / --nmax              analyse params (default 75 / 125)\n"
         "  --front / --left / --right   auto face contour (36 / 13 / 13 points)\n"
-        "  --analyse                    run all skin analyses in detected ROI\n"
-        "  --all                        same as --analyse (legacy)\n"
+        "  --analyse / --all            run all skin analyses in ROI\n"
         "\n"
         "examples:\n"
-        "  libfa64_demo.exe --right --image 01_R.jpg --analyse\n"
-        "  libfa64_demo.exe --front --image 0000001_12.jpg --analyse\n"
-        "  libfa64_demo.exe --right --image 01_R.jpg          (contour only)\n");
+        "  libfa64_demo.exe --image 01_L.jpg --roi roi_g06_L_RGB.txt --pores --nmin 75 --nmax 125\n"
+        "  libfa64_demo.exe --right --image 01_R.jpg --analyse\n");
 }
 
 int main(int argc, char **argv)
 {
     const char *imagePath = "demo_output/synthetic_input.bmp";
+    const char *roiPath = nullptr;
     bool runAnalyse = false;
+    bool runPoresOnly = false;
     bool faceOnly = false;
+    int nMin = 75;
+    int nMax = 125;
     FaceMode faceMode = FACE_NONE;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--all") == 0 || std::strcmp(argv[i], "--analyse") == 0)
             runAnalyse = true;
+        else if (std::strcmp(argv[i], "--pores") == 0)
+            runPoresOnly = true;
         else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             printUsage();
             return 0;
         } else if (std::strcmp(argv[i], "--face") == 0)
             faceOnly = true;
+        else if (std::strcmp(argv[i], "--roi") == 0 && i + 1 < argc)
+            roiPath = argv[++i];
+        else if (std::strcmp(argv[i], "--nmin") == 0 && i + 1 < argc)
+            nMin = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--nmax") == 0 && i + 1 < argc)
+            nMax = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--front") == 0) {
             faceMode = FACE_FRONT;
         } else if (std::strcmp(argv[i], "--left") == 0) {
@@ -215,8 +273,11 @@ int main(int argc, char **argv)
 
     std::printf("LibFA64 demo\n");
     std::printf("image: %s\n", imagePath);
+    if (roiPath)
+        std::printf("roi: %s\n", roiPath);
+    std::printf("nMin=%d nMax=%d\n", nMin, nMax);
 
-    if (faceMode == FACE_NONE)
+    if (faceMode == FACE_NONE && !roiPath)
         faceMode = FACE_FRONT;
 
     bool explicitFaceMode = false;
@@ -228,7 +289,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if ((faceOnly || explicitFaceMode) && !runAnalyse)
+    if ((faceOnly || explicitFaceMode) && !runAnalyse && !runPoresOnly && !roiPath)
         return runFaceDetect(imagePath, faceMode, nullptr);
 
     setExtraInfo(30, 1, SOURCE_RGB);
@@ -241,25 +302,31 @@ int main(int argc, char **argv)
     std::printf("image pixels: %d\n", pixels);
 
     std::vector<int> roiPxl;
-    const int rc = runFaceDetect(imagePath, faceMode, &roiPxl);
-    if (rc != 0)
-        return rc;
+    if (roiPath) {
+        if (!loadRoiFromFile(roiPath, &roiPxl))
+            return 2;
+    } else {
+        const int rc = runFaceDetect(imagePath, faceMode, &roiPxl);
+        if (rc != 0)
+            return rc;
+    }
 
-    if (!runAnalyse) {
-        runPores(imagePath, g_pxl, 8);
+    if (!runAnalyse && !runPoresOnly) {
+        runPores(imagePath, roiPxl.data(), static_cast<int>(roiPxl.size()), nMin, nMax);
         std::printf("done. output in demo_output/\n");
         return 0;
     }
 
     if (roiPxl.empty()) {
-        std::printf("WARN: no auto ROI, fallback to center rectangle\n");
+        std::printf("WARN: no ROI, fallback to center rectangle\n");
         roiPxl.assign(g_pxl, g_pxl + 8);
     }
 
     std::printf("analyse ROI: %d points (%d coords)\n",
                 static_cast<int>(roiPxl.size() / 2), static_cast<int>(roiPxl.size()));
-    runPores(imagePath, roiPxl.data(), static_cast<int>(roiPxl.size()));
-    runAllAnalyses(imagePath, roiPxl.data(), static_cast<int>(roiPxl.size()));
+    runPores(imagePath, roiPxl.data(), static_cast<int>(roiPxl.size()), nMin, nMax);
+    if (runAnalyse)
+        runAllAnalyses(imagePath, roiPxl.data(), static_cast<int>(roiPxl.size()));
 
     std::printf("done. output in demo_output/\n");
     return 0;

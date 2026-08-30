@@ -1,8 +1,11 @@
 #include "AppConfig.h"
+#include "MM_Const_Define.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <cmath>
 
 static const char* CONFIG_FILENAME = "MMFace_.json";
 
@@ -298,5 +301,205 @@ QString AppConfig::FaceReconExePath() const
             return p;
     }
     return QString("D:/3D/FaceReconCPU/FaceReconCPU.exe");
+}
+
+namespace {
+
+QJsonObject analyseRoot(const QJsonObject &root)
+{
+    return root.value(QStringLiteral("Analyse")).toObject();
+}
+
+QJsonObject analyseSections(const QJsonObject &root)
+{
+    return analyseRoot(root).value(QStringLiteral("Sections")).toObject();
+}
+
+int jsonInt(const QJsonObject &obj, const char *key, int fallback)
+{
+    if (!obj.contains(key))
+        return fallback;
+    return obj.value(QLatin1String(key)).toInt(fallback);
+}
+
+double jsonDouble(const QJsonObject &obj, const char *key, double fallback)
+{
+    if (!obj.contains(key))
+        return fallback;
+    return obj.value(QLatin1String(key)).toDouble(fallback);
+}
+
+} // namespace
+
+QString AppConfig::analyseAgeBand(int ageYears) const
+{
+    if (ageYears < 20)
+        return QStringLiteral("10");
+    if (ageYears < 30)
+        return QStringLiteral("20");
+    if (ageYears < 40)
+        return QStringLiteral("30");
+    if (ageYears < 50)
+        return QStringLiteral("40");
+    if (ageYears < 60)
+        return QStringLiteral("50");
+    if (ageYears < 70)
+        return QStringLiteral("60");
+    return QStringLiteral("70");
+}
+
+QString AppConfig::analyseSectionBaseForReportType(int reportType) const
+{
+    switch (reportType) {
+    case 1:
+        return QStringLiteral("RGBPores");
+    case 2:
+        return QStringLiteral("UVAcne");
+    case 3:
+        return QStringLiteral("PLSpots");
+    case 4:
+        return QStringLiteral("PLSpots");
+    case 5:
+        return QStringLiteral("RGBWrinkle");
+    case 6:
+        return QStringLiteral("RGBEvenness");
+    case 7:
+        return QStringLiteral("BROWNEvenness");
+    case 8:
+        return QStringLiteral("RGBMoisture");
+    default:
+        return QStringLiteral("RGBPores");
+    }
+}
+
+QString AppConfig::analyseSectionBaseForJob(int analyseFunction, const QString &capType) const
+{
+    switch (analyseFunction) {
+    case MM_ANALYSE_PORES:
+        return QStringLiteral("RGBPores");
+    case MM_ANALYSE_ACNES:
+        return QStringLiteral("UVAcne");
+    case MM_ANALYSE_SPOTS:
+        if (capType == MM_BROWN)
+            return QStringLiteral("REDSpots");
+        if (capType == MM_UV)
+            return QStringLiteral("UVSpots");
+        return QStringLiteral("PLSpots");
+    case MM_ANALYSE_WRINKLE:
+        return QStringLiteral("RGBWrinkle");
+    case MM_ANALYSE_EVENNESS:
+        return QStringLiteral("RGBEvenness");
+    default:
+        return analyseSectionBaseForReportType(analyseFunction);
+    }
+}
+
+AnalyseSectionParams AppConfig::analyseSectionParams(const QString &sectionBase, int ageYears) const
+{
+    auto parseSection = [](const QJsonObject &section, AnalyseSectionParams defaults) {
+        AnalyseSectionParams p = defaults;
+        p.femaleMin = jsonInt(section, "FemaleMin", p.femaleMin);
+        p.femaleMax = jsonInt(section, "FemaleMax", p.femaleMax);
+        p.maleMin = jsonInt(section, "MaleMin", p.maleMin);
+        p.maleMax = jsonInt(section, "MaleMax", p.maleMax);
+        p.minArea = jsonInt(section, "MinArea", p.minArea);
+        p.maxArea = jsonInt(section, "MaxArea", p.maxArea);
+        p.conVal = jsonInt(section, "ConVal", p.conVal);
+        p.maleGain = jsonDouble(section, "MaleGain", p.maleGain);
+        p.femaleGain = jsonDouble(section, "FemaleGain", p.femaleGain);
+        if (p.maleGain <= 0.0)
+            p.maleGain = 1.0;
+        if (p.femaleGain <= 0.0)
+            p.femaleGain = 1.0;
+        return p;
+    };
+
+    AnalyseSectionParams p;
+    const QJsonObject sections = analyseSections(m_root);
+    const QString sectionKey = sectionBase + analyseAgeBand(ageYears);
+    QJsonObject section = sections.value(sectionKey).toObject();
+    if (section.isEmpty() && ageYears != 30)
+        section = sections.value(sectionBase + QStringLiteral("30")).toObject();
+    if (section.isEmpty())
+        return p;
+    return parseSection(section, p);
+}
+
+void AppConfig::analyseMinMaxForJob(int analyseFunction, const QString &capType, int ageYears,
+                                    int gender, int *outMin, int *outMax) const
+{
+    const QString base = analyseSectionBaseForJob(analyseFunction, capType);
+    const AnalyseSectionParams p = analyseSectionParams(base, ageYears);
+    const bool male = (gender != 0);
+    if (outMin)
+        *outMin = male ? p.maleMin : p.femaleMin;
+    if (outMax)
+        *outMax = male ? p.maleMax : p.femaleMax;
+    if (outMin && *outMin <= 0 && analyseFunction == MM_ANALYSE_PORES)
+        *outMin = male ? 75 : 120;
+    if (outMax && *outMax <= 0 && analyseFunction == MM_ANALYSE_PORES)
+        *outMax = male ? 125 : 130;
+}
+
+void AppConfig::analyseRunOptionsForJob(int analyseFunction, const QString &capType, int ageYears,
+                                        int *outConVal, int *outMinArea, int *outMaxArea) const
+{
+    const AnalyseSectionParams p = analyseSectionParams(
+        analyseSectionBaseForJob(analyseFunction, capType), ageYears);
+    if (outConVal)
+        *outConVal = p.conVal;
+    if (outMinArea)
+        *outMinArea = p.minArea;
+    if (outMaxArea)
+        *outMaxArea = p.maxArea;
+}
+
+double AppConfig::correctPercent(double magicFacePercent, int reportType, int gender,
+                                 int ageYears) const
+{
+    if (reportType == 8)
+        return magicFacePercent;
+
+    const AnalyseSectionParams p = analyseSectionParams(
+        analyseSectionBaseForReportType(reportType), ageYears);
+    const double fgain = (gender != 0) ? p.maleGain : p.femaleGain;
+    double percent = magicFacePercent;
+    if (percent < 0.0)
+        percent = 0.0;
+
+    const double fvalue = std::sqrt(percent) * fgain;
+    if (fvalue <= 50.0)
+        return fvalue;
+
+    double fNum = 0.0;
+    double fCount = (fvalue - 50.0) / 10.0;
+    int nCount = static_cast<int>(fCount);
+    const double fTail = fCount - static_cast<double>(nCount);
+    if (nCount > 60)
+        nCount = 60;
+
+    int i = 0;
+    if (nCount - 1 > 0) {
+        for (i = 0; i <= nCount - 1; ++i)
+            fNum += std::pow(0.82, i + 1) * 10.0;
+        i = nCount - 1;
+    } else {
+        i = 0;
+    }
+
+    fNum += fTail * std::pow(0.82, i + 1) * 10.0;
+    if (nCount == 0)
+        fNum += fTail * 8.2;
+
+    if (fNum == 0.0)
+        return fvalue;
+    return fNum + 50.0;
+}
+
+double AppConfig::displayScoreFromRawPercent(int rawPercent, int reportType, int gender,
+                                            int ageYears) const
+{
+    const double magicFacePercent = rawPercent / 100.0;
+    return correctPercent(magicFacePercent, reportType, gender, ageYears);
 }
 

@@ -1,12 +1,14 @@
 #include "FaceAnalyseManager.h"
 
 #include "AppDb.h"
+#include "AppConfig.h"
 #include "FaceContourMath.h"
 #include "LibFA.h"
 #include "MM_Const_Define.h"
 
 #include <QColor>
 #include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -17,8 +19,11 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaObject>
+#include <QPainter>
 #include <QtConcurrent>
 #include <QUrl>
+#include <algorithm>
+#include <cmath>
 
 Q_LOGGING_CATEGORY(lcFaceAnalyse, "FaceAnalyse")
 
@@ -618,6 +623,18 @@ bool runOneSkinAnalyse(const SkinAnalyseJob &job,
     }
 
     setExtraInfo(age, gender, job.sourceType);
+
+    int nMin = job.nMin;
+    int nMax = job.nMax;
+    AppConfig::instance().analyseMinMaxForJob(
+        job.analyseFunction, job.capType, age, gender, &nMin, &nMax);
+    int conVal = 80;
+    int minArea = 30;
+    int maxArea = 100;
+    AppConfig::instance().analyseRunOptionsForJob(
+        job.analyseFunction, job.capType, age, &conVal, &minArea, &maxArea);
+    setAnalyseRunOptions(conVal, minArea, maxArea);
+
     const QString outPath = overlayOutputPath(
         AppDb::instance().groupFolderPath(custId, groupId), photo.Photo_Name);
 
@@ -626,7 +643,7 @@ bool runOneSkinAnalyse(const SkinAnalyseJob &job,
     QVector<int> pxlCopy = pxl;
     const int pxlCount = pxlCopy.size();
     T_ANA_RESULT r = job.run(
-        inBytes.data(), outBytes.data(), pxlCopy.data(), pxlCount, job.nMin, job.nMax);
+        inBytes.data(), outBytes.data(), pxlCopy.data(), pxlCount, nMin, nMax);
 
     if (!AppDb::instance().upsertAnalyseInfo(photo.IX, job.analyseFunction, r.value, r.percent)) {
         if (warnOut)
@@ -772,4 +789,160 @@ QUrl FaceAnalyseManager::photoAnalyseOverlayUrl(int facePhotoIx) const
     if (path.isEmpty())
         return QUrl();
     return QUrl::fromLocalFile(path);
+}
+
+namespace {
+
+QString localFilePathFromMaybeUrl(const QString &pathOrUrl)
+{
+    if (pathOrUrl.isEmpty())
+        return QString();
+    if (pathOrUrl.startsWith(QLatin1String("file:"), Qt::CaseInsensitive))
+        return QUrl(pathOrUrl).toLocalFile();
+    return pathOrUrl;
+}
+
+/// FaceRecon 侧脸 UV 贴图布局（实测 2664×3552 侧图 → 7104×3552 贴图）：
+/// [左黑边 448][L 2664][中缝 880][R 2664][右黑边 448]
+void faceReconPasteOffsets(int photoW, int atlasW, int *outLeftX, int *outRightX)
+{
+    const double refW = 2664.0;
+    int xl = static_cast<int>(std::lround(448.0 * photoW / refW));
+    int xr = static_cast<int>(std::lround(3992.0 * photoW / refW));
+    if (xl < 0)
+        xl = 0;
+    if (xr < 0)
+        xr = 0;
+    if (xl + photoW > atlasW)
+        xl = std::max(0, atlasW - photoW);
+    if (xr + photoW > atlasW)
+        xr = std::max(0, atlasW - photoW);
+    if (outLeftX)
+        *outLeftX = xl;
+    if (outRightX)
+        *outRightX = xr;
+}
+
+qint64 newestMTime(const QStringList &paths)
+{
+    qint64 newest = 0;
+    for (const QString &p : paths) {
+        if (p.isEmpty())
+            continue;
+        const QFileInfo fi(p);
+        if (!fi.exists())
+            continue;
+        newest = std::max(newest, fi.lastModified().toMSecsSinceEpoch());
+    }
+    return newest;
+}
+
+bool pasteSide(QImage *atlas, const QImage &side, int x)
+{
+    if (!atlas || side.isNull() || x < 0)
+        return false;
+    QImage src = side;
+    if (src.format() != QImage::Format_RGB888 && src.format() != QImage::Format_ARGB32
+        && src.format() != QImage::Format_RGB32) {
+        src = src.convertToFormat(QImage::Format_RGB888);
+    }
+    if (src.height() != atlas->height() || src.width() > atlas->width() - x) {
+        src = src.scaled(std::min(src.width(), atlas->width() - x), atlas->height(),
+                         Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    }
+    QPainter painter(atlas);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(x, 0, src);
+    painter.end();
+    return true;
+}
+
+} // namespace
+
+QUrl FaceAnalyseManager::ensurePairAnalyseAtlasUrl(const QString &groupDir,
+                                                   const QString &textureStem,
+                                                   int facePhotoIxL,
+                                                   int facePhotoIxR,
+                                                   const QString &baseAtlasLocalPath) const
+{
+    if (groupDir.isEmpty() || textureStem.isEmpty())
+        return QUrl();
+
+    const QString overlayL = AppDb::instance().analyseOverlayPathForPhoto(facePhotoIxL);
+    const QString overlayR = AppDb::instance().analyseOverlayPathForPhoto(facePhotoIxR);
+    if (overlayL.isEmpty() && overlayR.isEmpty())
+        return QUrl();
+
+    const QString baseAtlas = localFilePathFromMaybeUrl(baseAtlasLocalPath);
+    if (baseAtlas.isEmpty() || !QFileInfo::exists(baseAtlas))
+        return QUrl();
+
+    const QString analyseDir = QDir(groupDir).filePath(QStringLiteral("analyse"));
+    QDir().mkpath(analyseDir);
+    const QString outPath = QDir(analyseDir).filePath(textureStem + QStringLiteral("_atlas.jpg"));
+
+    QStringList sources;
+    sources << baseAtlas << overlayL << overlayR;
+    const qint64 srcNewest = newestMTime(sources);
+    const QFileInfo outInfo(outPath);
+    if (outInfo.exists() && outInfo.lastModified().toMSecsSinceEpoch() >= srcNewest)
+        return QUrl::fromLocalFile(outPath);
+
+    QImage atlas = QImage(baseAtlas);
+    if (atlas.isNull())
+        return QUrl();
+    if (atlas.format() != QImage::Format_RGB32 && atlas.format() != QImage::Format_ARGB32
+        && atlas.format() != QImage::Format_RGB888) {
+        atlas = atlas.convertToFormat(QImage::Format_RGB32);
+    } else {
+        atlas = atlas.copy();
+    }
+
+    FacePhoto photoL;
+    FacePhoto photoR;
+    const bool haveL = facePhotoIxL > 0
+                       && AppDb::instance().findFacePhotoByIx(facePhotoIxL, &photoL);
+    const bool haveR = facePhotoIxR > 0
+                       && AppDb::instance().findFacePhotoByIx(facePhotoIxR, &photoR);
+
+    QImage imgL;
+    QImage imgR;
+    if (!overlayL.isEmpty())
+        imgL = QImage(overlayL);
+    else if (haveL) {
+        const QString p = AppDb::instance().photoFilePath(photoL);
+        if (!p.isEmpty())
+            imgL = QImage(p);
+    }
+    if (!overlayR.isEmpty())
+        imgR = QImage(overlayR);
+    else if (haveR) {
+        const QString p = AppDb::instance().photoFilePath(photoR);
+        if (!p.isEmpty())
+            imgR = QImage(p);
+    }
+
+    const int photoW = !imgL.isNull() ? imgL.width()
+                                      : (!imgR.isNull() ? imgR.width() : 0);
+    if (photoW <= 0)
+        return QUrl();
+
+    int xl = 0;
+    int xr = 0;
+    faceReconPasteOffsets(photoW, atlas.width(), &xl, &xr);
+
+    bool painted = false;
+    if (!overlayL.isEmpty() && !imgL.isNull())
+        painted = pasteSide(&atlas, imgL, xl) || painted;
+    if (!overlayR.isEmpty() && !imgR.isNull())
+        painted = pasteSide(&atlas, imgR, xr) || painted;
+    if (!painted)
+        return QUrl();
+
+    if (!atlas.save(outPath, "JPG", 92)) {
+        qCWarning(lcFaceAnalyse) << "save analyse atlas failed:" << outPath;
+        return QUrl();
+    }
+    qCInfo(lcFaceAnalyse) << "analyse atlas:" << outPath << "xl" << xl << "xr" << xr;
+    return QUrl::fromLocalFile(outPath);
 }

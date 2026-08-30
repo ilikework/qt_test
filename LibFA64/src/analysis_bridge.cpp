@@ -23,6 +23,14 @@ struct AnalysisRegion {
     byte **gray = nullptr;
 };
 
+struct AnalyseRunOptions {
+    int conVal = 80;
+    int minArea = 30;
+    int maxArea = 100;
+};
+
+AnalyseRunOptions g_runOptions;
+
 static cv::Rect polygonBounds(const int *pxl, int pxl_cnt, const cv::Size &imageSize)
 {
     if (!pxl || pxl_cnt < 4)
@@ -57,7 +65,7 @@ static bool buildRegion(const cv::Mat &bgr, const int *pxl, int pxl_cnt, Analysi
 
     get_mem2D(&region.gray, height, width);
 
-    for (int x = region.rc.x, ii = 0; x < region.rc.x + width; ++x, ++ii) {
+    for (int x = region.rc.x, ii =  0; x < region.rc.x + width; ++x, ++ii) {
         for (int y = region.rc.y + height - 1, j = 0; y >= region.rc.y; --y, ++j) {
             const cv::Vec3b px = bgr.at<cv::Vec3b>(y, x);
             region.gray[j][ii] = byte(rgb2y(px[2], px[1], px[0]));
@@ -149,6 +157,13 @@ static T_ANA_RESULT makeEmptyResult()
 
 } // namespace
 
+void setAnalyseRunOptions(int conVal, int minArea, int maxArea)
+{
+    g_runOptions.conVal = conVal;
+    g_runOptions.minArea = minArea;
+    g_runOptions.maxArea = maxArea;
+}
+
 T_ANA_RESULT analysePoresByFile(const char *inFile, const char *outFile,
                                 const int *pxl, int pxl_cnt, int nMin, int nMax)
 {
@@ -166,10 +181,9 @@ T_ANA_RESULT analysePoresByFile(const char *inFile, const char *outFile,
 
     int portCount = 0;
     int area = 0;
-    const int conVal = 80;
     maokong_ana_new(region.gray, region.rc.width, region.rc.height,
                     region.pnX.data(), region.pnY.data(), region.pnX.size(),
-                    &portCount, &area, nMin, nMax, conVal, nullptr, 1);
+                    &portCount, &area, nMin, nMax, g_runOptions.conVal, nullptr, 1);
 
     overlayGrayResult(bgr, region, false);
     cv::imwrite(outFile, bgr);
@@ -197,12 +211,11 @@ T_ANA_RESULT analyseSpotsByFile(const char *inFile, const char *outFile,
 
     int portCount = 0;
     int area = 0;
-    const int maxArea = 100;
-    const int minArea = 30;
-    const int conVal = 80;
     sports_ana_new(region.gray, region.rc.width, region.rc.height,
                    region.pnX.data(), region.pnY.data(), region.pnX.size(),
-                   &portCount, &area, nMin, nMax, maxArea, minArea, conVal, nullptr, 1);
+                   &portCount, &area, nMin, nMax,
+                   g_runOptions.maxArea, g_runOptions.minArea,
+                   g_runOptions.conVal, nullptr, 1);
 
     overlayGrayResult(bgr, region, false);
     cv::imwrite(outFile, bgr);
@@ -229,12 +242,11 @@ T_ANA_RESULT analyseWrinkleByFile(const char *inFile, const char *outFile,
         return result;
 
     int area = 0;
-    const int maxArea = 100;
-    const int minArea = 30;
-    const int conVal = 80;
     const int wrinkleScore = winkel_ana_new1(region.gray, region.rc.width, region.rc.height,
                                              region.pnX.data(), region.pnY.data(), region.pnX.size(),
-                                             &area, nMin, nMax, maxArea, minArea, conVal, nullptr);
+                                             &area, nMin, nMax,
+                                             g_runOptions.maxArea, g_runOptions.minArea,
+                                             g_runOptions.conVal, nullptr);
 
     overlayGrayResult(bgr, region, false);
     cv::imwrite(outFile, bgr);

@@ -20,19 +20,17 @@ Item {
         "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
         "皱 纹", "敏感度", "褐色斑", "混合彩斑", "综合报告"
     ]
-    property var resDate: [
-        "2025/4/1", "2025/5/4", "2025/6/7", "2025/7/12", "2025/8/31"
-    ]
+    property var resDate: []
     property var resDatas: [
-        { name: "毛 孔", res: [10, 25, 12, 28, 14] },
-        { name: "粉 刺", res: [73, 62, 71, 58, 74] },
-        { name: "深层色斑", res: [30, 52, 18, 24, 46] },
-        { name: "浅层色斑", res: [43, 66, 31, 42, 71] },
-        { name: "皱 纹", res: [90, 72, 22, 45, 21] },
-        { name: "敏感度", res: [63, 19, 46, 37, 83] },
-        { name: "褐色斑", res: [12, 23, 45, 67, 89] },
-        { name: "混合彩斑", res: [74, 61, 51, 53, 64] },
-        { name: "综合报告", res: [30, 55, 42, 88, 74] }
+        { name: "毛 孔", res: [] },
+        { name: "粉 刺", res: [] },
+        { name: "深层色斑", res: [] },
+        { name: "浅层色斑", res: [] },
+        { name: "皱 纹", res: [] },
+        { name: "敏感度", res: [] },
+        { name: "褐色斑", res: [] },
+        { name: "混合彩斑", res: [] },
+        { name: "综合报告", res: [] }
     ]
 
     // —— 预录 / 诊断 / 产品 ——
@@ -266,6 +264,55 @@ Item {
 
     ListModel { id: productsModel }
 
+    function rebuildComprehensiveSeries() {
+        var comp = []
+        for (var t = 0; t < resDate.length; t++) {
+            var sum = 0
+            var n = 0
+            for (var j = 0; j < 8; j++) {
+                if (resDatas[j].res && t < resDatas[j].res.length) {
+                    sum += resDatas[j].res[t]
+                    n++
+                }
+            }
+            comp.push(n > 0 ? sum / n : 0)
+        }
+        resDatas[8].res = comp
+    }
+
+    function refreshReportChartData() {
+        if (!_useCustomerReportManager || customerID === "") {
+            resDate = []
+            for (var i = 0; i < 8; i++)
+                resDatas[i].res = []
+            rebuildComprehensiveSeries()
+            rebuildChartAxes()
+            updateAllLineCharts()
+            if (typeof chartBar !== "undefined")
+                chartBar.updatebar()
+            return
+        }
+
+        var data = customerReportManager.loadReportChartData(customerID)
+        resDate = data.dates || []
+        var reports = data.reports || []
+        for (var r = 0; r < 8; r++) {
+            if (r < reports.length) {
+                if (reports[r].name)
+                    resDatas[r].name = reports[r].name
+                resDatas[r].res = reports[r].values ? reports[r].values.slice() : []
+            } else {
+                resDatas[r].res = []
+            }
+        }
+        rebuildComprehensiveSeries()
+        rebuildChartAxes()
+        updateAllLineCharts()
+        if (typeof chartBar !== "undefined")
+            chartBar.updatebar()
+        loadActiveReport()
+    }
+
     function updateAllLineCharts() {
         var displaySeries = [s1, s2, s3, s4, s5, s6, s7, s8]
         var printSeries = [ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8]
@@ -274,19 +321,39 @@ Item {
             allSeries[s].clear()
         for (var i = 0; i < resDate.length; i++) {
             for (var j = 0; j < 8; j++) {
-                displaySeries[j].append(i, resDatas[j].res[i])
-                printSeries[j].append(i, resDatas[j].res[i])
+                if (!resDatas[j].res || i >= resDatas[j].res.length)
+                    continue
+                var val = resDatas[j].res[i]
+                displaySeries[j].append(i, val)
+                printSeries[j].append(i, val)
             }
         }
     }
 
-    function initChartAxes() {
+    function clearCategoryAxis(axis) {
+        if (!axis || !axis.categories)
+            return
+        var cats = axis.categories.slice()
+        for (var i = 0; i < cats.length; i++)
+            axis.remove(cats[i])
+    }
+
+    function rebuildChartAxes() {
+        clearCategoryAxis(axisX)
+        clearCategoryAxis(axisBarX)
+        clearCategoryAxis(axisPrintX)
+        clearCategoryAxis(axisPrintBarX)
+        var n = Math.max(1, resDate.length)
         for (var i = 0; i < resDate.length; i++) {
             axisX.append(resDate[i], i)
+            axisBarX.append(resDate[i], i)
             axisPrintX.append(resDate[i], i)
+            axisPrintBarX.append(resDate[i], i)
         }
-        axisX.max = resDate.length
-        axisPrintX.max = resDate.length
+        axisX.max = n
+        axisBarX.max = n
+        axisPrintX.max = n
+        axisPrintBarX.max = n
     }
 
     property int printReportIdx: 8
@@ -416,12 +483,6 @@ Item {
             barSet.color = seriesColors[reportIdx]
     }
 
-    function initPrintBarAxes() {
-        for (var i = 0; i < resDate.length; i++)
-            axisPrintBarX.append(resDate[i], i)
-        axisPrintBarX.max = resDate.length
-    }
-
     function printActiveReport() {
         if (typeof printHelper === "undefined")
             return
@@ -444,16 +505,7 @@ Item {
         if (customerID !== "")
             subphotoes = analyseModule.loadSub(currentGroupID)
         loadPreRecordData()
-        initChartAxes()
-        initBarChartAxes()
-        initPrintBarAxes()
-        updateAllLineCharts()
-    }
-
-    function initBarChartAxes() {
-        for (var i = 0; i < resDate.length; i++)
-            axisBarX.append(resDate[i], i)
-        axisBarX.max = resDate.length
+        Qt.callLater(refreshReportChartData)
     }
 
     Rectangle {

@@ -107,8 +107,41 @@ Item {
     property string generationErrorMessage: ""
 
     /// 变脸左右贴图 URL：优先按列表解析；subphotoes 未就绪或解析为空时回退 textureSource（避免 morph 左右 URL 为空、采样黑图）
-    readonly property string leftTextureSource: morphMode ? ((((subphotoes && selectedLeftIndex >= 0 && selectedLeftIndex < subphotoes.length) ? textureUrlForIndex(selectedLeftIndex) : "") || textureSource)) : ""
-    readonly property string rightTextureSource: morphMode ? ((((subphotoes && selectedRightIndex >= 0 && selectedRightIndex < subphotoes.length) ? textureUrlForIndex(selectedRightIndex) : "") || textureSource)) : ""
+    readonly property string leftTextureSource: {
+        var rev = analyseTextureRevision
+        if ((textureReloadGen % 2) === 1)
+            return ""
+        if (!morphMode)
+            return ""
+        var u = (subphotoes && selectedLeftIndex >= 0 && selectedLeftIndex < subphotoes.length)
+                ? textureUrlForIndex(selectedLeftIndex) : ""
+        return u || textureSource
+    }
+    readonly property string rightTextureSource: {
+        var rev = analyseTextureRevision
+        if ((textureReloadGen % 2) === 1)
+            return ""
+        if (!morphMode)
+            return ""
+        var u = (subphotoes && selectedRightIndex >= 0 && selectedRightIndex < subphotoes.length)
+                ? textureUrlForIndex(selectedRightIndex) : ""
+        return u || textureSource
+    }
+    /// 普通模式贴图（含强制重载空窗）
+    readonly property string activeTextureSource: {
+        var rev = analyseTextureRevision
+        if ((textureReloadGen % 2) === 1)
+            return ""
+        return textureSource
+    }
+
+    /// 当前是否至少有一张可选分析贴图（普通=选中项；变脸=左右任一侧）
+    readonly property bool canUseAnalyseTexture: {
+        var rev = analyseTextureRevision
+        if (morphMode)
+            return indexHasAnalyseOverlay(selectedLeftIndex) || indexHasAnalyseOverlay(selectedRightIndex)
+        return indexHasAnalyseOverlay(selectedTextureIndex)
+    }
 
     /// true = 无人操作，obj 左右摆动；false = 用户正在操作，停止摆动
     property bool swingIdle: true
@@ -124,6 +157,12 @@ Item {
 
     /// true = 使用同级目录 01_L-01_R_relief.png 作为贴图（3D模型按钮）
     property bool reliefTextureMode: false
+    /// true = 3D 贴图使用分析叠加合成图（一般选中的 CapType / 变脸左右各自）
+    property bool useAnalyseTexture: false
+    /// 分析贴图合成版本号：分析完成或强制重建时自增，驱动 URL 刷新
+    property int analyseTextureRevision: 0
+    /// 偶数为正常 source；奇数为清空，用于强制 Texture 重读磁盘
+    property int textureReloadGen: 0
     /// true = 启用片内 3D 打光；false = 平面显示（等同原 Unshaded）
     property bool rotatingLight3DEnabled: false
     property bool lightDragOnMainView: false
@@ -580,32 +619,103 @@ Item {
         return ""
     }
 
-    function textureUrlForIndex(index) {
+    function indexHasAnalyseOverlay(index) {
+        if (!subphotoes || index < 0 || index >= subphotoes.length)
+            return false
+        if (typeof faceAnalyseManager === "undefined" || !faceAnalyseManager)
+            return false
+        var item = subphotoes[index]
+        var ixl = item.IXL || 0
+        var ixr = item.IXR || 0
+        return (ixl > 0 && faceAnalyseManager.photoHasAnalyseOverlay(ixl))
+                || (ixr > 0 && faceAnalyseManager.photoHasAnalyseOverlay(ixr))
+    }
+
+    function originalTextureUrlForIndex(index) {
         var rel = resolveTextureFileNameForIndex(index)
-        if (!rel) return ""
+        if (!rel)
+            return ""
         return "file:///" + groupDir.replace(/\\/g, "/") + "/" + rel
+    }
+
+    /// 分析叠加图拼成 FaceRecon UV 贴图；失败则回退原贴图
+    function analyseTextureUrlForIndex(index) {
+        if (!indexHasAnalyseOverlay(index))
+            return ""
+        if (typeof faceAnalyseManager === "undefined" || !faceAnalyseManager)
+            return ""
+        var item = subphotoes[index]
+        var stem = getTextureStem(index)
+        if (!stem)
+            return ""
+        var baseRel = resolveTextureFileNameForIndex(index)
+        if (!baseRel)
+            return ""
+        var baseLocal = groupDir.replace(/\\/g, "/") + "/" + baseRel
+        var url = faceAnalyseManager.ensurePairAnalyseAtlasUrl(
+                    groupDir.replace(/\\/g, "/"),
+                    stem,
+                    item.IXL || 0,
+                    item.IXR || 0,
+                    baseLocal)
+        if (!url || !url.toString || url.toString() === "")
+            return ""
+        return url.toString()
+    }
+
+    function textureUrlForIndex(index) {
+        if (root.useAnalyseTexture) {
+            var au = analyseTextureUrlForIndex(index)
+            if (au)
+                return au
+        }
+        return originalTextureUrlForIndex(index)
+    }
+
+    function kickTextureReload() {
+        textureReloadGen = textureReloadGen + 1
+        Qt.callLater(function () {
+            textureReloadGen = textureReloadGen + 1
+            Qt.callLater(refresh3DMaterial)
+        })
+    }
+
+    function refreshTextureSourceFromSelection() {
+        if (root.reliefTextureMode) {
+            var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
+            var reliefRel = "01_L-01_R_relief.png"
+            var reliefFull = groupDir.replace(/\\/g, "/") + "/" + reliefRel
+            root.textureSource = mm3dManager.fileExists(reliefFull) ? (base + reliefRel) : ""
+            return
+        }
+        var idx = selectedTextureIndex
+        if (idx < 0 || idx >= (subphotoes ? subphotoes.length : 0))
+            idx = 0
+        root.textureSource = textureUrlForIndex(idx)
+        if (root.textureSource)
+            console.log("[MM3D] 贴图:", root.textureSource, "analyse=", root.useAnalyseTexture)
+        else
+            console.warn("[MM3D] 未设置贴图 URL，groupDir=", groupDir, "obj=", root.objSource)
     }
 
     function applyObjAndTexturePaths() {
         var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
         root.objSource = base + defaultObjName
-        if (root.reliefTextureMode) {
-            var reliefRel = "01_L-01_R_relief.png"
-            var reliefFull = groupDir.replace(/\\/g, "/") + "/" + reliefRel
-            if (mm3dManager.fileExists(reliefFull))
-                root.textureSource = base + reliefRel
-            else
-                root.textureSource = ""
-            return
+        refreshTextureSourceFromSelection()
+    }
+
+    function toggleAnalyseTexture() {
+        if (root.useAnalyseTexture) {
+            root.useAnalyseTexture = false
+        } else {
+            if (!root.canUseAnalyseTexture)
+                return
+            if (root.reliefTextureMode)
+                root.reliefTextureMode = false
+            root.useAnalyseTexture = true
         }
-        var idx = selectedTextureIndex
-        if (idx < 0 || idx >= (subphotoes ? subphotoes.length : 0)) idx = 0
-        var rel = resolveTextureFileNameForIndex(idx)
-        root.textureSource = rel ? (base + rel) : ""
-        if (root.textureSource)
-            console.log("[MM3D] 贴图:", root.textureSource)
-        else
-            console.warn("[MM3D] 未设置贴图 URL，groupDir=", groupDir, "obj=", root.objSource)
+        refreshTextureSourceFromSelection()
+        kickTextureReload()
     }
 
     function normalizedPath(p) {
@@ -650,6 +760,7 @@ Item {
         root.selectedLeftIndex = 0
         root.selectedRightIndex = 0
         root.reliefTextureMode = false
+        root.useAnalyseTexture = false
         if (root.visible)
             Qt.callLater(ensureObjGenerated)
     }
@@ -671,15 +782,6 @@ Item {
         if (morphMode)
             Qt.callLater(updateXYHandleSurfacePos)
         Qt.callLater(refresh3DMaterial)
-    }
-
-    onSelectedLeftIndexChanged: {
-        if (morphMode)
-            Qt.callLater(refresh3DMaterial)
-    }
-    onSelectedRightIndexChanged: {
-        if (morphMode)
-            Qt.callLater(refresh3DMaterial)
     }
 
     onMorphMeshBiasChanged: {
@@ -768,21 +870,65 @@ Item {
     onSimLightBoostChanged: Qt.callLater(refresh3DMaterial)
 
     onSelectedTextureIndexChanged: {
-        if (root.reliefTextureMode) return
-        if (!root.objSource) return
-        var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
-        var rel = resolveTextureFileNameForIndex(selectedTextureIndex)
-        root.textureSource = rel ? (base + rel) : ""
+        if (root.reliefTextureMode)
+            return
+        if (!root.objSource)
+            return
+        if (root.useAnalyseTexture && !indexHasAnalyseOverlay(selectedTextureIndex))
+            root.useAnalyseTexture = false
+        refreshTextureSourceFromSelection()
+        Qt.callLater(refresh3DMaterial)
+    }
+
+    onSelectedLeftIndexChanged: {
+        if (morphMode) {
+            if (root.useAnalyseTexture
+                    && !indexHasAnalyseOverlay(selectedLeftIndex)
+                    && !indexHasAnalyseOverlay(selectedRightIndex))
+                root.useAnalyseTexture = false
+            Qt.callLater(refresh3DMaterial)
+        }
+    }
+    onSelectedRightIndexChanged: {
+        if (morphMode) {
+            if (root.useAnalyseTexture
+                    && !indexHasAnalyseOverlay(selectedLeftIndex)
+                    && !indexHasAnalyseOverlay(selectedRightIndex))
+                root.useAnalyseTexture = false
+            Qt.callLater(refresh3DMaterial)
+        }
+    }
+
+    onUseAnalyseTextureChanged: {
+        if (!root.objSource)
+            return
+        refreshTextureSourceFromSelection()
+        kickTextureReload()
+    }
+
+    onAnalyseTextureRevisionChanged: {
+        if (!root.objSource)
+            return
+        if (root.useAnalyseTexture)
+            refreshTextureSourceFromSelection()
+        kickTextureReload()
     }
 
     onReliefTextureModeChanged: {
-        if (!root.objSource) return
-        var base = "file:///" + groupDir.replace(/\\/g, "/") + "/"
-        if (reliefTextureMode)
-            root.textureSource = base + "01_L-01_R_relief.png"
-        else {
-            var rel = resolveTextureFileNameForIndex(selectedTextureIndex)
-            root.textureSource = rel ? (base + rel) : ""
+        if (!root.objSource)
+            return
+        if (reliefTextureMode && root.useAnalyseTexture)
+            root.useAnalyseTexture = false
+        refreshTextureSourceFromSelection()
+        kickTextureReload()
+    }
+
+    Connections {
+        target: typeof faceAnalyseManager !== "undefined" ? faceAnalyseManager : null
+        function onGroupAnalyseFinished(success, message) {
+            root.analyseTextureRevision++
+            if (success && root.useAnalyseTexture)
+                refreshTextureSourceFromSelection()
         }
     }
 
@@ -940,7 +1086,7 @@ Item {
 
                 Texture {
                     id: morphTexLeft
-                    source: root.morphMode ? root.leftTextureSource : root.textureSource
+                    source: root.morphMode ? root.leftTextureSource : root.activeTextureSource
                     generateMipmaps: false
                     minFilter: Texture.Linear
                     mipFilter: Texture.None
@@ -950,7 +1096,7 @@ Item {
                 }
                 Texture {
                     id: morphTexRight
-                    source: root.morphMode ? root.rightTextureSource : root.textureSource
+                    source: root.morphMode ? root.rightTextureSource : root.activeTextureSource
                     generateMipmaps: false
                     minFilter: Texture.Linear
                     mipFilter: Texture.None
@@ -1957,6 +2103,29 @@ Item {
                     width: parent.width
                     height: 32
                     CheckButton {
+                        id: analyseTexBtn
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        buttonHeight: 32
+                        fontPixelSize: 16
+                        cornerRadius: 6
+                        borderW: 1
+                        enabled: root.canUseAnalyseTexture || root.useAnalyseTexture
+                        opacity: enabled ? 1.0 : 0.4
+                        text: root.useAnalyseTexture ? "原贴图" : "分析贴图"
+                        checked: root.useAnalyseTexture
+                        onClicked: root.toggleAnalyseTexture()
+                    }
+                    Binding {
+                        target: analyseTexBtn
+                        property: "checked"
+                        value: root.useAnalyseTexture
+                    }
+                }
+
+                Item {
+                    width: parent.width
+                    height: 32
+                    CheckButton {
                         id: light3dBtn
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
@@ -1997,7 +2166,7 @@ Item {
 
                 Item {
                     width: parent.width - 2
-                    height: parent.height - 148
+                    height: parent.height - 180
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     ListView {
@@ -2035,7 +2204,14 @@ Item {
                                         anchors.centerIn: parent
                                         width: 65
                                         height: 87
-                                        source: modelData.photoL
+                                        source: {
+                                            var rev = root.analyseTextureRevision
+                                            if (root.useAnalyseTexture && modelData.IXL
+                                                    && typeof faceAnalyseManager !== "undefined"
+                                                    && faceAnalyseManager.photoHasAnalyseOverlay(modelData.IXL))
+                                                return faceAnalyseManager.photoAnalyseOverlayUrl(modelData.IXL)
+                                            return modelData.photoL
+                                        }
                                         fillMode: Image.PreserveAspectFit
                                         sourceSize.width: 65
                                         sourceSize.height: 87
@@ -2059,7 +2235,14 @@ Item {
                                         anchors.centerIn: parent
                                         width: 65
                                         height: 87
-                                        source: modelData.photoR
+                                        source: {
+                                            var rev = root.analyseTextureRevision
+                                            if (root.useAnalyseTexture && modelData.IXR
+                                                    && typeof faceAnalyseManager !== "undefined"
+                                                    && faceAnalyseManager.photoHasAnalyseOverlay(modelData.IXR))
+                                                return faceAnalyseManager.photoAnalyseOverlayUrl(modelData.IXR)
+                                            return modelData.photoR
+                                        }
                                         fillMode: Image.PreserveAspectFit
                                         sourceSize.width: 65
                                         sourceSize.height: 87

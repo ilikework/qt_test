@@ -193,6 +193,11 @@ public:
     QVector<int> getCustomerReportOfferings(int reportMainIx);
     bool setCustomerReportOfferings(int reportMainIx, const QVector<int> &offeringIxs);
 
+    /// 客户历次组（Group_ID 升序）的分析曲线：reportScores[reportIndex 0..7][groupIndex] → 0..100 展示分
+    bool loadCustomerReportChartHistory(const QString &custId,
+                                        QStringList *groupDateLabels,
+                                        QVector<QVector<double>> *reportScores) const;
+
 private:
     explicit AppDb(QObject* parent=nullptr);
     ~AppDb();
