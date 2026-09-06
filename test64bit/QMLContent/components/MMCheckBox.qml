@@ -33,7 +33,8 @@ CheckBox {
    //     }
    // }
     contentItem: Text {
-        text: control.text
+        readonly property int _i18nRev: (typeof appTranslator !== "undefined" && appTranslator) ? appTranslator.revision : 0
+        text: { var _ = _i18nRev; return control.text }
         color: "white"
         font: control.font
         verticalAlignment: Text.AlignVCenter

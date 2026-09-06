@@ -10,6 +10,7 @@
 #include "AppDb.h"
 #include "MM_Const_Define.h"
 #include "MMLogger.h"
+#include "MmTr.h"
 
 BackupManager::BackupManager(QObject *parent) : QObject(parent) {
     m_process = new QProcess(this);
@@ -55,7 +56,7 @@ void BackupManager::onZipProcessFinished(int exitCode, QProcess::ExitStatus /*st
     if (m_isRestorePhase) {
         if (exitCode != 0) {
             QDir(m_restoreTempExtractPath).removeRecursively();
-            emit finished(false, "备份文件损坏或解压失败");
+            emit finished(false, mmTr("备份文件损坏或解压失败"));
             return;
         }
         onRestoreExpandDone();
@@ -64,11 +65,11 @@ void BackupManager::onZipProcessFinished(int exitCode, QProcess::ExitStatus /*st
     auto cleanTemp = [](const QString &path) { QDir(path).removeRecursively(); };
     cleanTemp(m_tempDir);
     if (exitCode != 0) {
-        emit finished(false, "压缩备份失败");
+        emit finished(false, mmTr("压缩备份失败"));
         return;
     }
     emit backupProgress(1.0);
-    emit finished(true, "备份成功！");
+    emit finished(true, mmTr("备份成功！"));
 }
 
 void BackupManager::onRestoreExpandDone() {
@@ -81,7 +82,7 @@ void BackupManager::onRestoreExpandDone() {
     emit restoreProgress(0.4);
     if (!QFile::exists(tempExtractPath + "/MMFace_.db")) {
         cleanTemp(tempExtractPath);
-        emit finished(false, "非法备份包：缺少数据库文件");
+        emit finished(false, mmTr("非法备份包：缺少数据库文件"));
         return;
     }
     emit backupProgress(0.5);
@@ -114,7 +115,7 @@ void BackupManager::onRestoreExpandDone() {
         QString detail = !movedDb && !movedCust ? "（数据库与顾客目录可能被占用）"
             : !movedDb ? "（数据库文件被占用或权限不足）"
             : "（顾客目录被占用或权限不足，请关闭可能占用该目录的程序）";
-        emit finished(false, "无法暂存旧数据" + detail + "，恢复终止");
+        emit finished(false, mmTr("无法暂存旧数据") + detail + "，恢复终止");
         return;
     }
 
@@ -137,7 +138,7 @@ void BackupManager::onRestoreExpandDone() {
         cleanTemp(tempOldPath);
         AppDb::instance().openDb();
         emit backupProgress(1.0);
-        emit finished(true, "恢复成功！");
+        emit finished(true, mmTr("恢复成功！"));
     } else {
         for (const QString &item : items) {
             QString deployedItem = appDir + "/" + item;
@@ -154,7 +155,7 @@ void BackupManager::onRestoreExpandDone() {
         AppDb::instance().openDb();
         cleanTemp(tempExtractPath);
         cleanTemp(tempOldPath);
-        emit finished(false, "部署失败，已自动回滚至原始数据。");
+        emit finished(false, mmTr("部署失败，已自动回滚至原始数据。"));
     }
 }
 
@@ -186,7 +187,7 @@ void BackupManager::startBackup(const QString &savePath, bool includePhotos) {
     // 复制 db
     if (!QFile::copy(dbPath, tempDir + "/" + DB_FILENAME)) {
         cleanTemp(tempDir);
-        emit finished(false, "无法复制数据库文件");
+        emit finished(false, mmTr("无法复制数据库文件"));
         return;
     }
 

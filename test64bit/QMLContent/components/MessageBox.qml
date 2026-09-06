@@ -18,7 +18,7 @@ Window {
 
     property string boxTitle: ""
     property string boxMessage: ""
-    property string buttonText: "确定"
+    property string buttonText: appTranslator.translateText("确定")
     signal confirmed()
 
     function open() { show() }

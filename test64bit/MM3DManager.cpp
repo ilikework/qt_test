@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include "MmTr.h"
 
 MM3DManager::MM3DManager(QObject *parent)
     : QObject{parent}
@@ -167,7 +168,7 @@ void MM3DManager::onReadyReadStandardOutput()
                 sendCommand("exit\r\n");
                 process_.closeWriteChannel();
                 if (!success)
-                    emit errorMessage(QStringLiteral("3D生成失败"));
+                    emit errorMessage(mmTr("3D生成失败"));
                 emit finished(success, lastOutputDir_);
             }
         }

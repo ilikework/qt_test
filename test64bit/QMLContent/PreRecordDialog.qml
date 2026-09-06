@@ -17,10 +17,10 @@ Window {
 
     // 作为子组件时默认不显示，由外部调用 show() 打开；单独 run PreRecordDialog 时 onCompleted 会设为 true
 
-    property var reportLabels: [
-        "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
-        "皱 纹", "敏感度", "褐色斑", "混合彩斑", "综合报告"
-    ]
+    property var reportLabels: {
+        var _ = (typeof appTranslator !== "undefined" && appTranslator) ? appTranslator.revision : 0
+        return mmI18n.reportLabels()
+    }
     // 9 个报告 × 3 档，每档选中的产品索引 [index, index, ...]
     property var selectedOfferings: []
     /// 递增以强制已选产品 Repeater 在深层数组更新后刷新
@@ -86,7 +86,7 @@ Window {
         if (!arr || slotIndex < 0 || slotIndex >= arr.length) return ""
         var ix = arr[slotIndex]
         if (ix < 0 || ix >= productsModel.count) return ""
-        return productsModel.get(ix).name || "未命名"
+        return productsModel.get(ix).name || appTranslator.translateText("未命名")
     }
     function getSelectedProductPrice(reportIdx, tier, slotIndex) {
         ensureSelectedOfferings()
@@ -254,19 +254,19 @@ Window {
         if (!_usePreRecordManager) return true
         var emptyCheck = checkProductNamesNonEmpty()
         if (!emptyCheck.ok) {
-            saveErrorDialog.boxMessage = "请填写产品名称（第 " + (emptyCheck.emptyAt + 1) + " 条名称为空）"
+            saveErrorDialog.boxMessage = appTranslator.translateText("请填写产品名称（第 %1 条名称为空）").arg(emptyCheck.emptyAt + 1)
             saveErrorDialog.open()
             return false
         }
         var namesCheck = checkProductNamesUnique()
         if (!namesCheck.ok) {
-            saveErrorDialog.boxMessage = "产品名称不能重复：「" + (namesCheck.duplicateName || "") + "」"
+            saveErrorDialog.boxMessage = appTranslator.translateText("产品名称不能重复：「%1」").arg(namesCheck.duplicateName || "")
             saveErrorDialog.open()
             return false
         }
         var priceCheck = checkProductPricesFilled()
         if (!priceCheck.ok) {
-            saveErrorDialog.boxMessage = "请填写价格（第 " + (priceCheck.emptyAt + 1) + " 条价格为空，0 为有效值）"
+            saveErrorDialog.boxMessage = appTranslator.translateText("请填写价格（第 %1 条价格为空，0 为有效值）").arg(priceCheck.emptyAt + 1)
             saveErrorDialog.open()
             return false
         }
@@ -306,8 +306,8 @@ Window {
             return
         }
         if (productsModel.count === 0) {
-            productsModel.append({ name: "示例精华液", price: "298", usage: "每日早晚使用，配合按摩。" })
-            productsModel.append({ name: "示例面膜", price: "88", usage: "每周 2–3 次，敷 15 分钟。" })
+            productsModel.append({ name: appTranslator.translateText("示例精华液"), price: "298", usage: appTranslator.translateText("每日早晚使用，配合按摩。") })
+            productsModel.append({ name: appTranslator.translateText("示例面膜"), price: "88", usage: appTranslator.translateText("每周 2–3 次，敷 15 分钟。") })
         }
         if (reportModel.count === 0) {
             for (var s = 0; s < 9; s++) {
@@ -328,7 +328,7 @@ Window {
 
         Text {
             id: titleText
-            text: "预录设置"
+            text: { var _ = appTranslator.revision; return appTranslator.translateText("预录设置") }
             font.pixelSize: 24
             color: "white"
             anchors.horizontalCenter: parent.horizontalCenter
@@ -351,7 +351,7 @@ Window {
                 radius: 4
                 Text {
                     anchors.centerIn: parent
-                    text: "1. 产品/服务预录"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("1. 产品/服务预录") }
                     color: tabRow.currentIndex === 0 ? "#00aaff" : "#e0e0e0"
                     font.pixelSize: 15
                 }
@@ -369,7 +369,7 @@ Window {
                 radius: 4
                 Text {
                     anchors.centerIn: parent
-                    text: "2. 报告预录"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("2. 报告预录") }
                     color: tabRow.currentIndex === 1 ? "#00aaff" : "#e0e0e0"
                     font.pixelSize: 15
                 }
@@ -400,7 +400,7 @@ Window {
                     anchors.fill: parent
                     spacing: 8
                     Text {
-                        text: "维护产品/服务目录，供报告预录时选用。可上传照片、填写名称、价格、功能说明。"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("维护产品/服务目录，供报告预录时选用。可上传照片、填写名称、价格、功能说明。") }
                         color: "#e0e0e0"
                         font.pixelSize: 13
                         Layout.fillWidth: true
@@ -408,7 +408,7 @@ Window {
                     }
                     TextButton {
                         Layout.alignment: Qt.AlignRight
-                        text: "添加"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("添加") }
                         onClicked: {
                             productsModel.append({ name: "", price: "", usage: "", photoPath: "" })
                             preRecordDirty = true
@@ -455,7 +455,7 @@ Window {
                                             }
                                             Text {
                                                 anchors.centerIn: parent
-                                                text: "点击选图"
+                                                text: { var _ = appTranslator.revision; return appTranslator.translateText("点击选图") }
                                                 color: "#b0b0b0"
                                                 font.pixelSize: 11
                                                 visible: !productImg.visible
@@ -474,7 +474,7 @@ Window {
                                             spacing: 4
                                             TextField {
                                                 Layout.fillWidth: true
-                                                placeholderText: "名称"
+                                                placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("名称") }
                                                 text: model.name
                                                 font.pixelSize: 14
                                                 color: "#ffffff"
@@ -500,7 +500,7 @@ Window {
                                             TextField {
                                                 id: priceField
                                                 Layout.fillWidth: true
-                                                placeholderText: "价格（必填，数字≥0，可为0）"
+                                                placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("价格（必填，数字≥0，可为0）") }
                                                 text: (typeof model.price === "number") ? model.price : (model.price !== undefined && model.price !== null && model.price !== "" ? String(model.price) : "")
                                                 font.pixelSize: 14
                                                 color: "#ffffff"
@@ -541,7 +541,7 @@ Window {
                                             TextArea {
                                                 Layout.fillWidth: true
                                                 Layout.preferredHeight: 44
-                                                placeholderText: "功能说明"
+                                                placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("功能说明") }
                                                 text: model.usage
                                                 font.pixelSize: 13
                                                 color: "#ffffff"
@@ -566,7 +566,7 @@ Window {
                                             }
                                         }
                                         TextButton {
-                                            text: "删除"
+                                            text: { var _ = appTranslator.revision; return appTranslator.translateText("删除") }
                                             Layout.alignment: Qt.AlignTop
                                             implicitWidth: 80
                                             implicitHeight: 32
@@ -591,7 +591,7 @@ Window {
                     anchors.fill: parent
                     spacing: 4
                     Text {
-                        text: "每种报告分 好 / 中 / 差 三档，每档填写建议并勾选推荐产品/服务。请切换下方 Tab 选择报告类型。"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("每种报告分 好 / 中 / 差 三档，每档填写建议并勾选推荐产品/服务。请切换下方 Tab 选择报告类型。") }
                         color: "#e0e0e0"
                         font.pixelSize: 13
                         Layout.fillWidth: true
@@ -667,11 +667,11 @@ Window {
                                                 Layout.fillWidth: true
                                                 Layout.minimumWidth: 160
                                                 spacing: 6
-                                                Text { text: "好"; color: "#7ec0ff"; font.pixelSize: 15; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("好"); color: "#7ec0ff"; font.pixelSize: 15; Layout.fillWidth: true }
                                                 TextArea {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 240
-                                                    placeholderText: "建议（约可显示 300 字）"
+                                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("建议（约可显示 300 字）") }
                                                     text: reportGoodMemo(reportIdx)
                                                     font.pixelSize: 14
                                                     color: "#ffffff"
@@ -695,7 +695,7 @@ Window {
                                                     border.color: hovered ? "#5a9aca" : "#555"
                                                     Text {
                                                         anchors.centerIn: parent
-                                                        text: "选择产品/服务"
+                                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                                                         color: parent.hovered ? "#9ec8ff" : "#b0b0b0"
                                                         font.pixelSize: 12
                                                     }
@@ -708,7 +708,7 @@ Window {
                                                         onClicked: openProductPicker(reportIdx, 0)
                                                     }
                                                 }
-                                                Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("已选产品"); color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 88
@@ -761,11 +761,11 @@ Window {
                                                 Layout.fillWidth: true
                                                 Layout.minimumWidth: 160
                                                 spacing: 6
-                                                Text { text: "中"; color: "#e0e0e0"; font.pixelSize: 15; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("中"); color: "#e0e0e0"; font.pixelSize: 15; Layout.fillWidth: true }
                                                 TextArea {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 240
-                                                    placeholderText: "建议（约可显示 300 字）"
+                                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("建议（约可显示 300 字）") }
                                                     text: reportMediumMemo(reportIdx)
                                                     font.pixelSize: 14
                                                     color: "#ffffff"
@@ -789,7 +789,7 @@ Window {
                                                     border.color: hovered ? "#5a9aca" : "#555"
                                                     Text {
                                                         anchors.centerIn: parent
-                                                        text: "选择产品/服务"
+                                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                                                         color: parent.hovered ? "#9ec8ff" : "#b0b0b0"
                                                         font.pixelSize: 12
                                                     }
@@ -802,7 +802,7 @@ Window {
                                                         onClicked: openProductPicker(reportIdx, 1)
                                                     }
                                                 }
-                                                Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("已选产品"); color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 88
@@ -855,11 +855,11 @@ Window {
                                                 Layout.fillWidth: true
                                                 Layout.minimumWidth: 160
                                                 spacing: 6
-                                                Text { text: "差"; color: "#ff8888"; font.pixelSize: 15; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("差"); color: "#ff8888"; font.pixelSize: 15; Layout.fillWidth: true }
                                                 TextArea {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 240
-                                                    placeholderText: "建议（约可显示 300 字）"
+                                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("建议（约可显示 300 字）") }
                                                     text: reportBadMemo(reportIdx)
                                                     font.pixelSize: 14
                                                     color: "#ffffff"
@@ -883,7 +883,7 @@ Window {
                                                     border.color: hovered ? "#5a9aca" : "#555"
                                                     Text {
                                                         anchors.centerIn: parent
-                                                        text: "选择产品/服务"
+                                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                                                         color: parent.hovered ? "#9ec8ff" : "#b0b0b0"
                                                         font.pixelSize: 12
                                                     }
@@ -896,7 +896,7 @@ Window {
                                                         onClicked: openProductPicker(reportIdx, 2)
                                                     }
                                                 }
-                                                Text { text: "已选产品"; color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
+                                                Text { text: appTranslator.translateText("已选产品"); color: "#e0e0e0"; font.pixelSize: 12; Layout.fillWidth: true }
                                                 Item {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 88
@@ -961,7 +961,7 @@ Window {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 24
             TextButton {
-                text: "保存"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("保存") }
                 width: 90
                 height: 40
                 onClicked: {
@@ -970,7 +970,7 @@ Window {
                 }
             }
             TextButton {
-                text: "返回"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("返回") }
                 width: 90
                 height: 40
                 onClicked: close()
@@ -988,9 +988,9 @@ Window {
     FileDialog {
         id: productPhotoDialog
         property int currentIndex: -1
-        title: "选择产品/服务图片"
+        title: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务图片") }
         fileMode: FileDialog.OpenFile
-        nameFilters: ["图片 (*.png *.jpg *.jpeg *.bmp)"]
+        nameFilters: [appTranslator.translateText("图片 (*.png *.jpg *.jpeg *.bmp)")]
         onAccepted: {
             if (currentIndex >= 0 && currentIndex < productsModel.count) {
                 var path = selectedFile.toString()
@@ -1004,26 +1004,26 @@ Window {
     MessageBox {
         id: saveErrorDialog
         transientParent: preRecordWin
-        boxTitle: "保存失败"
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("保存失败") }
         boxMessage: ""
     }
 
     Dialog {
         id: savePromptDialog
-        title: "保存到数据库"
+        title: { var _ = appTranslator.revision; return appTranslator.translateText("保存到数据库") }
         modal: true
         anchors.centerIn: parent
         width: 320
         contentItem: Item {
             width: 280
             height: 40
-            Text { text: "是否保存当前修改到数据库？"; color: "#fff"; wrapMode: Text.WordWrap; anchors.fill: parent }
+            Text { text: appTranslator.translateText("是否保存当前修改到数据库？"); color: "#fff"; wrapMode: Text.WordWrap; anchors.fill: parent }
         }
         background: Rectangle { color: "#2c2c2c"; border.color: "#555"; radius: 8 }
         footer: Row {
             spacing: 12
-            TextButton { text: "保存"; onClicked: { if (doSaveToDb()) tabRow.currentIndex = 1; savePromptDialog.close() } }
-            TextButton { text: "不保存"; onClicked: { tabRow.currentIndex = 1; savePromptDialog.close() } }
+            TextButton { text: appTranslator.translateText("保存"); onClicked: { if (doSaveToDb()) tabRow.currentIndex = 1; savePromptDialog.close() } }
+            TextButton { text: appTranslator.translateText("不保存"); onClicked: { tabRow.currentIndex = 1; savePromptDialog.close() } }
         }
     }
 }

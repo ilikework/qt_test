@@ -12,6 +12,7 @@ Window { // 给主窗口添加一个ID
     height: 600
     flags: Qt.FramelessWindowHint
     property int baseFontSize: 20
+    readonly property int _i18nRev: appTranslator ? appTranslator.revision : 0
     // Optional: set from parent (e.g. C++ backupManager). When null, Connections is no-op.
     //property var backupManager: null
 
@@ -44,25 +45,25 @@ Window { // 给主窗口添加一个ID
         function onBackupProgress(progress) {
             // 更新 UI 上的进度条
             progressBar.value = progress
-            statusText.text = "处理中: " + Math.floor(progress * 100) + "%"
+            statusText.text = appTranslator.translateText("处理中: %1%").arg(Math.floor(progress * 100))
         }
 
         function onRestoreProgress(progress) {
             progressBar.value = progress
             if (backupManager && backupManager.indeterminatePhase) return
             if (progress < 0.4) {
-                statusText.text = "正在校验备份包..."
+                statusText.text = appTranslator.translateText("正在校验备份包...")
             } else if (progress >= 0.4 && progress < 0.6) {
-                statusText.text = "正在安全暂存当前数据..." // 此时 DB 已关闭
+                statusText.text = appTranslator.translateText("正在安全暂存当前数据...")
             } else if (progress >= 0.6 && progress < 0.9) {
-                statusText.text = "正在部署新文件..."
+                statusText.text = appTranslator.translateText("正在部署新文件...")
             } else {
-                statusText.text = "正在重新连接数据库..."
+                statusText.text = appTranslator.translateText("正在重新连接数据库...")
             }
         }
         function onIndeterminatePhaseChanged() {
             if (backupManager && backupManager.indeterminatePhase)
-                statusText.text = "正在压缩/解压，请稍候…"
+                statusText.text = appTranslator.translateText("正在压缩/解压，请稍候…")
         }
     }
 
@@ -72,7 +73,7 @@ Window { // 给主窗口添加一个ID
 
         // 标题
         Text {
-            text: "备份与恢复"
+            text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("备份与恢复") }
             font.pixelSize: 24
             color: "white"
             anchors.horizontalCenter: parent.horizontalCenter
@@ -94,18 +95,18 @@ Window { // 给主窗口添加一个ID
 
                 MMRadioButton {
                     id: backupRadio
-                    text: "备份"
+                    text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("备份") }
                     checked: true
                     ButtonGroup.group: modeGroup // 绑定到组
                 }
                 MMRadioButton {
                     id: restoreRadio
-                    text: "恢复"
+                    text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("恢复") }
                     ButtonGroup.group: modeGroup
                 }
                 MMRadioButton {
                     id: importRadio
-                    text: "导入用"
+                    text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("导入用") }
                     ButtonGroup.group: modeGroup
                 }
             }
@@ -128,9 +129,17 @@ Window { // 给主窗口添加一个ID
                     anchors.margins: 10
                     spacing: 5
 
-                    MMCheckBox { text: "客户信息"; checked: true }
-                    MMCheckBox { text: "产品与报告信息"; checked: true }
-                    MMCheckBox { text: "高级备份" }
+                    MMCheckBox {
+                        text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("客户信息") }
+                        checked: true
+                    }
+                    MMCheckBox {
+                        text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("产品与报告信息") }
+                        checked: true
+                    }
+                    MMCheckBox {
+                        text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("高级备份") }
+                    }
                 }
             }
         }
@@ -146,19 +155,20 @@ Window { // 给主窗口添加一个ID
                 id: pathField
                 width: 280
                 y: 5
-                placeholderText: "请选择文件保存路径"
+                placeholderText: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("请选择文件保存路径") }
                 font.pixelSize: baseFontSize
             }
 
-            TextButton { text: "浏览"
+            TextButton {
+                text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("浏览") }
                 onClicked: {
                     if (backupRadio.checked) {
                         saveFileDialog.fileMode = FileDialog.SaveFile
-                        saveFileDialog.title = "选择备份保存位置"
+                        saveFileDialog.title = appTranslator.translateText("选择备份保存位置")
                         saveFileDialog.openWithDefaultName()
                     } else {
                         saveFileDialog.fileMode = FileDialog.OpenFile
-                        saveFileDialog.title = "选择备份文件进行恢复"
+                        saveFileDialog.title = appTranslator.translateText("选择备份文件进行恢复")
                         saveFileDialog.openForRestore()  // 恢复时对话框内不预填文件名
                     }
                 }
@@ -215,7 +225,9 @@ Window { // 给主窗口添加一个ID
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 50
 
-            TextButton { text: "开始"; width: 80
+            TextButton {
+                text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("开始") }
+                width: 80
                 onClicked: {
                     if (pathField.text === "") {
                         return
@@ -226,21 +238,23 @@ Window { // 给主窗口添加一个ID
 
                     if (backupRadio.checked) {
                         // 执行备份逻辑
-                        statusText.text = "准备备份..."
+                        statusText.text = appTranslator.translateText("准备备份...")
                         // 第二个参数控制是否包含照片，可以绑定到你的 MMCheckBox 状态
                         backupManager.startBackup(pathField.text, true)
                     }
                     else if (restoreRadio.checked) {
                         // 执行恢复逻辑
-                        statusText.text = "准备恢复..."
+                        statusText.text = appTranslator.translateText("准备恢复...")
                         backupManager.startRestore(pathField.text)
                     }
                     else if (importRadio.checked) {
-                        statusText.text = "导入功能开发中..."
+                        statusText.text = appTranslator.translateText("导入功能开发中...")
                     }
                 }
             }
-            TextButton { text: "返回"; width: 80
+            TextButton {
+                text: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("返回") }
+                width: 80
                 onClicked: close()
             }
         }
@@ -251,7 +265,7 @@ Window { // 给主窗口添加一个ID
     // 保存文件对话框
     FileDialog {
         id: saveFileDialog
-        title: "选择备份保存位置"
+        title: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("选择备份保存位置") }
         fileMode: FileDialog.SaveFile
         nameFilters: ["Backup files (*.zip)"]
 
@@ -279,7 +293,7 @@ Window { // 给主窗口添加一个ID
     MessageBox {
         id: messageDialog
         transientParent: backupRestoreWindow // 消息框的父窗口设置为BackupAndRestore.qml的主窗口
-        boxTitle: "操作完成"
+        boxTitle: { var _ = backupRestoreWindow._i18nRev; return appTranslator.translateText("操作完成") }
         onConfirmed: {
             // 用户点击“确定”后关闭窗口
             backupRestoreWindow.close() // 调用主窗口的close()方法

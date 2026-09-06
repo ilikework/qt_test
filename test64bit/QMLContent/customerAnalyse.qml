@@ -43,15 +43,17 @@ Item {
     property int photoViewMode: 0
     property bool blinkShowAnalysed: true
     property int analyseDisplayRevision: 0
+
     /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
     property int subListSelectedIndex: 0
 
     readonly property string photoViewModeLabel: {
+        var _ = appTranslator.revision
         if (photoViewMode === 1)
-            return "显示：原图"
+            return appTranslator.translateText("显示：原图")
         if (photoViewMode === 2)
-            return "显示：对比"
-        return "显示：分析图"
+            return appTranslator.translateText("显示：对比")
+        return appTranslator.translateText("显示：分析图")
     }
 
     function currentSubPhotoItem() {
@@ -164,7 +166,7 @@ Item {
         rightMain.reloadDrawings()
         leftMain.enterShowContour()
         rightMain.enterShowContour()
-        postAutoMarkDialog.boxMessage = message || "请选择下一步："
+        postAutoMarkDialog.boxMessage = message || appTranslator.translateText("请选择下一步：")
         postAutoMarkDialog.open()
     }
 
@@ -177,7 +179,7 @@ Item {
             return
         if (!faceAnalyseManager.groupNeedsAutoMark(customerID, currentGroupID)) {
             refreshRegionReadyState()
-            showContourAndAskRefine("左右脸轮廓已就绪，请选择下一步：")
+            showContourAndAskRefine(appTranslator.translateText("左右脸轮廓已就绪，请选择下一步："))
             return
         }
         autoMarkDialog.open()
@@ -186,8 +188,8 @@ Item {
     /// 主画面右侧「皮肤分析」
     function startSkinAnalyse() {
         if (!groupRegionReady) {
-            statusMsgBox.boxTitle = "提示"
-            statusMsgBox.boxMessage = "请先完成自动区域定位。"
+            statusMsgBox.boxTitle = appTranslator.translateText("提示")
+            statusMsgBox.boxMessage = appTranslator.translateText("请先完成自动区域定位。")
             statusMsgBox.open()
             return
         }
@@ -208,8 +210,8 @@ Item {
             return
         }
         if (currentGroupID <= 0 || subphotoes.length === 0) {
-            statusMsgBox.boxTitle = "提示"
-            statusMsgBox.boxMessage = "请先选择要定位的照片组。"
+            statusMsgBox.boxTitle = appTranslator.translateText("提示")
+            statusMsgBox.boxMessage = appTranslator.translateText("请先选择要定位的照片组。")
             statusMsgBox.open()
             return
         }
@@ -364,7 +366,7 @@ Item {
                 }
                 Text {
                     anchors.centerIn: parent
-                    text: "请使用右侧「取消」或「保存」\n退出拍摄"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("请使用右侧「取消」或「保存」\n退出拍摄") }
                     color: "#aaa"
                     font.pixelSize: 14
                     horizontalAlignment: Text.AlignHCenter
@@ -385,7 +387,8 @@ Item {
                     CheckButton
                     {
                         id:btnMain
-                        text: "主画面"
+                        width: parent.width * 0.9
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("主画面") }
                         checked: true
                         onClicked:
                         {
@@ -397,7 +400,8 @@ Item {
                     CheckButton
                     {
                         id:btn3D
-                        text: "3D人脸"
+                        width: parent.width * 0.9
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("3D人脸") }
                         onClicked:
                         {
                             viewStack.currentIndex = 1
@@ -408,7 +412,8 @@ Item {
                     CheckButton
                     {
                         id: btnCamera
-                        text: "拍摄"
+                        width: parent.width * 0.9
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("拍摄") }
                         onClicked:
                         {
                             viewStack.currentIndex = 2
@@ -417,8 +422,9 @@ Item {
                         }
                     }
                     CheckButton {
+                        width: parent.width * 0.9
                         checked: false
-                        text: "报告"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("报告") }
                         onClicked:
                         {
                             loadPage("customerReport.qml", { customerID: customerID, currentGroupID: currentGroupID })
@@ -426,14 +432,16 @@ Item {
                         }
                     }
                     CheckButton {
+                        width: parent.width * 0.9
                         checked: false
-                        text: "回到 用户一览"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("回到 用户一览") }
                         onClicked: loadPage("customerManager.qml", {})
                     }
                     CheckButton {
+                        width: parent.width * 0.9
                         checked: false
 
-                        text: "回到Home"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("回到Home") }
                         onClicked:
                         {
                             loadPage("logo.qml",{})
@@ -531,7 +539,7 @@ Item {
                             Layout.preferredHeight: 36
                             preferredFontPixelSize: 16
                             preferredRadius: 8
-                            text: "自动区域定位"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("自动区域定位") }
                             enabled: currentGroupID > 0 && subphotoes.length > 0
                                     && !(faceAnalyseManager && faceAnalyseManager.busy)
                             onClicked: customerDetail.startAutoRegionMark()
@@ -542,7 +550,7 @@ Item {
                             Layout.preferredHeight: 36
                             preferredFontPixelSize: 16
                             preferredRadius: 8
-                            text: "皮肤分析"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("皮肤分析") }
                             enabled: customerDetail.groupRegionReady && subphotoes.length > 0
                                     && !(faceAnalyseManager && faceAnalyseManager.busy)
                             onClicked: customerDetail.startSkinAnalyse()
@@ -674,14 +682,14 @@ Item {
                     autoMarkResultDialog.openForSide("left")
                 }
             } else {
-                statusMsgBox.boxTitle = "定位失败"
+                statusMsgBox.boxTitle = appTranslator.translateText("定位失败")
                 statusMsgBox.boxMessage = message
                 statusMsgBox.open()
                 analyseWorkflowActive = false
             }
         }
         function onErrorMessage(msg) {
-            statusMsgBox.boxTitle = "错误"
+            statusMsgBox.boxTitle = appTranslator.translateText("错误")
             statusMsgBox.boxMessage = msg
             statusMsgBox.open()
         }
@@ -694,7 +702,7 @@ Item {
                 blinkShowAnalysed = true
                 applyMainPhotoDisplay()
             }
-            statusMsgBox.boxTitle = success ? "分析完成" : "分析失败"
+            statusMsgBox.boxTitle = success ? appTranslator.translateText("分析完成") : appTranslator.translateText("分析失败")
             statusMsgBox.boxMessage = message
             statusMsgBox.open()
         }
@@ -714,11 +722,11 @@ Item {
     ModalChoicePanel {
         id: autoMarkDialog
         anchors.fill: parent
-        boxTitle: "自动定位"
-        boxMessage: "是否现在对左右脸做自动轮廓定位？"
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("自动定位") }
+        boxMessage: { var _ = appTranslator.revision; return appTranslator.translateText("是否现在对左右脸做自动轮廓定位？") }
         choices: [
-            { id: "start", text: "开始" },
-            { id: "later", text: "稍后" }
+            { id: "start", text: appTranslator.translateText("开始") },
+            { id: "later", text: appTranslator.translateText("稍后") }
         ]
         onChoiceMade: function(choiceId) {
             if (choiceId === "start") {
@@ -733,26 +741,26 @@ Item {
     ModalChoicePanel {
         id: autoMarkResultDialog
         anchors.fill: parent
-        boxTitle: "定位结果"
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("定位结果") }
         boxMessage: ""
         property var resultChoices: [
-            { id: "keep", text: "保留新定位结果" },
-            { id: "revert", text: "使用原定位结果" }
+            { id: "keep", text: appTranslator.translateText("保留新定位结果") },
+            { id: "revert", text: appTranslator.translateText("使用原定位结果") }
         ]
         choices: resultChoices
         function openForSide(side) {
             const isLeft = side === "left"
             const succeeded = faceAnalyseManager.pendingAutoMarkSideSucceeded(isLeft)
             const sideSummary = faceAnalyseManager.pendingAutoMarkSideSummary(isLeft)
-            boxTitle = isLeft ? "左脸定位结果" : "右脸定位结果"
+            boxTitle = isLeft ? appTranslator.translateText("左脸定位结果") : appTranslator.translateText("右脸定位结果")
             if (succeeded) {
-                boxMessage = sideSummary + "\n请确认是否保留本次自动定位结果。"
+                boxMessage = sideSummary + "\n" + appTranslator.translateText("请确认是否保留本次自动定位结果。")
                 resultChoices = [
-                    { id: "keep", text: "保留新定位结果" },
+                    { id: "keep", text: appTranslator.translateText("保留新定位结果") },
                     { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
                 ]
             } else {
-                boxMessage = sideSummary + "\n请" + faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) + "。"
+                boxMessage = sideSummary + "\n" + appTranslator.translateText("请") + faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) + appTranslator.translateText("。")
                 resultChoices = [
                     { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
                 ]
@@ -764,8 +772,8 @@ Item {
             const succeeded = faceAnalyseManager.pendingAutoMarkSideSucceeded(isLeft)
             const keepNew = succeeded && choiceId === "keep"
             if (!faceAnalyseManager.confirmAutoMarkSideChoice(isLeft, keepNew)) {
-                statusMsgBox.boxTitle = "提示"
-                statusMsgBox.boxMessage = "恢复原定位或模板失败，请重试。"
+                statusMsgBox.boxTitle = appTranslator.translateText("提示")
+                statusMsgBox.boxMessage = appTranslator.translateText("恢复原定位或模板失败，请重试。")
                 statusMsgBox.open()
             }
             if (isLeft) {
@@ -787,11 +795,11 @@ Item {
     ModalChoicePanel {
         id: postAutoMarkDialog
         anchors.fill: parent
-        boxTitle: "轮廓定位结果"
-        boxMessage: "请选择下一步："
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("轮廓定位结果") }
+        boxMessage: { var _ = appTranslator.revision; return appTranslator.translateText("请选择下一步：") }
         choices: [
-            { id: "analyse", text: "皮肤分析" },
-            { id: "refine", text: "手动精修轮廓" }
+            { id: "analyse", text: appTranslator.translateText("皮肤分析") },
+            { id: "refine", text: appTranslator.translateText("手动精修轮廓") }
         ]
         onChoiceMade: function(choiceId) {
             if (choiceId === "refine") {
@@ -815,7 +823,7 @@ Item {
         z: 1500
         Text {
             anchors.centerIn: parent
-            text: customerDetail.skinAnalyseRunning ? "正在皮肤分析…" : "正在自动定位轮廓…"
+            text: customerDetail.skinAnalyseRunning ? appTranslator.translateText("正在皮肤分析…") : appTranslator.translateText("正在自动定位轮廓…")
             color: "#ffffff"
             font.pixelSize: 22
             font.bold: true

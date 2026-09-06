@@ -82,12 +82,12 @@ Window {
     function validate() {
             // 1. 检查必填项（非空）
             if (nameInput.text.trim() === "") {
-                errorLabel.text = "⚠️ 姓名不能为空"
+                errorLabel.text = appTranslator.translateText("⚠️ 姓名不能为空")
                 nameInput.forceActiveFocus() // 让错误的输入框获得焦点
                 return false
             }
             if(genderBox.currentIndex!==1 && genderBox.currentIndex!==2 ) {
-                errorLabel.text = "⚠️ 请选择性别"
+                errorLabel.text = appTranslator.translateText("⚠️ 请选择性别")
                 genderBox.forceActiveFocus()
                 return false
             }
@@ -95,7 +95,7 @@ Window {
             // 2. 检查手机号格式（简单正则：1开头且为11位数字）
             let phoneRegex = /^1[3-9]\d{9}$/
             if (!phoneRegex.test(phoneInput.text)) {
-                errorLabel.text = "⚠️ 手机号格式错误"
+                errorLabel.text = appTranslator.translateText("⚠️ 手机号格式错误")
                 phoneInput.forceActiveFocus()
                 return false
             }
@@ -104,7 +104,7 @@ Window {
             if (emailInput.text.trim() !== "") {
                 let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
                 if (!emailRegex.test(emailInput.text)) {
-                    errorLabel.text = "⚠️ 邮箱格式不正确！"
+                    errorLabel.text = appTranslator.translateText("⚠️ 邮箱格式不正确！")
                     emailInput.forceActiveFocus()
                     return false
                 }
@@ -135,7 +135,7 @@ Window {
 
                     // 标题
                     Text {
-                        text: "客户信息填写"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("客户信息填写") }
                         font.pixelSize: 22
                         font.bold: true
                         color: "#ffffff"
@@ -175,7 +175,7 @@ Window {
 
                             FileDialog {
                                 id: fileDialog
-                                title: "选择照片"
+                                title: { var _ = appTranslator.revision; return appTranslator.translateText("选择照片") }
                                 nameFilters: ["Images (*.png *.jpg *.jpeg *.bmp)"]
                                 onAccepted: {
                                     customerPhoto.source = fileDialog.selectedFile
@@ -187,7 +187,7 @@ Window {
                                 Layout.alignment: Qt.AlignHCenter
                                 spacing: 0
                                 TextButton {
-                                    text: "选择照片"
+                                    text: { var _ = appTranslator.revision; return appTranslator.translateText("选择照片") }
                                     onClicked: fileDialog.open()
                                 }
                             }
@@ -201,7 +201,7 @@ Window {
                             // 客户编号
                             RowLayout {
                                 spacing: 8
-                                Label { text: "客户编号"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight}
+                                Label { text: appTranslator.translateText("客户编号"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight}
                                 TextField {
                                     text: customer.id
                                     readOnly: true
@@ -213,11 +213,11 @@ Window {
                             // 客户姓名
                             RowLayout {
                                 spacing: 8
-                                Label { text: "客户姓名"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90 ; horizontalAlignment: Text.AlignRight}
+                                Label { text: appTranslator.translateText("客户姓名"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90 ; horizontalAlignment: Text.AlignRight}
                                 TextField
                                 {
                                     id:nameInput
-                                    placeholderText: "请输入客户姓名"
+                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("请输入客户姓名") }
                                     text: customer.name
                                     Layout.fillWidth: true
                                     onTextEdited: customer.name = text
@@ -228,7 +228,7 @@ Window {
                             // 登记日
                             RowLayout {
                                 spacing: 8
-                                Label { text: "登记日"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
+                                Label { text: appTranslator.translateText("登记日"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 DatePicker {
                                     id: createDate
                                     Layout.fillWidth: true
@@ -241,10 +241,10 @@ Window {
                             RowLayout {
                                 spacing: 8
 
-                                Label { text: "性别"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
+                                Label { text: appTranslator.translateText("性别"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 ComboBox {
                                     id:genderBox
-                                    model: ["请选择", "男", "女"]
+                                    model: [appTranslator.translateText("请选择"), appTranslator.translateText("男"), appTranslator.translateText("女")]
                                     Layout.preferredWidth: 100
                                     //  文字显示（下拉框未展开时）
                                     contentItem: Text {
@@ -267,7 +267,7 @@ Window {
                                     onActivated: (index) => { customer.gender = index }
                                 }
 
-                                Label { text: "生日"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight }
+                                Label { text: appTranslator.translateText("生日"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight }
                                 DatePicker {
                                     id: birthday
                                     Layout.fillWidth: true
@@ -282,7 +282,7 @@ Window {
                                 Label { text: "Email"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 TextField {
                                     id:emailInput
-                                    placeholderText: "请输入Email"
+                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("请输入Email") }
                                     Layout.fillWidth: true
                                     background: Rectangle { color: "#fbeeee"; radius: 6; border.color: "#444444"}
                                     text: customer.email
@@ -293,10 +293,10 @@ Window {
                             // 电话
                             RowLayout {
                                 spacing: 8
-                                Label { text: "手机号"; font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
+                                Label { text: appTranslator.translateText("手机号"); font.pixelSize: 14; color: "#ffb300"; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                                 TextField {
                                     id:phoneInput
-                                    placeholderText: "请输入手机号"
+                                    placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("请输入手机号") }
                                     Layout.fillWidth: true
                                     background: Rectangle { color: "#fbeeee"; radius: 6; border.color: "#444444"}
                                     text: customer.phone
@@ -308,14 +308,14 @@ Window {
                             RowLayout {
                                 spacing: 28
                                 Layout.alignment: Qt.AlignRight
-                                TextButton { text: "保存"; width: 200; height: 50
+                                TextButton { text: appTranslator.translateText("保存"); width: 200; height: 50
                                     onClicked: {
                                         if (!validate()) return
                                         dlg.accepted(customer)
                                         dlg.close()
                                     }
                                 }
-                                TextButton { text: "取消"; width: 200; height: 50;
+                                TextButton { text: appTranslator.translateText("取消"); width: 200; height: 50;
 
                                     onClicked: {
                                         dlg.canceled()

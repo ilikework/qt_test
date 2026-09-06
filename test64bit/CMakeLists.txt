@@ -11,11 +11,13 @@ qt_standard_project_setup()
 # --- C++ ?????????? ---
 set(APP_SOURCES
     main.cpp
-    #mycustom3ditem.cpp
+    AppTranslator.cpp
+    MmI18n.cpp
 )
 
 set(APP_HEADERS
-    #mycustom3ditem.h # ????????????
+    AppTranslator.h
+    MmI18n.h
 )
 
 # --- ??????????---
@@ -175,3 +177,14 @@ add_custom_command(TARGET apptest64bit POST_BUILD
         "${LIBFA64_ROOT}/build/bin/Release/LibFA64.dll"
         $<TARGET_FILE_DIR:apptest64bit>
 )
+
+# i18n: run translations/gen_qm.py to regenerate, then POST_BUILD copies to exe/i18n/
+set(MMFACE_I18N_DIR "${CMAKE_CURRENT_SOURCE_DIR}/translations/i18n")
+foreach(_loc zh_CN zh_TW en ja)
+    add_custom_command(TARGET apptest64bit POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:apptest64bit>/i18n"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MMFACE_I18N_DIR}/mmface_${_loc}.qm"
+            "$<TARGET_FILE_DIR:apptest64bit>/i18n"
+    )
+endforeach()

@@ -184,7 +184,7 @@ Item   {
                     // 未连上相机程序（socket 未连接）：程序会自动启动 exe 再连，理论上应能连上，若不能则提示联系客服
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "未能连接相机程序，请联系客服。"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("未能连接相机程序，请联系客服。") }
                         color: "#e04040"
                         font.pixelSize: 32
                         font.bold: true
@@ -194,7 +194,7 @@ Item   {
                     // 已连上程序，正在等待相机硬件打开
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "正在打开相机，请稍候（" + Math.ceil(camClient.cameraOpenRemainingMs / 1000) + "秒）"
+                        text: appTranslator.translateText("正在打开相机，请稍候（") + Math.ceil(camClient.cameraOpenRemainingMs / 1000) + appTranslator.translateText("秒）")
                         color: "#e04040"
                         font.pixelSize: 28
                         font.bold: true
@@ -204,7 +204,7 @@ Item   {
                     // 已连上程序但未开预览：请连接相机硬件后点预览，红色
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "正在连接相机打开预览"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("正在连接相机打开预览") }
                         color: "#e04040"
                         font.pixelSize: 28
                         font.bold: true
@@ -251,13 +251,14 @@ Item   {
                         opacity: camClient.connected ? 1 : 0.45
                         CheckButton {
                             id: previewBtn
+                            width: parent.width * 0.9
                             anchors.horizontalCenter: parent.horizontalCenter
                             buttonHeight: 32
                             fontPixelSize: 16
                             cornerRadius: 6
                             borderW: 1
                             autoToggle: false
-                            text: "预览"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("预览") }
                             onClicked: {
                                 if (camClient.previewOn)
                                     return
@@ -265,7 +266,7 @@ Item   {
                                     cameraRoot.statusMessage = ""
                                     camClient.startPreview()
                                 } else {
-                                    cameraRoot.showStatusMessage("请先连接相机")
+                                    cameraRoot.showStatusMessage(appTranslator.translateText("请先连接相机"))
                                 }
                             }
                         }
@@ -282,12 +283,13 @@ Item   {
                         opacity: camClient.previewOn ? 1 : 0.45
                         CheckButton {
                             id: shootBtn
+                            width: parent.width * 0.9
                             anchors.horizontalCenter: parent.horizontalCenter
                             buttonHeight: 32
                             fontPixelSize: 16
                             cornerRadius: 6
                             borderW: 1
-                            text: "拍摄"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("拍摄") }
                             onClicked: {
                                 if (cameraRoot.captureBusy || !camClient.previewOn || !camClient.connected)
                                     return
@@ -311,7 +313,7 @@ Item   {
                             preferredHeight: 32
                             preferredFontPixelSize: 16
                             preferredRadius: 10
-                            text: "保存"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("保存") }
                             onClicked: {
                                 camClient.save()
                                 cameraRoot.pendingSavedGroupId = camClient.lastSavedGroupId
@@ -329,7 +331,7 @@ Item   {
                             preferredHeight: 32
                             preferredFontPixelSize: 16
                             preferredRadius: 10
-                            text: "取消"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("取消") }
                             onClicked: {
                                 camClient.cancel()
                                 cameraRoot.requestShowMain()
@@ -343,12 +345,13 @@ Item   {
                         opacity: cameraRoot.captureBusy ? 0.45 : 1
                         CheckButton {
                             id: settingsBtn
+                            width: parent.width * 0.9
                             anchors.horizontalCenter: parent.horizontalCenter
                             buttonHeight: 32
                             fontPixelSize: 16
                             cornerRadius: 6
                             borderW: 1
-                            text: "设定"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("设定") }
                             onClicked: {
                                 if (cameraRoot.captureBusy)
                                     return
@@ -493,12 +496,12 @@ Item   {
     ModalChoicePanel {
         id: postSaveDialog
         anchors.fill: parent
-        boxTitle: "保存成功"
-        boxMessage: "请选择下一步操作："
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("保存成功") }
+        boxMessage: { var _ = appTranslator.revision; return appTranslator.translateText("请选择下一步操作：") }
         choices: [
-            { id: "analyse", text: "做分析" },
-            { id: "retake", text: "重新拍摄" },
-            { id: "exit", text: "保存后退出" }
+            { id: "analyse", text: appTranslator.translateText("做分析") },
+            { id: "retake", text: appTranslator.translateText("重新拍摄") },
+            { id: "exit", text: appTranslator.translateText("保存后退出") }
         ]
         onChoiceMade: function(choiceId) {
             var gid = cameraRoot.pendingSavedGroupId

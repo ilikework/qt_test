@@ -10,7 +10,8 @@ RadioButton {
 
     Material.accent: Material.Indigo
     contentItem: Label {
-        text: radioOption.text
+        readonly property int _i18nRev: (typeof appTranslator !== "undefined" && appTranslator) ? appTranslator.revision : 0
+        text: { var _ = _i18nRev; return radioOption.text }
         // Change the text color
         color: "white"
         font: radioOption.font

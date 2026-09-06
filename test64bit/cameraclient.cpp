@@ -18,6 +18,7 @@
 #include "StartPreviewFlow.h"
 
 #include "MM_Const_Define.h"
+#include "MmTr.h"
 
 
 static constexpr int HEADER_LEN = 16;
@@ -169,7 +170,7 @@ void CameraClient::openCamera() {
         emit cameraOpeningChanged();
         cameraOpenOk_ = ok;
         emit log(ok ? "open OK" : "open NG");
-        emit openFinished(ok, ok ? QString() : QStringLiteral("相机打开失败，请检查连接"));
+        emit openFinished(ok, ok ? QString() : mmTr("相机打开失败，请检查连接"));
         if (pendingStartPreview_) {
             pendingStartPreview_ = false;
             if (ok) {
@@ -199,7 +200,7 @@ void CameraClient::startPreviewInternal() {
             previewOn_ = true;
             emit previewOnChanged();
         } else {
-            emit previewOpenFailed(msg.isEmpty() ? QStringLiteral("预览打开失败") : msg);
+            emit previewOpenFailed(msg.isEmpty() ? mmTr("预览打开失败") : msg);
         }
     });
     flow->start();
@@ -767,27 +768,27 @@ QVariantList  CameraClient::settings()
 
     const QList<RowDef> rows = {
         {"iso",          "RGB ISO",   s.rgb_iso},
-        {"exposuretime", "RGB 快门",   s.rgb_exposureTime},
-        {"aperture",     "RGB 光圈",   s.rgb_aperture},
-        {"wb",           "RGB 白平衡", s.rgb_wb},
+        {"exposuretime", mmTr("RGB 快门"),   s.rgb_exposureTime},
+        {"aperture",     mmTr("RGB 光圈"),   s.rgb_aperture},
+        {"wb",           mmTr("RGB 白平衡"), s.rgb_wb},
 
         {"iso",          "UV ISO",    s.uv_iso},
-        {"exposuretime", "UV 快门",    s.uv_exposureTime},
-        {"aperture",     "UV 光圈",    s.uv_aperture},
-        {"wb",           "UV 白平衡",  s.uv_wb},
+        {"exposuretime", mmTr("UV 快门"),    s.uv_exposureTime},
+        {"aperture",     mmTr("UV 光圈"),    s.uv_aperture},
+        {"wb",           mmTr("UV 白平衡"),  s.uv_wb},
 
         {"iso",          "PL ISO",    s.pl_iso},
-        {"exposuretime", "PL 快门",    s.pl_exposureTime},
-        {"aperture",     "PL 光圈",    s.pl_aperture},
-        {"wb",           "PL 白平衡",  s.pl_wb},
+        {"exposuretime", mmTr("PL 快门"),    s.pl_exposureTime},
+        {"aperture",     mmTr("PL 光圈"),    s.pl_aperture},
+        {"wb",           mmTr("PL 白平衡"),  s.pl_wb},
 
         {"iso",          "NPL ISO",   s.npl_iso},
-        {"exposuretime", "NPL 快门",   s.npl_exposureTime},
-        {"aperture",     "NPL 光圈",   s.npl_aperture},
-        {"wb",           "NPL 白平衡", s.npl_wb},
+        {"exposuretime", mmTr("NPL 快门"),   s.npl_exposureTime},
+        {"aperture",     mmTr("NPL 光圈"),   s.npl_aperture},
+        {"wb",           mmTr("NPL 白平衡"), s.npl_wb},
 
-        {"ImageSize",    "图片尺寸",    s.imageSize},
-        {"ImageQuality", "图片质量",    s.imageQuality}
+        {"ImageSize",    mmTr("图片尺寸"),    s.imageSize},
+        {"ImageQuality", mmTr("图片质量"),    s.imageQuality}
     };
 
     QVariantList  out;

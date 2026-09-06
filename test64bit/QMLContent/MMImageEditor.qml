@@ -186,14 +186,14 @@ Item {
                     // (cursor handled by staticSensor at header level)
                 }
 
-                ToolBtn { mode: MMImageEditor.EditMode.View; btnLabel: "平移" }
-                ToolBtn { mode: MMImageEditor.EditMode.Line; btnLabel: "测量" }
-                ToolBtn { mode: MMImageEditor.EditMode.Circle; btnLabel: "画圆" }
-                ToolBtn { mode: MMImageEditor.EditMode.Eraser; btnLabel: "橡皮擦" }
-                ToolBtn { mode: MMImageEditor.EditMode.ShowSmooth; btnLabel: "显示轮廓" }
-                ToolBtn { id: editBtn;  mode: MMImageEditor.EditMode.EditSmooth; btnLabel: "精修轮廓" }
+                ToolBtn { mode: MMImageEditor.EditMode.View; btnLabel: appTranslator.translateText("平移") }
+                ToolBtn { mode: MMImageEditor.EditMode.Line; btnLabel: appTranslator.translateText("测量") }
+                ToolBtn { mode: MMImageEditor.EditMode.Circle; btnLabel: appTranslator.translateText("画圆") }
+                ToolBtn { mode: MMImageEditor.EditMode.Eraser; btnLabel: appTranslator.translateText("橡皮擦") }
+                ToolBtn { mode: MMImageEditor.EditMode.ShowSmooth; btnLabel: appTranslator.translateText("显示轮廓") }
+                ToolBtn { id: editBtn;  mode: MMImageEditor.EditMode.EditSmooth; btnLabel: appTranslator.translateText("精修轮廓") }
                 // 重置按钮：点击后进入 None 模式（不显示图形）
-                ToolBtn { mode: MMImageEditor.EditMode.None; btnLabel: "隐藏" }
+                ToolBtn { mode: MMImageEditor.EditMode.None; btnLabel: appTranslator.translateText("隐藏") }
             }
         }
     }

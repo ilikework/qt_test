@@ -4,7 +4,8 @@ import QtQuick.Controls 6.4
 
 Item {
     id: root
-    width: parent ? parent.width * 0.9 : 200
+    implicitWidth: label.implicitWidth + 24
+    width: implicitWidth
 
     property int buttonHeight: 40
     property int fontPixelSize: 20
@@ -42,6 +43,7 @@ Item {
         Behavior on color { ColorAnimation { duration: 120 } }
 
         MouseArea {
+            id: mouseArea
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -58,11 +60,22 @@ Item {
 
     Text {
         id: label
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        anchors.verticalCenter: parent.verticalCenter
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignHCenter
         font.pixelSize: root.fontPixelSize
         font.bold: true
         color: "white"
+        elide: Text.ElideRight
+    }
+
+    ToolTip {
+        visible: label.truncated && mouseArea.containsMouse
+        text: label.text
+        delay: 400
     }
 }

@@ -53,7 +53,7 @@ Window {
             if (!filter || name.indexOf(filter) >= 0 || usage.indexOf(filter) >= 0)
                 filteredProductsModel.append({
                     productIndex: i,
-                    name: p.name || "未命名",
+                    name: p.name || appTranslator.translateText("未命名"),
                     priceText: priceStr,
                     usage: p.usage || "",
                     photoPath: p.photoPath || ""
@@ -118,14 +118,14 @@ Window {
             spacing: 12
 
             Text {
-                text: "选择产品/服务"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                 color: "#ffffff"
                 font.pixelSize: 18
                 font.bold: true
             }
             TextField {
                 Layout.fillWidth: true
-                placeholderText: "输入名称或功能说明筛选"
+                placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("输入名称或功能说明筛选") }
                 text: productFilterText
                 font.pixelSize: 14
                 color: "#ffffff"
@@ -148,7 +148,7 @@ Window {
                             var ix = filteredProductsModel.get(i).productIndex
                             if (isSelected(ix)) sel++
                         }
-                        "共 " + total + " 条，已选 " + sel + " 条"
+                        appTranslator.translateText("共 %1 条，已选 %2 条").arg(total).arg(sel)
                     }
                     color: "#b0b0b0"
                     font.pixelSize: 13
@@ -164,7 +164,7 @@ Window {
                     border.color: hovered ? "#5a9aca" : "#555"
                     Text {
                         anchors.centerIn: parent
-                        text: "全选"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("全选") }
                         color: parent.hovered ? "#9ec8ff" : "#b0b0b0"
                         font.pixelSize: 12
                     }
@@ -192,7 +192,7 @@ Window {
                     border.color: hovered ? "#8a5555" : "#555"
                     Text {
                         anchors.centerIn: parent
-                        text: "取消全选"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("取消全选") }
                         color: parent.hovered ? "#dd9999" : "#b0b0b0"
                         font.pixelSize: 12
                     }
@@ -268,7 +268,7 @@ Window {
                                 }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "无图"
+                                    text: { var _ = appTranslator.revision; return appTranslator.translateText("无图") }
                                     color: "#666"
                                     font.pixelSize: 11
                                     visible: !(model.photoPath && String(model.photoPath).length > 0)
@@ -284,7 +284,7 @@ Window {
                                     Layout.fillWidth: true
                                     spacing: 8
                                     Text {
-                                        text: model.name || "未命名"
+                                        text: model.name || appTranslator.translateText("未命名")
                                         color: "#ffffff"
                                         font.pixelSize: 15
                                         font.bold: true
@@ -292,7 +292,7 @@ Window {
                                         Layout.fillWidth: true
                                     }
                                     Text {
-                                        text: model.priceText !== "" ? ("¥" + model.priceText) : "价格未填"
+                                        text: model.priceText !== "" ? ("¥" + model.priceText) : appTranslator.translateText("价格未填")
                                         color: model.priceText !== "" ? "#7ec0ff" : "#888"
                                         font.pixelSize: 14
                                         font.bold: true
@@ -301,7 +301,7 @@ Window {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: model.usage || "（无功能说明）"
+                                    text: model.usage || appTranslator.translateText("（无功能说明）")
                                     color: model.usage ? "#b0b0b0" : "#666"
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
@@ -324,13 +324,13 @@ Window {
                 Layout.alignment: Qt.AlignRight
                 spacing: 12
                 TextButton {
-                    text: "取消"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("取消") }
                     implicitWidth: 80
                     implicitHeight: 36
                     onClicked: offeringPickerWin.close()
                 }
                 TextButton {
-                    text: "确定"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("确定") }
                     implicitWidth: 80
                     implicitHeight: 36
                     onClicked: {

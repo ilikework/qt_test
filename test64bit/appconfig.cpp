@@ -33,6 +33,7 @@ bool AppConfig::load()
     if (!f.exists()) {
         // 文件不存在：创建一个默认的
         m_root = QJsonObject{
+            { "language", "zh_CN" },
             { "camera", "" },
             { "WaitForConnectCamera", 5000 }
         };
@@ -301,6 +302,26 @@ QString AppConfig::FaceReconExePath() const
             return p;
     }
     return QString("D:/3D/FaceReconCPU/FaceReconCPU.exe");
+}
+
+QString AppConfig::language() const
+{
+    QString lang = m_root.value(QStringLiteral("language")).toString(QStringLiteral("zh_CN"));
+    if (lang.isEmpty())
+        lang = QStringLiteral("zh_CN");
+    return lang;
+}
+
+void AppConfig::setLanguage(const QString &languageCode)
+{
+    QString lang = languageCode.trimmed();
+    if (lang.isEmpty())
+        lang = QStringLiteral("zh_CN");
+    if (m_root.value(QStringLiteral("language")).toString() == lang)
+        return;
+    m_root.insert(QStringLiteral("language"), lang);
+    save();
+    emit languageChanged();
 }
 
 namespace {

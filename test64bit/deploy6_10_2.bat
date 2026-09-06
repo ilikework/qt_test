@@ -145,6 +145,16 @@ if not "%PYEXE%"=="" (
 
 popd
 
+echo Copying i18n translations...
+if exist "%PROJECT_ROOT%translations\i18n" (
+    if not exist "%DEPLOY_DIR%\i18n" mkdir "%DEPLOY_DIR%\i18n"
+    copy /Y "%PROJECT_ROOT%translations\i18n\mmface_*.qm" "%DEPLOY_DIR%\i18n\" >nul
+    echo   + i18n\mmface_*.qm
+) else (
+    echo [WARN] 缺少 translations\i18n\，请先运行: python translations\gen_qm.py
+    set "ERR=1"
+)
+
 echo.
 echo --- Deploy contents ^(key files^) ---
 if exist "%DEPLOY_DIR%\%APP_EXE_NAME%" (echo   OK  %APP_EXE_NAME%) else (echo   MISSING %APP_EXE_NAME% & set "ERR=1")
@@ -153,6 +163,7 @@ if exist "%DEPLOY_DIR%\opencv_world343.dll" (echo   OK  opencv_world343.dll) els
 if exist "%DEPLOY_DIR%\shape_predictor_68_face_landmarks.dat" (echo   OK  shape_predictor_68_face_landmarks.dat) else (echo   MISSING shape_predictor_68_face_landmarks.dat & set "ERR=1")
 if exist "%DEPLOY_DIR%\MMFace_.json" (echo   OK  MMFace_.json) else (echo   MISSING MMFace_.json & set "ERR=1")
 if exist "%DEPLOY_DIR%\MMFace_.db" (echo   OK  MMFace_.db) else (echo   MISSING MMFace_.db & set "ERR=1")
+if exist "%DEPLOY_DIR%\i18n\mmface_en.qm" (echo   OK  i18n\mmface_en.qm) else (echo   MISSING i18n\mmface_en.qm & set "ERR=1")
 echo.
 echo 提示: FaceReconCPU.exe 路径由 MMFace_.json 的 FaceReconExePath 指定，不随本脚本打包。
 echo       目标机上请保持该绝对路径可用，或改 JSON 后部署。

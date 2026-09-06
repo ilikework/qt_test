@@ -1,5 +1,6 @@
 #include "CustomerReportManager.h"
 #include "AppDb.h"
+#include "MmI18n.h"
 
 int CustomerReportManager::reportTypeByIndex(int index)
 {
@@ -119,11 +120,6 @@ QVariantMap CustomerReportManager::loadReportChartData(const QString &custId)
     if (custId.isEmpty())
         return out;
 
-    static const char *kReportNames[] = {
-        "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
-        "皱 纹", "敏感度", "褐色斑", "混合彩斑"
-    };
-
     QStringList dates;
     QVector<QVector<double>> scores;
     if (!AppDb::instance().loadCustomerReportChartHistory(custId, &dates, &scores)) {
@@ -139,7 +135,7 @@ QVariantMap CustomerReportManager::loadReportChartData(const QString &custId)
     QVariantList reportList;
     for (int i = 0; i < 8; ++i) {
         QVariantMap row;
-        row[QStringLiteral("name")] = QString::fromUtf8(kReportNames[i]);
+        row[QStringLiteral("name")] = MmI18n::instance().reportLabel(i);
         QVariantList values;
         if (i < scores.size()) {
             for (double v : scores[i])

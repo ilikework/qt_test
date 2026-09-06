@@ -40,6 +40,9 @@ public:
     QString WholeCreateFrom() const;
     QString FaceReconExePath() const;
 
+    QString language() const;
+    void setLanguage(const QString &languageCode);
+
     /** analysis.ini 年龄档：10/20/…/70 */
     QString analyseAgeBand(int ageYears) const;
     /** Report_Type 1..8 → ini section 基名（与 TC30 Delphi 一致） */
@@ -59,6 +62,7 @@ public:
     bool reload(); // 重新读
 
 signals:
+    void languageChanged();
 
 private:
     explicit AppConfig(QObject* parent = nullptr);

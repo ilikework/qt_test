@@ -1,5 +1,6 @@
 #include "PreRecordManager.h"
 #include "AppDb.h"
+#include "MmI18n.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -71,11 +72,10 @@ QVariantList PreRecordManager::getReportSuggestions() const
 {
     QVariantList out;
     AppDb &db = AppDb::instance();
-    const char *labels[] = { "毛 孔", "粉 刺", "深层色斑", "浅层色斑", "皱 纹", "敏感度", "褐色斑", "混合彩斑", "综合报告" };
     for (int i = 0; i < 9; ++i) {
         int rt = reportTypeByIndex(i);
         QVariantMap m;
-        m["label"] = QString::fromUtf8(labels[i]);
+        m["label"] = MmI18n::instance().reportLabel(i);
         m["goodMemo"] = db.getReportTemplateMemo(rt, 30);
         m["mediumMemo"] = db.getReportTemplateMemo(rt, 20);
         m["badMemo"] = db.getReportTemplateMemo(rt, 10);

@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtCharts
 import com.magicmirror.components
+import "components"
 
 Item {
     id: customerReport
@@ -16,22 +17,21 @@ Item {
     property var mainphotoes: []
     property var subphotoes: []
 
-    property var reportLabels: [
-        "毛 孔", "粉 刺", "深层色斑", "浅层色斑",
-        "皱 纹", "敏感度", "褐色斑", "混合彩斑", "综合报告"
-    ]
+    readonly property int _i18nRev: (typeof appTranslator !== "undefined" && appTranslator) ? appTranslator.revision : 0
+
+    property var reportLabels: {
+        var _ = _i18nRev
+        return mmI18n.reportLabels()
+    }
     property var resDate: []
-    property var resDatas: [
-        { name: "毛 孔", res: [] },
-        { name: "粉 刺", res: [] },
-        { name: "深层色斑", res: [] },
-        { name: "浅层色斑", res: [] },
-        { name: "皱 纹", res: [] },
-        { name: "敏感度", res: [] },
-        { name: "褐色斑", res: [] },
-        { name: "混合彩斑", res: [] },
-        { name: "综合报告", res: [] }
-    ]
+    property var resDatas: {
+        var _ = _i18nRev
+        var labels = mmI18n.reportLabels()
+        var out = []
+        for (var i = 0; i < labels.length; ++i)
+            out.push({ name: labels[i], res: [] })
+        return out
+    }
 
     // —— 预录 / 诊断 / 产品 ——
     property bool _usePreRecordManager: typeof preRecordManager !== "undefined"
@@ -42,9 +42,18 @@ Item {
     property var selectedOfferings: []
     property int currentReportTier: 1
     property string diagnosticText: ""
-    property var tierLabels: ["好", "中", "差"]
+    property var tierLabels: {
+        var _ = _i18nRev
+        return [mmI18n.tierLabel(0), mmI18n.tierLabel(1), mmI18n.tierLabel(2)]
+    }
     property var tierColors: ["#2e7d32", "#ef8c00", "#c62828"]
-    property var photoShortLabels: ["毛孔", "粉刺", "深层色斑", "浅层色斑", "皱纹", "敏感", "褐色斑", "混合彩斑"]
+    property var photoShortLabels: {
+        var _ = _i18nRev
+        var out = []
+        for (var i = 0; i < 8; ++i)
+            out.push(String(mmI18n.reportLabel(i)).replace(/\s/g, ""))
+        return out
+    }
     property var seriesColors: [
         "#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24",
         "#a29bfe", "#fd79a8", "#00b894", "#e17055"
@@ -86,7 +95,7 @@ Item {
         var ix = arr[slotIndex]
         if (ix < 0 || ix >= productsModel.count)
             return ""
-        return productsModel.get(ix).name || "未命名"
+        return productsModel.get(ix).name || appTranslator.translateText("未命名")
     }
 
     function formatProductPrice(priceVal) {
@@ -451,8 +460,8 @@ Item {
 
     function reportTitle(idx) {
         if (idx < 0 || idx >= reportLabels.length)
-            return "检测报告"
-        return String(reportLabels[idx]).replace(/\s/g, "") + "检测报告"
+            return appTranslator.translateText("检测报告")
+        return String(reportLabels[idx]).replace(/\s/g, "") + appTranslator.translateText("检测报告")
     }
 
     function openProductPickerForActiveReport() {
@@ -545,7 +554,7 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: "客户报告"
+                    text: { var _ = customerReport._i18nRev; return appTranslator.translateText("客户报告") }
                     color: "#7dc9ff"
                     font.pixelSize: 46
                 }
@@ -562,7 +571,7 @@ Item {
                 Repeater {
                     model: reportLabels
                     delegate: Rectangle {
-                        width: 170
+                        width: Math.max(120, Math.min(220, tabText.implicitWidth + 24))
                         height: 60
                         radius: 6
                         border.color: index === tabButtons.selectedIndex ? "#90c8ff" : "#466080"
@@ -572,10 +581,16 @@ Item {
                             GradientStop { position: 1.0; color: index === tabButtons.selectedIndex ? "#446a9c" : "#233" }
                         }
                         Text {
+                            id: tabText
                             anchors.centerIn: parent
+                            width: parent.width - 12
                             text: modelData
                             color: "white"
-                            font.pixelSize: 26
+                            font.pixelSize: 22
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            maximumLineCount: 2
+                            wrapMode: Text.Wrap
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -688,14 +703,14 @@ Item {
                                 labelsColor: "#cccccc"
                             }
 
-                            LineSeries { id: s1; axisX: axisX; axisY: axisY; name: "毛孔"; width: 2; color: seriesColors[0] }
-                            LineSeries { id: s2; axisX: axisX; axisY: axisY; name: "粉刺"; width: 2; color: seriesColors[1] }
-                            LineSeries { id: s3; axisX: axisX; axisY: axisY; name: "深层色斑"; width: 2; color: seriesColors[2] }
-                            LineSeries { id: s4; axisX: axisX; axisY: axisY; name: "浅层色斑"; width: 2; color: seriesColors[3] }
-                            LineSeries { id: s5; axisX: axisX; axisY: axisY; name: "皱纹"; width: 2; color: seriesColors[4] }
-                            LineSeries { id: s6; axisX: axisX; axisY: axisY; name: "敏感"; width: 2; color: seriesColors[5] }
-                            LineSeries { id: s7; axisX: axisX; axisY: axisY; name: "褐色斑"; width: 2; color: seriesColors[6] }
-                            LineSeries { id: s8; axisX: axisX; axisY: axisY; name: "混合彩斑"; width: 2; color: seriesColors[7] }
+                            LineSeries { id: s1; axisX: axisX; axisY: axisY; name: photoShortLabels[0]; width: 2; color: seriesColors[0] }
+                            LineSeries { id: s2; axisX: axisX; axisY: axisY; name: photoShortLabels[1]; width: 2; color: seriesColors[1] }
+                            LineSeries { id: s3; axisX: axisX; axisY: axisY; name: photoShortLabels[2]; width: 2; color: seriesColors[2] }
+                            LineSeries { id: s4; axisX: axisX; axisY: axisY; name: photoShortLabels[3]; width: 2; color: seriesColors[3] }
+                            LineSeries { id: s5; axisX: axisX; axisY: axisY; name: photoShortLabels[4]; width: 2; color: seriesColors[4] }
+                            LineSeries { id: s6; axisX: axisX; axisY: axisY; name: photoShortLabels[5]; width: 2; color: seriesColors[5] }
+                            LineSeries { id: s7; axisX: axisX; axisY: axisY; name: photoShortLabels[6]; width: 2; color: seriesColors[6] }
+                            LineSeries { id: s8; axisX: axisX; axisY: axisY; name: photoShortLabels[7]; width: 2; color: seriesColors[7] }
                         }
 
                         RowLayout {
@@ -704,7 +719,7 @@ Item {
                             spacing: 10
 
                             Text {
-                                text: "诊断等级"
+                                text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断等级") }
                                 color: "#cccccc"
                                 font.pixelSize: 14
                             }
@@ -730,7 +745,7 @@ Item {
                                 }
                             }
                             Text {
-                                text: "综合指数 " + comprehensiveScore().toFixed(0)
+                                text: appTranslator.translateText("综合指数 ") + comprehensiveScore().toFixed(0)
                                 color: "#999999"
                                 font.pixelSize: 12
                             }
@@ -743,7 +758,7 @@ Item {
                                 border.color: "#7cc0ff"
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "选择产品/服务"
+                                    text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                                     color: "#cce8ff"
                                     font.pixelSize: 12
                                 }
@@ -772,7 +787,7 @@ Item {
                                     anchors.margins: 8
                                     spacing: 4
                                     Text {
-                                        text: "诊断建议（约100字）"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断建议（约100字）") }
                                         color: "#7dc9ff"
                                         font.pixelSize: 14
                                         font.bold: true
@@ -785,7 +800,7 @@ Item {
                                         color: "#ffffff"
                                         font.pixelSize: 13
                                         //maximumLength: 100
-                                        placeholderText: "预录建议自动填入，可修改"
+                                        placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("预录建议自动填入，可修改") }
                                         placeholderTextColor: "#888"
                                         background: Rectangle { color: "#243548"; radius: 4; border.color: "#555" }
                                         onTextChanged: {
@@ -809,7 +824,7 @@ Item {
                                     anchors.margins: 8
                                     spacing: 4
                                     Text {
-                                        text: "推荐产品/服务（5–10项）"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("推荐产品/服务（5–10项）") }
                                         color: "#7dc9ff"
                                         font.pixelSize: 14
                                         font.bold: true
@@ -849,7 +864,7 @@ Item {
                                     Text {
                                         visible: !(selectedOfferings[8] && selectedOfferings[8][currentReportTier]
                                             && selectedOfferings[8][currentReportTier].length > 0)
-                                        text: "未选择"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("未选择") }
                                         color: "#888"
                                         font.pixelSize: 12
                                     }
@@ -995,7 +1010,7 @@ Item {
                             Layout.topMargin: 4
                             spacing: 10
                             Text {
-                                text: "诊断等级"
+                                text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断等级") }
                                 color: "#cccccc"
                                 font.pixelSize: 14
                             }
@@ -1021,7 +1036,7 @@ Item {
                                 }
                             }
                             Text {
-                                text: "指数 " + latestScore(tabButtons.selectedIndex).toFixed(0)
+                                text: appTranslator.translateText("指数 ") + latestScore(tabButtons.selectedIndex).toFixed(0)
                                 color: "#999999"
                                 font.pixelSize: 12
                             }
@@ -1034,7 +1049,7 @@ Item {
                                 border.color: "#7cc0ff"
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "选择产品/服务"
+                                    text: { var _ = appTranslator.revision; return appTranslator.translateText("选择产品/服务") }
                                     color: "#cce8ff"
                                     font.pixelSize: 12
                                 }
@@ -1063,7 +1078,7 @@ Item {
                                     anchors.margins: 8
                                     spacing: 4
                                     Text {
-                                        text: "诊断建议（约100字）"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断建议（约100字）") }
                                         color: "#7dc9ff"
                                         font.pixelSize: 14
                                         font.bold: true
@@ -1075,7 +1090,7 @@ Item {
                                         wrapMode: TextArea.Wrap
                                         color: "#ffffff"
                                         font.pixelSize: 13
-                                        placeholderText: "预录建议自动填入，可修改"
+                                        placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("预录建议自动填入，可修改") }
                                         placeholderTextColor: "#888"
                                         background: Rectangle { color: "#243548"; radius: 4; border.color: "#555" }
                                         onTextChanged: {
@@ -1099,7 +1114,7 @@ Item {
                                     anchors.margins: 8
                                     spacing: 4
                                     Text {
-                                        text: "推荐产品/服务（5–10项）"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("推荐产品/服务（5–10项）") }
                                         color: "#7dc9ff"
                                         font.pixelSize: 14
                                         font.bold: true
@@ -1146,7 +1161,7 @@ Item {
                                             return !(selectedOfferings[idx] && selectedOfferings[idx][currentReportTier]
                                                 && selectedOfferings[idx][currentReportTier].length > 0)
                                         }
-                                        text: "未选择"
+                                        text: { var _ = appTranslator.revision; return appTranslator.translateText("未选择") }
                                         color: "#888"
                                         font.pixelSize: 12
                                     }
@@ -1165,12 +1180,12 @@ Item {
 
                 Repeater {
                     model: [
-                        { text: "二维码", icon: "qrc:/images/qr.svg" },
-                        { text: "邮件", icon: "qrc:/images/mail.svg" },
-                        { text: "彩点显示", icon: "qrc:/images/spot.svg" },
-                        { text: "A4打印", icon: "qrc:/images/print.svg" },
-                        { text: "保存", icon: "" },
-                        { text: "返回", icon: "qrc:/images/left_icon.svg" },
+                        { text: appTranslator.translateText("二维码"), icon: "qrc:/images/qr.svg" },
+                        { text: appTranslator.translateText("邮件"), icon: "qrc:/images/mail.svg" },
+                        { text: appTranslator.translateText("彩点显示"), icon: "qrc:/images/spot.svg" },
+                        { text: appTranslator.translateText("A4打印"), icon: "qrc:/images/print.svg" },
+                        { text: appTranslator.translateText("保存"), icon: "" },
+                        { text: appTranslator.translateText("返回"), icon: "qrc:/images/left_icon.svg" },
                         { text: "HOME", icon: "qrc:/images/exit_icon.svg" }
                     ]
 
@@ -1181,9 +1196,9 @@ Item {
                             height: 80
                             radius: 10
                             color: "#204060"
-                            border.color: (modelData.text === "保存" && reportDirty) ? "#ffcc66" : "#7cc0ff"
-                            border.width: (modelData.text === "保存" && reportDirty) ? 2 : 1
-                            opacity: (modelData.text === "彩点显示" && !currentReportPairHasAnalyse()) ? 0.45 : 1
+                            border.color: (index === 4 && reportDirty) ? "#ffcc66" : "#7cc0ff"
+                            border.width: (index === 4 && reportDirty) ? 2 : 1
+                            opacity: (index === 2 && !currentReportPairHasAnalyse()) ? 0.45 : 1
                             Image {
                                 visible: modelData.icon !== ""
                                 anchors.centerIn: parent
@@ -1195,7 +1210,7 @@ Item {
                             Text {
                                 visible: modelData.icon === ""
                                 anchors.centerIn: parent
-                                text: "保存"
+                                text: { var _ = appTranslator.revision; return appTranslator.translateText("保存") }
                                 color: reportDirty ? "#ffcc66" : "white"
                                 font.pixelSize: 22
                                 font.bold: reportDirty
@@ -1203,7 +1218,7 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                enabled: modelData.text !== "彩点显示" || currentReportPairHasAnalyse()
+                                enabled: index !== 2 || currentReportPairHasAnalyse()
                                 onClicked: {
                                     if (index === 2)
                                         cyclePhotoViewMode()
@@ -1224,15 +1239,15 @@ Item {
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: {
-                                if (modelData.text === "彩点显示") {
+                                if (index === 2) {
                                     if (photoViewMode === 1)
-                                        return "原图"
+                                        return appTranslator.translateText("原图")
                                     if (photoViewMode === 2)
-                                        return "对比"
+                                        return appTranslator.translateText("对比")
                                 }
                                 return modelData.text
                             }
-                            color: (modelData.text === "彩点显示" && !currentReportPairHasAnalyse())
+                            color: (index === 2 && !currentReportPairHasAnalyse())
                                 ? "#666" : "white"
                             font.pixelSize: 22
                         }
@@ -1272,7 +1287,7 @@ Item {
                             font.bold: true
                         }
                         Text {
-                            text: "综合皮肤检测报告"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("综合皮肤检测报告") }
                             color: "#555555"
                             font.pixelSize: 13
                         }
@@ -1349,20 +1364,20 @@ Item {
                         labelsColor: "#444444"
                     }
 
-                    LineSeries { id: ps1; axisX: axisPrintX; axisY: axisPrintY; name: "毛孔"; width: 2; color: seriesColors[0] }
-                    LineSeries { id: ps2; axisX: axisPrintX; axisY: axisPrintY; name: "粉刺"; width: 2; color: seriesColors[1] }
-                    LineSeries { id: ps3; axisX: axisPrintX; axisY: axisPrintY; name: "深层色斑"; width: 2; color: seriesColors[2] }
-                    LineSeries { id: ps4; axisX: axisPrintX; axisY: axisPrintY; name: "浅层色斑"; width: 2; color: seriesColors[3] }
-                    LineSeries { id: ps5; axisX: axisPrintX; axisY: axisPrintY; name: "皱纹"; width: 2; color: seriesColors[4] }
-                    LineSeries { id: ps6; axisX: axisPrintX; axisY: axisPrintY; name: "敏感"; width: 2; color: seriesColors[5] }
-                    LineSeries { id: ps7; axisX: axisPrintX; axisY: axisPrintY; name: "褐色斑"; width: 2; color: seriesColors[6] }
-                    LineSeries { id: ps8; axisX: axisPrintX; axisY: axisPrintY; name: "混合彩斑"; width: 2; color: seriesColors[7] }
+                    LineSeries { id: ps1; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[0]; width: 2; color: seriesColors[0] }
+                    LineSeries { id: ps2; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[1]; width: 2; color: seriesColors[1] }
+                    LineSeries { id: ps3; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[2]; width: 2; color: seriesColors[2] }
+                    LineSeries { id: ps4; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[3]; width: 2; color: seriesColors[3] }
+                    LineSeries { id: ps5; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[4]; width: 2; color: seriesColors[4] }
+                    LineSeries { id: ps6; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[5]; width: 2; color: seriesColors[5] }
+                    LineSeries { id: ps7; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[6]; width: 2; color: seriesColors[6] }
+                    LineSeries { id: ps8; axisX: axisPrintX; axisY: axisPrintY; name: photoShortLabels[7]; width: 2; color: seriesColors[7] }
                 }
 
                 Text {
                     Layout.fillWidth: true
-                    text: "诊断等级：" + tierLabels[currentReportTier]
-                        + "　综合指数：" + comprehensiveScore().toFixed(0)
+                    text: appTranslator.translateText("诊断等级：") + tierLabels[currentReportTier]
+                        + appTranslator.translateText("　综合指数：") + comprehensiveScore().toFixed(0)
                     color: "#333333"
                     font.pixelSize: 13
                     font.bold: true
@@ -1372,7 +1387,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
-                        text: "诊断建议"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断建议") }
                         color: "#333333"
                         font.pixelSize: 12
                         font.bold: true
@@ -1393,7 +1408,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
-                        text: "推荐产品/服务"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("推荐产品/服务") }
                         color: "#333333"
                         font.pixelSize: 12
                         font.bold: true
@@ -1551,8 +1566,8 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "诊断等级：" + tierLabels[currentReportTier]
-                        + "　指数：" + latestScore(printReportIdx).toFixed(0)
+                    text: appTranslator.translateText("诊断等级：") + tierLabels[currentReportTier]
+                        + appTranslator.translateText("　指数：") + latestScore(printReportIdx).toFixed(0)
                     color: "#333333"
                     font.pixelSize: 13
                     font.bold: true
@@ -1568,7 +1583,7 @@ Item {
                         Layout.fillHeight: true
                         spacing: 4
                         Text {
-                            text: "诊断建议"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("诊断建议") }
                             color: "#333333"
                             font.pixelSize: 12
                             font.bold: true
@@ -1590,7 +1605,7 @@ Item {
                         Layout.fillHeight: true
                         spacing: 4
                         Text {
-                            text: "推荐产品/服务"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("推荐产品/服务") }
                             color: "#333333"
                             font.pixelSize: 12
                             font.bold: true

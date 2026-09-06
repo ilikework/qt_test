@@ -90,7 +90,7 @@ Item {
 
                 }
                 Label {
-                    text: calendarView.year + "年 " + (calendarView.month + 1) + "月"
+                    text: appTranslator.translateText("%1年 %2月").arg(calendarView.year).arg(calendarView.month + 1)
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Button {
@@ -129,7 +129,7 @@ Item {
                 columnSpacing: 4
 
                 Repeater {
-                    model: ["日", "一", "二", "三", "四", "五", "六"]
+                    model: [appTranslator.translateText("日"), appTranslator.translateText("一"), appTranslator.translateText("二"), appTranslator.translateText("三"), appTranslator.translateText("四"), appTranslator.translateText("五"), appTranslator.translateText("六")]
                     delegate: Label {
                         text: modelData
                         font.bold: true

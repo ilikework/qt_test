@@ -24,6 +24,7 @@
 #include <QUrl>
 #include <algorithm>
 #include <cmath>
+#include "MmTr.h"
 
 Q_LOGGING_CATEGORY(lcFaceAnalyse, "FaceAnalyse")
 
@@ -183,7 +184,7 @@ bool FaceAnalyseManager::ensureDetector()
     if (detectorReady_)
         return true;
     if (!initFaceDetector()) {
-        emit errorMessage(QStringLiteral("initFaceDetector 失败，请确认 shape_predictor_68_face_landmarks.dat 在程序目录"));
+        emit errorMessage(mmTr("initFaceDetector 失败，请确认 shape_predictor_68_face_landmarks.dat 在程序目录"));
         return false;
     }
     detectorReady_ = true;
@@ -250,8 +251,8 @@ QString FaceAnalyseManager::pendingAutoMarkSideSummary(bool isLeft) const
 QString FaceAnalyseManager::pendingAutoMarkRevertLabel(bool isLeft) const
 {
     if (isLeft ? pendingHadPreviousL_ : pendingHadPreviousR_)
-        return QStringLiteral("使用原定位结果");
-    return QStringLiteral("使用默认模板");
+        return mmTr("使用原定位结果");
+    return mmTr("使用默认模板");
 }
 
 bool FaceAnalyseManager::confirmAutoMarkSideChoice(bool isLeft, bool keepNew)
@@ -290,11 +291,11 @@ void FaceAnalyseManager::finalizeAutoMarkChoice()
 void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, bool fromWorkflow)
 {
     if (busy_) {
-        emit errorMessage(QStringLiteral("正在定位中，请稍候"));
+        emit errorMessage(mmTr("正在定位中，请稍候"));
         return;
     }
     if (customerId.isEmpty() || groupId <= 0) {
-        emit autoMarkFinished(false, QStringLiteral("无效的客户或组号"), false);
+        emit autoMarkFinished(false, mmTr("无效的客户或组号"), false);
         return;
     }
 
@@ -360,20 +361,20 @@ void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, b
 
         auto sideSummary = [](const QString &label, const SideMarkPayload &side) -> QString {
             if (side.skipped)
-                return QStringLiteral("%1：已锁定默认轮廓（跳过）").arg(label);
+                return mmTr("%1：已锁定默认轮廓（跳过）").arg(label);
             if (side.fileMissing)
-                return QStringLiteral("%1：锚点图片未找到").arg(label);
+                return mmTr("%1：锚点图片未找到").arg(label);
             if (side.jsonCompact.isEmpty())
-                return QStringLiteral("%1：定位失败").arg(label);
+                return mmTr("%1：定位失败").arg(label);
             if (side.dllOk)
-                return QStringLiteral("%1：自动定位成功").arg(label);
+                return mmTr("%1：自动定位成功").arg(label);
             if (side.dllPointCount == 0)
-                return QStringLiteral("%1：自动定位失败（LibFA 未检测到人脸，0 个点），已用默认轮廓").arg(label);
-            return QStringLiteral("%1：自动定位失败，已用默认轮廓").arg(label);
+                return mmTr("%1：自动定位失败（LibFA 未检测到人脸，0 个点），已用默认轮廓").arg(label);
+            return mmTr("%1：自动定位失败，已用默认轮廓").arg(label);
         };
 
-        const QString msgL = sideSummary(QStringLiteral("左脸"), result.left);
-        const QString msgR = sideSummary(QStringLiteral("右脸"), result.right);
+        const QString msgL = sideSummary(mmTr("左脸"), result.left);
+        const QString msgR = sideSummary(mmTr("右脸"), result.right);
         const QString detail = msgL + QStringLiteral("；") + msgR;
 
         setBusy(false);
@@ -397,7 +398,7 @@ void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, b
                               << "writeR:" << okR
                               << "detail:" << detail;
         if (!okL || !okR) {
-            emit autoMarkFinished(false, detail + QStringLiteral("；保存轮廓失败"), false);
+            emit autoMarkFinished(false, detail + mmTr("；保存轮廓失败"), false);
             return;
         }
 
@@ -425,7 +426,7 @@ void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, b
         GroupMarkResult out;
         if (!initFaceDetector()) {
             out.detectorOk = false;
-            out.detectorError = QStringLiteral("人脸检测初始化失败");
+            out.detectorError = mmTr("人脸检测初始化失败");
             qCWarning(lcFaceAnalyse) << "initFaceDetector failed";
             return out;
         }
@@ -499,19 +500,19 @@ QString labelForAnalyseFunction(int analyseFunction)
 {
     switch (analyseFunction) {
     case MM_ANALYSE_SPOTS:
-        return QStringLiteral("色斑");
+        return mmTr("色斑");
     case MM_ANALYSE_PORES:
-        return QStringLiteral("毛孔");
+        return mmTr("毛孔");
     case MM_ANALYSE_EVENNESS:
-        return QStringLiteral("均匀度");
+        return mmTr("均匀度");
     case MM_ANALYSE_WRINKLE:
-        return QStringLiteral("皱纹");
+        return mmTr("皱纹");
     case MM_ANALYSE_ACNES:
-        return QStringLiteral("痤疮");
+        return mmTr("痤疮");
     case MM_ANALYSE_MOISTURE:
-        return QStringLiteral("水分");
+        return mmTr("水分");
     default:
-        return QStringLiteral("分析");
+        return mmTr("分析");
     }
 }
 
@@ -521,7 +522,7 @@ QVector<SkinAnalyseJob> buildSkinAnalyseJobsFromDb(QString *errorOut)
     const QVector<FacePhotoAnalyseMapEntry> mapRows = AppDb::instance().getFacePhotoAnalyseMap();
     if (mapRows.isEmpty()) {
         if (errorOut)
-            *errorOut = QStringLiteral("T_FacePhoto_Map 未配置分析映射");
+            *errorOut = mmTr("T_FacePhoto_Map 未配置分析映射");
         return jobs;
     }
 
@@ -542,7 +543,7 @@ QVector<SkinAnalyseJob> buildSkinAnalyseJobsFromDb(QString *errorOut)
     }
 
     if (jobs.isEmpty() && errorOut)
-        *errorOut = QStringLiteral("T_FacePhoto_Map 中没有可执行的 LibFA64 分析项");
+        *errorOut = mmTr("T_FacePhoto_Map 中没有可执行的 LibFA64 分析项");
     return jobs;
 }
 
@@ -590,7 +591,7 @@ QString overlayOutputPath(const QString &groupDir, const QString &photoName)
 
 QString sideLabel(const QString &dirType)
 {
-    return dirType == LEFT ? QStringLiteral("左脸") : QStringLiteral("右脸");
+    return dirType == LEFT ? mmTr("左脸") : mmTr("右脸");
 }
 
 bool runOneSkinAnalyse(const SkinAnalyseJob &job,
@@ -606,19 +607,19 @@ bool runOneSkinAnalyse(const SkinAnalyseJob &job,
     if (!AppDb::instance().findPhotoInGroupByCapType(
             custId, groupId, dirType, job.capType, &photo)) {
         if (warnOut)
-            *warnOut = QStringLiteral("%1 %2 未找到照片").arg(sideLabel(dirType), job.capType);
+            *warnOut = mmTr("%1 %2 未找到照片").arg(sideLabel(dirType), job.capType);
         return false;
     }
 
     const QString inPath = AppDb::instance().photoFilePath(photo);
     if (inPath.isEmpty() || !QFile::exists(inPath)) {
         if (warnOut)
-            *warnOut = QStringLiteral("%1 图片不存在：%2").arg(sideLabel(dirType), inPath);
+            *warnOut = mmTr("%1 图片不存在：%2").arg(sideLabel(dirType), inPath);
         return false;
     }
     if (pxl.size() < 6) {
         if (warnOut)
-            *warnOut = QStringLiteral("%1 ROI 无效").arg(sideLabel(dirType));
+            *warnOut = mmTr("%1 ROI 无效").arg(sideLabel(dirType));
         return false;
     }
 
@@ -647,7 +648,7 @@ bool runOneSkinAnalyse(const SkinAnalyseJob &job,
 
     if (!AppDb::instance().upsertAnalyseInfo(photo.IX, job.analyseFunction, r.value, r.percent)) {
         if (warnOut)
-            *warnOut = QStringLiteral("保存分析结果失败：%1").arg(AppDb::instance().lastErrorText());
+            *warnOut = mmTr("保存分析结果失败：%1").arg(AppDb::instance().lastErrorText());
         return false;
     }
 
@@ -669,7 +670,7 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
     QString mapError;
     const QVector<SkinAnalyseJob> jobs = buildSkinAnalyseJobsFromDb(&mapError);
     if (jobs.isEmpty()) {
-        out.message = mapError.isEmpty() ? QStringLiteral("未找到分析配置") : mapError;
+        out.message = mapError.isEmpty() ? mmTr("未找到分析配置") : mapError;
         return out;
     }
     const int totalJobs = jobs.size() * 2;
@@ -677,19 +678,19 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
 
     Customer customer;
     if (!AppDb::instance().findCustomerByCustId(customerId, &customer)) {
-        out.message = QStringLiteral("未找到客户信息");
+        out.message = mmTr("未找到客户信息");
         return out;
     }
 
     QVector<int> pxlL;
     QVector<int> pxlR;
     if (!loadSidePxl(customerId, groupId, LEFT, &pxlL) || !loadSidePxl(customerId, groupId, RIGHT, &pxlR)) {
-        out.message = QStringLiteral("读取左右脸 ROI 失败，请先完成区域定位");
+        out.message = mmTr("读取左右脸 ROI 失败，请先完成区域定位");
         return out;
     }
 
     if (!AppDb::instance().deleteGroupAnalyseInfo(customerId, groupId)) {
-        out.message = QStringLiteral("清除旧分析结果失败");
+        out.message = mmTr("清除旧分析结果失败");
         return out;
     }
 
@@ -721,14 +722,14 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
 
     out.success = out.okCount > 0;
     if (out.failCount == 0) {
-        out.message = QStringLiteral("皮肤分析完成，共 %1 项。").arg(out.okCount);
+        out.message = mmTr("皮肤分析完成，共 %1 项。").arg(out.okCount);
     } else if (out.okCount > 0) {
-        out.message = QStringLiteral("皮肤分析部分完成：成功 %1 项，失败 %2 项。\n%3")
+        out.message = mmTr("皮肤分析部分完成：成功 %1 项，失败 %2 项。\n%3")
                           .arg(out.okCount)
                           .arg(out.failCount)
                           .arg(warnings.join(QStringLiteral("；")));
     } else {
-        out.message = QStringLiteral("皮肤分析失败。\n") + warnings.join(QStringLiteral("；"));
+        out.message = mmTr("皮肤分析失败。\n") + warnings.join(QStringLiteral("；"));
     }
     return out;
 }
@@ -738,19 +739,19 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
 void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId)
 {
     if (busy_) {
-        emit errorMessage(QStringLiteral("正在处理中，请稍候"));
+        emit errorMessage(mmTr("正在处理中，请稍候"));
         return;
     }
     if (customerId.isEmpty() || groupId <= 0) {
-        emit groupAnalyseFinished(false, QStringLiteral("无效的客户或组号"));
+        emit groupAnalyseFinished(false, mmTr("无效的客户或组号"));
         return;
     }
     if (groupNeedsAutoMark(customerId, groupId)) {
-        emit groupAnalyseFinished(false, QStringLiteral("请先完成左右脸区域定位"));
+        emit groupAnalyseFinished(false, mmTr("请先完成左右脸区域定位"));
         return;
     }
     if (!ensureDetector()) {
-        emit groupAnalyseFinished(false, QStringLiteral("人脸检测初始化失败"));
+        emit groupAnalyseFinished(false, mmTr("人脸检测初始化失败"));
         return;
     }
 

@@ -45,12 +45,8 @@ Item {
     }
 
     function getGenderString(gender) {
-        // 2. 根据性别返回默认图 (假设 1是男, 2是女)
-        switch(gender) {
-            case 1:  return "男";
-            case 2:  return "女";
-        }
-        return "未知";
+        var _ = appTranslator.revision
+        return mmI18n.genderLabel(gender)
     }
 
     function selectAndNav(targetId) {
@@ -118,24 +114,24 @@ Item {
         anchors.bottomMargin: 20
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 12
-        //width: parent.width * 0.9
-        //height:parent.height
-        // 标题
-        Label {
-            text: "客户管理"
-            height: 30
-            font.pixelSize: 36
-            font.bold: true
-            color: "#fff"
+        RowLayout {
+            Layout.fillWidth: true
+            Label {
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("客户管理") }
+                height: 30
+                font.pixelSize: 36
+                font.bold: true
+                color: "#fff"
+                Layout.fillWidth: true
+            }
         }
 
-        // // 搜索栏
         RowLayout {
             id:searchRow
             height: 24
             spacing: 12
             Label {
-                text: "搜索方式:"; color:"#ffd"
+                text: appTranslator.translateText("搜索方式:"); color:"#ffd"
                 font.pixelSize: 24
                 font.bold: true
             }
@@ -144,7 +140,7 @@ Item {
                 width: 580
                 font.pixelSize: 24
                 font.bold: true
-                model: ["客户编号","客户姓名","客户电话"]
+                model: [appTranslator.translateText("客户编号"), appTranslator.translateText("客户姓名"), appTranslator.translateText("客户电话")]
 
                 // 重写显示当前选中项的内容
                 contentItem: Text {
@@ -172,7 +168,7 @@ Item {
                 id: searchInput
                 font.pixelSize: 24
                 font.bold: true
-                placeholderText: "请输入搜索内容"
+                placeholderText: { var _ = appTranslator.revision; return appTranslator.translateText("请输入搜索内容") }
                 width: 580
                 Layout.preferredWidth: 580    // 告诉布局使用此宽度
                 Layout.maximumWidth: 580
@@ -299,12 +295,12 @@ Item {
                             Layout.alignment: Qt.AlignLeft | Qt.AlignTop
                             Layout.fillWidth: false   // 绝对不准填满剩余宽度
                             spacing: 2
-                            Label { text: "客户编号: " + modelData.id; color:"#ffb300" }
-                            Label { text: "客户姓名: " + modelData.name; color:"#ffb300" }
-                            Label { text: "登记时间: " + modelData.date; color:"#ffb300" }
-                            Label { text: "性别: " + getGenderString(modelData.gender) + "   生日: " + modelData.birthday; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("客户编号: ") + modelData.id; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("客户姓名: ") + modelData.name; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("登记时间: ") + modelData.date; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("性别: ") + getGenderString(modelData.gender) + appTranslator.translateText("   生日: ") + modelData.birthday; color:"#ffb300" }
                             Label { text: "Email: " + modelData.email; color:"#ffb300" }
-                            Label { text: "电话: " + modelData.phone; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("电话: ") + modelData.phone; color:"#ffb300" }
                             Item { Layout.fillHeight: true }
                         }
 
@@ -321,12 +317,12 @@ Item {
                             // 但为了确保不留下“空隙”，建议加上这条
                             Layout.preferredHeight: visible ? -1 : 0
                             Layout.fillHeight: visible
-                            Label { text: "报告日期: " + modelData.reportDate; color:"#ffb300" }
-                            Label { text: "报告摘要: " + modelData.reportSummary; color:"#ffb300" }
-                            Label { text: "肌肤皱纹: " + modelData.wrinkle; color:"#ffb300" }
-                            Label { text: "肌肤色斑: " + modelData.spot; color:"#ffb300" }
-                            Label { text: "肌肤粉刺: " + modelData.acne; color:"#ffb300" }
-                            Label { text: "肌肤血红斑: " + modelData.erythema; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("报告日期: ") + modelData.reportDate; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("报告摘要: ") + modelData.reportSummary; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("肌肤皱纹: ") + modelData.wrinkle; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("肌肤色斑: ") + modelData.spot; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("肌肤粉刺: ") + modelData.acne; color:"#ffb300" }
+                            Label { text: appTranslator.translateText("肌肤血红斑: ") + modelData.erythema; color:"#ffb300" }
                             Item { Layout.fillHeight: true }
                         }
                         Item {
@@ -347,12 +343,12 @@ Item {
             height: 40
             spacing: 10
             TextButton {
-                text: "< 上一页"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("< 上一页") }
                 enabled: currentPage > 1
                 onClicked: currentPage--
             }
             TextButton {
-                text: "下一页 >"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("下一页 >") }
                 enabled: currentPage * pageSize < customers.length
                 onClicked: currentPage++
             }
@@ -366,8 +362,7 @@ Item {
             TextButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
-                text: "新增用户"
-
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("新增用户") }
                 onClicked: {
                     customerDialog.setCustomer({
                         id: "#######",
@@ -386,7 +381,7 @@ Item {
             TextButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
-                text: "编辑信息"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("编辑信息") }
                 enabled: customerListView.currentIndex !== -1
                 onClicked:
                 {
@@ -413,7 +408,7 @@ Item {
             TextButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
-                text: "删除用户"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("删除用户") }
                 enabled: customerListView.currentIndex !== -1
                 onClicked: {
                     // 1. 获取选中行的 ID
@@ -432,7 +427,7 @@ Item {
             TextButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
-                text: "进入分析"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("进入分析") }
                 enabled: customerListView.currentIndex !== -1
                 onClicked:
                 {
@@ -449,7 +444,7 @@ Item {
             }
 
             TextButton {
-                text: "回到Home"
+                text: { var _ = appTranslator.revision; return appTranslator.translateText("回到Home") }
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 50
 
@@ -492,7 +487,7 @@ Item {
         // --- 删除确认对话框 ---
         Dialog {
             id: deleteConfirmDialog
-            title: "确认删除"
+            title: { var _ = appTranslator.revision; return appTranslator.translateText("确认删除") }
             anchors.centerIn: parent // 居中于 customerManager
             width: 300
             property string targetID: ""
@@ -507,17 +502,17 @@ Item {
             }
 
             Label {
-                text: "您确定要删除 ID 为 " + deleteConfirmDialog.targetID + " 的用户吗？"
+                text: appTranslator.translateText("您确定要删除 ID 为 ") + deleteConfirmDialog.targetID + appTranslator.translateText(" 的用户吗？")
                 anchors.centerIn: parent
             }
 
             footer: DialogButtonBox {
                 Button {
-                    text: "确认"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("确认") }
                     DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 }
                 Button {
-                    text: "取消"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("取消") }
                     DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 }
                 onAccepted: {

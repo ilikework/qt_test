@@ -569,7 +569,7 @@ Item {
         }
         var json = buildFaceReconJson()
         if (!json) {
-            generationErrorMessage = "无可用左右图数据，无法生成 3D"
+            generationErrorMessage = appTranslator.translateText("无可用左右图数据，无法生成 3D")
             return
         }
         mm3dManager.runFaceRecon(json)
@@ -958,7 +958,7 @@ Item {
         }
         function onErrorMessage(msg) {
             console.warn("MM3D:", msg)
-            root.generationErrorMessage = msg || "3D生成失败"
+            root.generationErrorMessage = msg || appTranslator.translateText("3D生成失败")
         }
     }
 
@@ -1640,7 +1640,7 @@ Item {
                     spacing: 8
                     Label {
                         width: parent.width
-                        text: "3D 光源"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("3D 光源") }
                         color: "#ccc"
                         font.pixelSize: 12
                     }
@@ -1699,7 +1699,7 @@ Item {
                     }
                     Label {
                         width: parent.width
-                        text: "方位角 " + root.lightAzimuthDeg.toFixed(0) + "° · 仰角 " + root.lightElevationDeg.toFixed(0) + "°"
+                        text: appTranslator.translateText("方位角 ") + root.lightAzimuthDeg.toFixed(0) + appTranslator.translateText("° · 仰角 ") + root.lightElevationDeg.toFixed(0) + "°"
                         color: "#bbb"
                         font.pixelSize: 11
                     }
@@ -1709,7 +1709,7 @@ Item {
                             Layout.fillWidth: true
                         }
                         Button {
-                            text: "重置光位"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("重置光位") }
                             onClicked: {
                                 root.lightAzimuthDeg = 0
                                 root.lightElevationDeg = 45
@@ -1719,7 +1719,7 @@ Item {
                     RowLayout {
                         width: parent.width
                         Label {
-                            text: "亮度"
+                            text: { var _ = appTranslator.revision; return appTranslator.translateText("亮度") }
                             color: "#aaa"
                             font.pixelSize: 11
                             Layout.minimumWidth: 40
@@ -1772,9 +1772,9 @@ Item {
                             hoverEnabled: true
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
-                            ToolTip.text: root.morphBlendAxis === 0 ? "X轴左右变脸（点按→Y轴上下）"
-                                          : (root.morphBlendAxis === 1 ? "Y轴上下变脸（点按→XY区域）"
-                                                                       : "XY区域变脸（点按→X轴左右）")
+                            ToolTip.text: root.morphBlendAxis === 0 ? appTranslator.translateText("X轴左右变脸（点按→Y轴上下）")
+                                          : (root.morphBlendAxis === 1 ? appTranslator.translateText("Y轴上下变脸（点按→XY区域）")
+                                                                       : appTranslator.translateText("XY区域变脸（点按→X轴左右）"))
                                           
                             onClicked: root.advanceMorphBlendAxis()
                             /// 图1 左右分界 / 图2 上下分界 / 图3 XY 区域（内嵌矢量，不依赖外部 png）
@@ -1879,7 +1879,7 @@ Item {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         text: root.swingCountdownSec > 0
-                              ? ("约 " + root.swingCountdownSec + " 秒后自动左右摆动")
+                              ? appTranslator.translateText("约 %1 秒后自动左右摆动").arg(root.swingCountdownSec)
                               : ""
                         color: "#eee"
                         font.pixelSize: 15
@@ -1889,7 +1889,7 @@ Item {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: "点击关闭 · 30 秒内不再提示"
+                        text: { var _ = appTranslator.revision; return appTranslator.translateText("点击关闭 · 30 秒内不再提示") }
                         color: "#aaa"
                         font.pixelSize: 12
                     }
@@ -2020,7 +2020,7 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     anchors.verticalCenterOffset: 30
-                    text: "正在生成 3D 模型…"
+                    text: { var _ = appTranslator.revision; return appTranslator.translateText("正在生成 3D 模型…") }
                     color: "white"
                 }
             }
@@ -2058,12 +2058,13 @@ Item {
                     height: 32
                     CheckButton {
                         id: morphBtn
+                        width: parent.width * 0.9
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
                         fontPixelSize: 16
                         cornerRadius: 6
                         borderW: 1
-                        text: root.morphMode ? "退出变脸" : "变脸"
+                        text: root.morphMode ? appTranslator.translateText("退出变脸") : appTranslator.translateText("变脸")
                         checked: root.morphMode
                         onClicked: root.morphMode = !root.morphMode
                     }
@@ -2079,12 +2080,13 @@ Item {
                     height: 32
                     CheckButton {
                         id: reliefBtn
+                        width: parent.width * 0.9
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
                         fontPixelSize: 16
                         cornerRadius: 6
                         borderW: 1
-                        text: root.reliefTextureMode ? "退出模型" : "3D模型"
+                        text: root.reliefTextureMode ? appTranslator.translateText("退出模型") : appTranslator.translateText("3D模型")
                         checked: root.reliefTextureMode
                         onClicked: {
                             if (root.morphMode)
@@ -2104,6 +2106,7 @@ Item {
                     height: 32
                     CheckButton {
                         id: analyseTexBtn
+                        width: parent.width * 0.9
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
                         fontPixelSize: 16
@@ -2111,7 +2114,7 @@ Item {
                         borderW: 1
                         enabled: root.canUseAnalyseTexture || root.useAnalyseTexture
                         opacity: enabled ? 1.0 : 0.4
-                        text: root.useAnalyseTexture ? "原贴图" : "分析贴图"
+                        text: root.useAnalyseTexture ? appTranslator.translateText("原贴图") : appTranslator.translateText("分析贴图")
                         checked: root.useAnalyseTexture
                         onClicked: root.toggleAnalyseTexture()
                     }
@@ -2127,12 +2130,13 @@ Item {
                     height: 32
                     CheckButton {
                         id: light3dBtn
+                        width: parent.width * 0.9
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
                         fontPixelSize: 16
                         cornerRadius: 6
                         borderW: 1
-                        text: root.rotatingLight3DEnabled ? "关灯" : "开灯"
+                        text: root.rotatingLight3DEnabled ? appTranslator.translateText("关灯") : appTranslator.translateText("开灯")
                         checked: root.rotatingLight3DEnabled
                         onClicked: root.rotatingLight3DEnabled = !root.rotatingLight3DEnabled
                     }
@@ -2148,12 +2152,13 @@ Item {
                     height: 32
                     CheckButton {
                         id: magnifierBtn
+                        width: parent.width * 0.9
                         anchors.horizontalCenter: parent.horizontalCenter
                         buttonHeight: 32
                         fontPixelSize: 16
                         cornerRadius: 6
                         borderW: 1
-                        text: root.magnifierActive ? "关放大镜" : "放大镜"
+                        text: root.magnifierActive ? appTranslator.translateText("关放大镜") : appTranslator.translateText("放大镜")
                         checked: root.magnifierActive
                         onClicked: root.magnifierActive = !root.magnifierActive
                     }

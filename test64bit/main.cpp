@@ -6,6 +6,8 @@
 #include "cameraclient.h"
 #include "CustomerManager.h"
 #include "appconfig.h"
+#include "AppTranslator.h"
+#include "MmI18n.h"
 #include "AnalyseManager.h"
 #include "BackupManager.h"
 #include "PreRecordManager.h"
@@ -33,6 +35,11 @@ int main(int argc, char *argv[])
 
     // Register Singleton/Global Modules
     engine.rootContext()->setContextProperty("appConfig", &AppConfig::instance());
+    engine.rootContext()->setContextProperty("appTranslator", &AppTranslator::instance());
+    engine.rootContext()->setContextProperty("mmI18n", &MmI18n::instance());
+
+    QObject::connect(&AppTranslator::instance(), &AppTranslator::languageChanged,
+                     &MmI18n::instance(), &MmI18n::retranslate);
 
     // Register invokable C++ objects
     CameraClient client(provider); // client depends on provider
@@ -64,6 +71,8 @@ int main(int argc, char *argv[])
 
     // Register custom QML types
     qmlRegisterType<ImageEditor>("com.magicmirror.components", 1, 0, "ImageEditor");
+
+    AppTranslator::instance().installForStartup(&engine);
 
     // --- Load main QML file from Qt Resource System ---
     const QUrl url(QStringLiteral("qrc:/App.qml"));
