@@ -43,6 +43,8 @@ Item {
     property int photoViewMode: 0
     property bool blinkShowAnalysed: true
     property int analyseDisplayRevision: 0
+    property real scoreL: -1
+    property real scoreR: -1
 
     /// 右侧子图列表当前选中项（不用 source 字符串比较：路径/url 格式易不一致）
     property int subListSelectedIndex: 0
@@ -54,6 +56,21 @@ Item {
         if (photoViewMode === 2)
             return appTranslator.translateText("显示：对比")
         return appTranslator.translateText("显示：分析图")
+    }
+
+    readonly property string scoreLabelL: {
+        var _ = analyseDisplayRevision
+        var _r = appTranslator.revision
+        if (scoreL < 0)
+            return ""
+        return appTranslator.translateText("指数 ") + scoreL.toFixed(1) + "%"
+    }
+    readonly property string scoreLabelR: {
+        var _ = analyseDisplayRevision
+        var _r = appTranslator.revision
+        if (scoreR < 0)
+            return ""
+        return appTranslator.translateText("指数 ") + scoreR.toFixed(1) + "%"
     }
 
     function currentSubPhotoItem() {
@@ -100,6 +117,18 @@ Item {
         rightMain.source = resolveEditorSource(item.photoR, item.IXR)
         leftMain.enterShowContour()
         rightMain.enterShowContour()
+        refreshAnalyseScores()
+    }
+
+    function refreshAnalyseScores() {
+        const item = currentSubPhotoItem()
+        if (!item || !faceAnalyseManager) {
+            scoreL = -1
+            scoreR = -1
+            return
+        }
+        scoreL = faceAnalyseManager.photoAnalyseDisplayScore(item.IXL)
+        scoreR = faceAnalyseManager.photoAnalyseDisplayScore(item.IXR)
     }
 
     function loadMainEditorsForIndex(index) {
@@ -185,7 +214,7 @@ Item {
         autoMarkDialog.open()
     }
 
-    /// 主画面右侧「皮肤分析」
+    /// 主画面右侧「皮肤分析」：先手动输入水分，再跑其余分析
     function startSkinAnalyse() {
         if (!groupRegionReady) {
             statusMsgBox.boxTitle = appTranslator.translateText("提示")
@@ -199,8 +228,14 @@ Item {
             skinAnalyseRunning = false
             return
         }
+        moistureDialog.open(50)
+    }
+
+    function continueSkinAnalyseWithMoisture(moisturePercent) {
+        if (!faceAnalyseManager || faceAnalyseManager.busy)
+            return
         skinAnalyseRunning = true
-        faceAnalyseManager.analyseGroup(customerID, currentGroupID)
+        faceAnalyseManager.analyseGroup(customerID, currentGroupID, moisturePercent)
     }
 
     /// 主画面右侧「自动区域定位」：LibFA64 左右脸轮廓定位（可重复执行）
@@ -493,6 +528,25 @@ Item {
                                 anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
                                 //source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoL : ""
                             }
+                            Rectangle {
+                                visible: customerDetail.scoreLabelL.length > 0
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 10
+                                width: scoreTextL.implicitWidth + 20
+                                height: 30
+                                radius: 6
+                                color: "#CC102030"
+                                border.color: "#7cc0ff"
+                                Text {
+                                    id: scoreTextL
+                                    anchors.centerIn: parent
+                                    text: customerDetail.scoreLabelL
+                                    color: "#ffffff"
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                            }
                         }
                     }
 
@@ -513,6 +567,25 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: 2 // 留出 2 像素的空隙，防止覆盖 borde
                                 //source: mainphotoes.count > 0 ? mainphotoes.get(curIndex).photoR : ""
+                            }
+                            Rectangle {
+                                visible: customerDetail.scoreLabelR.length > 0
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 10
+                                width: scoreTextR.implicitWidth + 20
+                                height: 30
+                                radius: 6
+                                color: "#CC102030"
+                                border.color: "#7cc0ff"
+                                Text {
+                                    id: scoreTextR
+                                    anchors.centerIn: parent
+                                    text: customerDetail.scoreLabelR
+                                    color: "#ffffff"
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
                             }
                         }
                     }
@@ -701,6 +774,8 @@ Item {
                 photoViewMode = 0
                 blinkShowAnalysed = true
                 applyMainPhotoDisplay()
+            } else {
+                refreshAnalyseScores()
             }
             statusMsgBox.boxTitle = success ? appTranslator.translateText("分析完成") : appTranslator.translateText("分析失败")
             statusMsgBox.boxMessage = message
@@ -813,6 +888,18 @@ Item {
 
     MessageBox {
         id: statusMsgBox
+    }
+
+    MoistureInputDialog {
+        id: moistureDialog
+        anchors.fill: parent
+        onAccepted: function(value) {
+            customerDetail.continueSkinAnalyseWithMoisture(value)
+        }
+        onCancelled: {
+            customerDetail.skinAnalyseRunning = false
+            customerDetail.analyseWorkflowActive = false
+        }
     }
 
     /// 定位进行中提示（InputFunnelBlocker 在 App 层拦截点击）

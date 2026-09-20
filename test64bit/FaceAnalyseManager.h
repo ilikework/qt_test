@@ -28,10 +28,13 @@ public:
     Q_INVOKABLE QString pendingAutoMarkRevertLabel(bool isLeft) const;
     Q_INVOKABLE bool confirmAutoMarkSideChoice(bool isLeft, bool keepNew);
     Q_INVOKABLE void finalizeAutoMarkChoice();
-    Q_INVOKABLE void analyseGroup(const QString &customerId, int groupId);
+    /// @param moisturePercent 手动水分值 0–99（对标 TC30 无水分笔输入）；写入 MM_WHOLE 照片的 AnalyseInfo
+    Q_INVOKABLE void analyseGroup(const QString &customerId, int groupId, int moisturePercent);
     Q_INVOKABLE void notifyGroupAnalyseProgress(int done, int total, const QString &label);
     Q_INVOKABLE bool photoHasAnalyseOverlay(int facePhotoIx) const;
     Q_INVOKABLE QUrl photoAnalyseOverlayUrl(int facePhotoIx) const;
+    /// 校正后的显示分数 0–100；无分析结果返回 -1
+    Q_INVOKABLE double photoAnalyseDisplayScore(int facePhotoIx) const;
     /// 用左右分析叠加图（或一侧原图兜底）合成 3D UV 贴图（FaceRecon 布局），缓存到 analyse/{stem}_atlas.jpg
     Q_INVOKABLE QUrl ensurePairAnalyseAtlasUrl(const QString &groupDir,
                                               const QString &textureStem,

@@ -1036,6 +1036,51 @@ bool AppDb::hasAnalyseInfo(int facePhotoIx) const
     return q.exec() && q.next();
 }
 
+bool AppDb::analyseDisplayScoreForPhoto(int facePhotoIx, double *outScore) const
+{
+    if (!outScore || facePhotoIx < 0 || !m_db.isOpen())
+        return false;
+    *outScore = 0.0;
+
+    FacePhoto photo;
+    if (!findFacePhotoByIx(facePhotoIx, &photo))
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT a.Analyse_Precent, COALESCE(m.Report_Type, p.Photo_ID) AS ReportType
+        FROM T_FacePhoto_AnalyseInfo a
+        JOIN T_Customers_FacePhoto p ON p.IX = a.FacePhoto_IX
+        LEFT JOIN T_FacePhoto_Map m
+            ON m.Photo_CapType = p.Photo_CapType
+           AND m.Analyse_Function = a.Analyse_Function
+        WHERE a.FacePhoto_IX = ?
+        ORDER BY a.IX DESC
+        LIMIT 1
+    )");
+    q.addBindValue(facePhotoIx);
+    if (!q.exec() || !q.next())
+        return false;
+
+    const int rawPercent = q.value(0).toInt();
+    int reportType = q.value(1).toInt();
+    if (reportType <= 0)
+        reportType = photo.Photo_ID > 0 ? photo.Photo_ID : 1;
+
+    int gender = 1;
+    int ageYears = 30;
+    Customer customer;
+    if (findCustomerByCustId(photo.Cust_ID, &customer)) {
+        gender = customer.Cust_Gender;
+        const QDate bd = QDate::fromString(customer.Cust_Birthday, QStringLiteral("yyyy-MM-dd"));
+        if (bd.isValid())
+            ageYears = qMax(1, bd.daysTo(QDate::currentDate()) / 365);
+    }
+
+    *outScore = displayScoreFromAnalysePercent(rawPercent, reportType, gender, ageYears);
+    return true;
+}
+
 QString AppDb::analyseOverlayPathForPhoto(int facePhotoIx) const
 {
     FacePhoto photo;

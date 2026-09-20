@@ -145,6 +145,8 @@ public:
     bool upsertAnalyseInfo(int facePhotoIx, int analyseFunction, int analyseResult, int analysePercent);
     bool deleteGroupAnalyseInfo(const QString &custId, int groupId);
     bool hasAnalyseInfo(int facePhotoIx) const;
+    /// 读取照片分析结果的显示分数（0–100，经 age/gender 校正）；无数据返回 false
+    bool analyseDisplayScoreForPhoto(int facePhotoIx, double *outScore) const;
     QString analyseOverlayPathForPhoto(int facePhotoIx) const;
 
     // 插入单条绘图信息，并返回该条记录的 IX (主键)

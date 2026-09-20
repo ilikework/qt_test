@@ -22,6 +22,7 @@
 #include <QPainter>
 #include <QtConcurrent>
 #include <QUrl>
+#include <QtGlobal>
 #include <algorithm>
 #include <cmath>
 #include "MmTr.h"
@@ -662,9 +663,40 @@ bool runOneSkinAnalyse(const SkinAnalyseJob &job,
     return true;
 }
 
+/// 手动水分值写入 MM_WHOLE（左右两侧）；存储格式与 TC30 一致：percent×100
+bool saveManualMoistureForGroup(const QString &customerId, int groupId, int moisturePercent,
+                                QStringList *warnings)
+{
+    const int clamped = qBound(0, moisturePercent, 99);
+    const int stored = clamped * 100;
+    bool anyOk = false;
+    const QString sides[] = { QStringLiteral(LEFT), QStringLiteral(RIGHT) };
+    for (const QString &side : sides) {
+        FacePhoto photo;
+        if (!AppDb::instance().findPhotoInGroupByCapType(
+                customerId, groupId, side, QStringLiteral(MM_WHOLE), &photo)) {
+            if (warnings)
+                warnings->append(mmTr("%1 WHOLE 未找到照片").arg(sideLabel(side)));
+            continue;
+        }
+        if (!AppDb::instance().upsertAnalyseInfo(
+                photo.IX, MM_ANALYSE_MOISTURE, stored, stored)) {
+            if (warnings)
+                warnings->append(mmTr("%1 水分保存失败：%2")
+                                     .arg(sideLabel(side), AppDb::instance().lastErrorText()));
+            continue;
+        }
+        anyOk = true;
+        qCInfo(lcFaceAnalyse) << "moisture saved" << sideLabel(side)
+                              << "WHOLE percent:" << clamped << "stored:" << stored;
+    }
+    return anyOk;
+}
+
 GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
                                        const QString &customerId,
-                                       int groupId)
+                                       int groupId,
+                                       int moisturePercent)
 {
     GroupAnalyseResult out;
     QString mapError;
@@ -673,7 +705,7 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
         out.message = mapError.isEmpty() ? mmTr("未找到分析配置") : mapError;
         return out;
     }
-    const int totalJobs = jobs.size() * 2;
+    const int totalJobs = jobs.size() * 2 + 1; // +1 水分
     int done = 0;
 
     Customer customer;
@@ -694,9 +726,19 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
         return out;
     }
 
+    QStringList warnings;
+
+    ++done;
+    QMetaObject::invokeMethod(mgr, "notifyGroupAnalyseProgress", Qt::QueuedConnection,
+                              Q_ARG(int, done), Q_ARG(int, totalJobs),
+                              Q_ARG(QString, mmTr("水分")));
+    if (saveManualMoistureForGroup(customerId, groupId, moisturePercent, &warnings))
+        ++out.okCount;
+    else
+        ++out.failCount;
+
     const int age = customerAgeYears(customer);
     const int gender = customer.Cust_Gender > 0 ? customer.Cust_Gender : 1;
-    QStringList warnings;
     const QString sides[] = { QStringLiteral(LEFT), QStringLiteral(RIGHT) };
 
     for (const QString &side : sides) {
@@ -736,7 +778,7 @@ GroupAnalyseResult runGroupSkinAnalyseWorker(FaceAnalyseManager *mgr,
 
 } // namespace
 
-void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId)
+void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId, int moisturePercent)
 {
     if (busy_) {
         emit errorMessage(mmTr("正在处理中，请稍候"));
@@ -755,8 +797,10 @@ void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId)
         return;
     }
 
+    const int moisture = qBound(0, moisturePercent, 99);
     setBusy(true);
-    qCInfo(lcFaceAnalyse) << "analyseGroup start customer:" << customerId << "group:" << groupId;
+    qCInfo(lcFaceAnalyse) << "analyseGroup start customer:" << customerId
+                          << "group:" << groupId << "moisture:" << moisture;
 
     auto *watcher = new QFutureWatcher<GroupAnalyseResult>(this);
     connect(watcher, &QFutureWatcher<GroupAnalyseResult>::finished, this, [this, watcher]() {
@@ -769,8 +813,8 @@ void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId)
         emit groupAnalyseFinished(result.success, result.message);
     });
 
-    watcher->setFuture(QtConcurrent::run([this, customerId, groupId]() {
-        return runGroupSkinAnalyseWorker(this, customerId, groupId);
+    watcher->setFuture(QtConcurrent::run([this, customerId, groupId, moisture]() {
+        return runGroupSkinAnalyseWorker(this, customerId, groupId, moisture);
     }));
 }
 
@@ -790,6 +834,14 @@ QUrl FaceAnalyseManager::photoAnalyseOverlayUrl(int facePhotoIx) const
     if (path.isEmpty())
         return QUrl();
     return QUrl::fromLocalFile(path);
+}
+
+double FaceAnalyseManager::photoAnalyseDisplayScore(int facePhotoIx) const
+{
+    double score = 0.0;
+    if (!AppDb::instance().analyseDisplayScoreForPhoto(facePhotoIx, &score))
+        return -1.0;
+    return score;
 }
 
 namespace {
