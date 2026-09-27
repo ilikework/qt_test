@@ -300,6 +300,15 @@ void FaceAnalyseManager::autoMarkGroup(const QString &customerId, int groupId, b
         return;
     }
 
+    // 对标 TC30 DelMResults：重新定位前清掉该组已有分析和报告
+    if (!AppDb::instance().deleteGroupAnalyseAndReports(customerId, groupId)) {
+        emit autoMarkFinished(false,
+                              mmTr("清除旧分析结果失败") + QStringLiteral("：")
+                                  + AppDb::instance().lastErrorText(),
+                              false);
+        return;
+    }
+
     clearPendingAutoMarkChoice();
 
     const GroupContourMeta metaL = AppDb::instance().getGroupContourMeta(customerId, groupId, LEFT);
@@ -821,6 +830,11 @@ void FaceAnalyseManager::analyseGroup(const QString &customerId, int groupId, in
 void FaceAnalyseManager::notifyGroupAnalyseProgress(int done, int total, const QString &label)
 {
     emit groupAnalyseProgress(done, total, label);
+}
+
+bool FaceAnalyseManager::groupHasAnalyse(const QString &customerId, int groupId) const
+{
+    return AppDb::instance().groupHasAnalyseInfo(customerId, groupId);
 }
 
 bool FaceAnalyseManager::photoHasAnalyseOverlay(int facePhotoIx) const

@@ -879,93 +879,90 @@ Item {
                         Layout.fillHeight: true
                         spacing: 8
 
-                        // 上区：照片(3:4 竖版，紧贴边框) + 柱图占满剩余宽度
+                        // 上区：左右主图按分析页方式撑满高度（3:4），柱图占剩余宽度
                         Item {
                             id: singleTopArea
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.minimumHeight: 100
+                            Layout.minimumHeight: 160
 
-                            readonly property real minChartW: 280
-                            readonly property real photoAspect: 3 / 4   // 宽:高，与缩略图 90×120 一致
-                            readonly property real photoPad: 4
-                            // 两图总宽 ≈ 2×(h×3/4+pad)；布局未完成时用 fallback
-                            readonly property real photoH: {
-                                var availH = height > 0 ? height : 220
-                                var availW = width > 0 ? width : 900
-                                // 总宽 ≈ 2×(h×3/4+pad) + minChartW + 间距
-                                return Math.min(
-                                    availH,
-                                    Math.max(72, (availW - minChartW - 24 - 2 * photoPad) / (2 * photoAspect))
-                                )
-                            }
+                            readonly property real gap: 16
+                            readonly property real chartMinW: 260
 
                             RowLayout {
-                                anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                height: singleTopArea.photoH
-                                spacing: 28
+                                anchors.fill: parent
+                                spacing: 16
 
-                                Rectangle {
-                                    id: mainImgL
-                                    Layout.preferredHeight: parent.height
-                                    Layout.maximumHeight: parent.height
-                                    Layout.preferredWidth: reportEditorL.width + singleTopArea.photoPad
-                                    Layout.maximumWidth: reportEditorL.width + singleTopArea.photoPad
-                                    radius: 8
-                                    color: "#222"
-                                    border.color: "#ffb300"
-                                    clip: true
-                                    MMImageEditor {
-                                        id: reportEditorL
-                                        anchors.centerIn: parent
-                                        height: parent.height - 2
-                                        width: height * singleTopArea.photoAspect
-                                        source: {
-                                            var _m = customerReport.photoViewMode
-                                            var _b = customerReport.blinkShowAnalysed
-                                            var idx = tabButtons.selectedIndex
-                                            if (!subphotoes || idx < 0 || idx >= subphotoes.length)
-                                                return ""
-                                            return customerReport.resolveEditorSource(
-                                                subphotoes[idx].photoL, subphotoes[idx].IXL)
-                                        }
-                                        Component.onCompleted: customerReport.refreshSingleReportEditors()
-                                    }
-                                }
-                                Rectangle {
-                                    id: mainImgR
-                                    Layout.preferredHeight: parent.height
-                                    Layout.maximumHeight: parent.height
-                                    Layout.preferredWidth: reportEditorR.width + singleTopArea.photoPad
-                                    Layout.maximumWidth: reportEditorR.width + singleTopArea.photoPad
-                                    radius: 8
-                                    color: "#222"
-                                    border.color: "#ffb300"
-                                    clip: true
-                                    MMImageEditor {
-                                        id: reportEditorR
-                                        anchors.centerIn: parent
-                                        height: parent.height - 2
-                                        width: height * singleTopArea.photoAspect
-                                        source: {
-                                            var _m = customerReport.photoViewMode
-                                            var _b = customerReport.blinkShowAnalysed
-                                            var idx = tabButtons.selectedIndex
-                                            if (!subphotoes || idx < 0 || idx >= subphotoes.length)
-                                                return ""
-                                            return customerReport.resolveEditorSource(
-                                                subphotoes[idx].photoR, subphotoes[idx].IXR)
-                                        }
-                                        Component.onCompleted: customerReport.refreshSingleReportEditors()
-                                    }
-                                }
-                                ChartView {
-                                    id: chartBar
+                                Item {
+                                    id: photoHost
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    Layout.minimumWidth: singleTopArea.minChartW
+
+                                    readonly property real boxW: Math.max(1, Math.min(
+                                        (width - singleTopArea.gap) / 2,
+                                        height * 3 / 4))
+                                    readonly property real boxH: boxW * 4 / 3
+
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: singleTopArea.gap
+
+                                        Rectangle {
+                                            id: mainImgL
+                                            width: photoHost.boxW
+                                            height: photoHost.boxH
+                                            radius: 8
+                                            color: "#222"
+                                            border.color: "#ffb300"
+                                            clip: true
+                                            MMImageEditor {
+                                                id: reportEditorL
+                                                anchors.fill: parent
+                                                anchors.margins: 2
+                                                source: {
+                                                    var _m = customerReport.photoViewMode
+                                                    var _b = customerReport.blinkShowAnalysed
+                                                    var idx = tabButtons.selectedIndex
+                                                    if (!subphotoes || idx < 0 || idx >= subphotoes.length)
+                                                        return ""
+                                                    return customerReport.resolveEditorSource(
+                                                        subphotoes[idx].photoL, subphotoes[idx].IXL)
+                                                }
+                                                Component.onCompleted: customerReport.refreshSingleReportEditors()
+                                            }
+                                        }
+                                        Rectangle {
+                                            id: mainImgR
+                                            width: photoHost.boxW
+                                            height: photoHost.boxH
+                                            radius: 8
+                                            color: "#222"
+                                            border.color: "#ffb300"
+                                            clip: true
+                                            MMImageEditor {
+                                                id: reportEditorR
+                                                anchors.fill: parent
+                                                anchors.margins: 2
+                                                source: {
+                                                    var _m = customerReport.photoViewMode
+                                                    var _b = customerReport.blinkShowAnalysed
+                                                    var idx = tabButtons.selectedIndex
+                                                    if (!subphotoes || idx < 0 || idx >= subphotoes.length)
+                                                        return ""
+                                                    return customerReport.resolveEditorSource(
+                                                        subphotoes[idx].photoR, subphotoes[idx].IXR)
+                                                }
+                                                Component.onCompleted: customerReport.refreshSingleReportEditors()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ChartView {
+                                    id: chartBar
+                                    Layout.fillHeight: true
+                                    Layout.preferredWidth: Math.max(singleTopArea.chartMinW, photoHost.width > 0 ? singleTopArea.width * 0.32 : singleTopArea.chartMinW)
+                                    Layout.minimumWidth: singleTopArea.chartMinW
                                     antialiasing: true
 
                                     function updatebar() {

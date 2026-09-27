@@ -31,6 +31,7 @@ public:
     /// @param moisturePercent 手动水分值 0–99（对标 TC30 无水分笔输入）；写入 MM_WHOLE 照片的 AnalyseInfo
     Q_INVOKABLE void analyseGroup(const QString &customerId, int groupId, int moisturePercent);
     Q_INVOKABLE void notifyGroupAnalyseProgress(int done, int total, const QString &label);
+    Q_INVOKABLE bool groupHasAnalyse(const QString &customerId, int groupId) const;
     Q_INVOKABLE bool photoHasAnalyseOverlay(int facePhotoIx) const;
     Q_INVOKABLE QUrl photoAnalyseOverlayUrl(int facePhotoIx) const;
     /// 校正后的显示分数 0–100；无分析结果返回 -1

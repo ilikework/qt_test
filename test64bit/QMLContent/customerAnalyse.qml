@@ -38,6 +38,7 @@ Item {
     }
     /// 自动定位完成后逐侧确认：left → right
     property string autoMarkSideStep: ""
+    property bool autoMarkWantRefine: false
     property bool skinAnalyseRunning: false
     /// 主图显示：0=分析图 1=原图 2=原图/分析图每秒切换
     property int photoViewMode: 0
@@ -239,6 +240,20 @@ Item {
     }
 
     /// 主画面右侧「自动区域定位」：LibFA64 左右脸轮廓定位（可重复执行）
+    function enterManualContourEdit() {
+        leftMain.reloadDrawings()
+        rightMain.reloadDrawings()
+        leftMain.enterEditContour()
+        rightMain.enterEditContour()
+    }
+
+    function refreshAfterAnalyseCleared() {
+        analyseDisplayRevision++
+        photoViewMode = 0
+        applyMainPhotoDisplay()
+    }
+
+    /// 主画面右侧「自动区域定位」：LibFA64 左右脸轮廓定位（可重复执行）
     function startAutoRegionMark() {
         if (!faceAnalyseManager) {
             console.warn("faceAnalyseManager not available")
@@ -254,7 +269,9 @@ Item {
             return
         if (!faceAnalyseManager.ensureDetector())
             return
+        autoMarkWantRefine = false
         faceAnalyseManager.autoMarkGroup(customerID, currentGroupID, false)
+        refreshAfterAnalyseCleared()
     }
 
 
@@ -458,12 +475,18 @@ Item {
                     }
                     CheckButton {
                         width: parent.width * 0.9
+                        autoToggle: false
                         checked: false
                         text: { var _ = appTranslator.revision; return appTranslator.translateText("报告") }
                         onClicked:
                         {
+                            if (!faceAnalyseManager || !faceAnalyseManager.groupHasAnalyse(customerID, currentGroupID)) {
+                                statusMsgBox.boxTitle = appTranslator.translateText("提示")
+                                statusMsgBox.boxMessage = appTranslator.translateText("请先完成皮肤分析后再查看报告。")
+                                statusMsgBox.open()
+                                return
+                            }
                             loadPage("customerReport.qml", { customerID: customerID, currentGroupID: currentGroupID })
-
                         }
                     }
                     CheckButton {
@@ -742,8 +765,9 @@ Item {
     Connections {
         target: faceAnalyseManager
         function onAutoMarkFinished(success, message, needsResultChoice) {
+            refreshRegionReadyState()
+            refreshAfterAnalyseCleared()
             if (success) {
-                refreshRegionReadyState()
                 leftMain.reloadDrawings()
                 rightMain.reloadDrawings()
                 leftMain.enterShowContour()
@@ -751,14 +775,14 @@ Item {
                 if (analyseWorkflowActive) {
                     showContourAndAskRefine(message)
                 } else if (needsResultChoice) {
+                    autoMarkWantRefine = false
                     autoMarkSideStep = "left"
                     autoMarkResultDialog.openForSide("left")
                 }
             } else {
-                statusMsgBox.boxTitle = appTranslator.translateText("定位失败")
-                statusMsgBox.boxMessage = message
-                statusMsgBox.open()
-                analyseWorkflowActive = false
+                autoMarkFailedDialog.boxMessage = message
+                        + "\n" + appTranslator.translateText("自动定位未成功，可进入手动精修轮廓。")
+                autoMarkFailedDialog.open()
             }
         }
         function onErrorMessage(msg) {
@@ -805,8 +829,11 @@ Item {
         ]
         onChoiceMade: function(choiceId) {
             if (choiceId === "start") {
-                if (faceAnalyseManager.ensureDetector())
+                if (faceAnalyseManager.ensureDetector()) {
+                    autoMarkWantRefine = false
                     faceAnalyseManager.autoMarkGroup(customerID, currentGroupID, true)
+                    refreshAfterAnalyseCleared()
+                }
             } else {
                 analyseWorkflowActive = false
             }
@@ -835,8 +862,9 @@ Item {
                     { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
                 ]
             } else {
-                boxMessage = sideSummary + "\n" + appTranslator.translateText("请") + faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) + appTranslator.translateText("。")
+                boxMessage = sideSummary + "\n" + appTranslator.translateText("自动定位未成功，可进入手动精修轮廓。")
                 resultChoices = [
+                    { id: "refine", text: appTranslator.translateText("手动精修轮廓") },
                     { id: "revert", text: faceAnalyseManager.pendingAutoMarkRevertLabel(isLeft) }
                 ]
             }
@@ -845,6 +873,8 @@ Item {
         onChoiceMade: function(choiceId) {
             const isLeft = autoMarkSideStep === "left"
             const succeeded = faceAnalyseManager.pendingAutoMarkSideSucceeded(isLeft)
+            if (choiceId === "refine")
+                autoMarkWantRefine = true
             const keepNew = succeeded && choiceId === "keep"
             if (!faceAnalyseManager.confirmAutoMarkSideChoice(isLeft, keepNew)) {
                 statusMsgBox.boxTitle = appTranslator.translateText("提示")
@@ -860,9 +890,14 @@ Item {
                 autoMarkSideStep = ""
                 leftMain.reloadDrawings()
                 rightMain.reloadDrawings()
-                leftMain.enterShowContour()
-                rightMain.enterShowContour()
                 refreshRegionReadyState()
+                if (autoMarkWantRefine) {
+                    autoMarkWantRefine = false
+                    enterManualContourEdit()
+                } else {
+                    leftMain.enterShowContour()
+                    rightMain.enterShowContour()
+                }
             }
         }
     }
@@ -878,11 +913,26 @@ Item {
         ]
         onChoiceMade: function(choiceId) {
             if (choiceId === "refine") {
-                leftMain.enterEditContour()
-                rightMain.enterEditContour()
+                enterManualContourEdit()
             } else {
                 startSkinAnalyse()
             }
+        }
+    }
+
+    ModalChoicePanel {
+        id: autoMarkFailedDialog
+        anchors.fill: parent
+        boxTitle: { var _ = appTranslator.revision; return appTranslator.translateText("定位失败") }
+        boxMessage: ""
+        choices: [
+            { id: "refine", text: appTranslator.translateText("手动精修轮廓") },
+            { id: "close", text: appTranslator.translateText("关闭") }
+        ]
+        onChoiceMade: function(choiceId) {
+            analyseWorkflowActive = false
+            if (choiceId === "refine")
+                enterManualContourEdit()
         }
     }
 

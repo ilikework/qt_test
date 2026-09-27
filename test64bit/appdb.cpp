@@ -1025,6 +1025,70 @@ bool AppDb::deleteGroupAnalyseInfo(const QString &custId, int groupId)
     return true;
 }
 
+bool AppDb::deleteGroupAnalyseAndReports(const QString &custId, int groupId)
+{
+    if (custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return false;
+
+    if (!deleteGroupAnalyseInfo(custId, groupId))
+        return false;
+
+    if (!ensureCustomerReportTables())
+        return false;
+
+    QSqlQuery offering(m_db);
+    offering.prepare(R"(
+        DELETE FROM T_Report_Offering
+        WHERE Report_IX IN (
+            SELECT IX FROM T_Report_Main WHERE Cust_ID = ? AND Group_ID = ?
+        )
+    )");
+    offering.addBindValue(custId);
+    offering.addBindValue(groupId);
+    if (!offering.exec()) {
+        m_lastError = offering.lastError().text();
+        return false;
+    }
+
+    QSqlQuery report(m_db);
+    report.prepare(QStringLiteral("DELETE FROM T_Report_Main WHERE Cust_ID = ? AND Group_ID = ?"));
+    report.addBindValue(custId);
+    report.addBindValue(groupId);
+    if (!report.exec()) {
+        m_lastError = report.lastError().text();
+        return false;
+    }
+
+    const QString analyseDir = groupFolderPath(custId, groupId) + QStringLiteral("/analyse");
+    QDir dir(analyseDir);
+    if (dir.exists()) {
+        const QStringList files = dir.entryList(QDir::Files);
+        for (const QString &name : files)
+            dir.remove(name);
+    }
+
+    m_lastError.clear();
+    return true;
+}
+
+bool AppDb::groupHasAnalyseInfo(const QString &custId, int groupId) const
+{
+    if (custId.isEmpty() || groupId <= 0 || !m_db.isOpen())
+        return false;
+
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        SELECT 1
+        FROM T_FacePhoto_AnalyseInfo a
+        JOIN T_Customers_FacePhoto p ON p.IX = a.FacePhoto_IX
+        WHERE p.Cust_ID = ? AND p.Group_ID = ?
+        LIMIT 1
+    )");
+    q.addBindValue(custId);
+    q.addBindValue(groupId);
+    return q.exec() && q.next();
+}
+
 bool AppDb::hasAnalyseInfo(int facePhotoIx) const
 {
     if (facePhotoIx < 0 || !m_db.isOpen())

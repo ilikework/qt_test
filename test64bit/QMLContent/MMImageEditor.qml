@@ -37,18 +37,26 @@ Item {
     }
 
     function fitToWindow() {
-        if (internalEditor.implicitWidth > 0 && internalEditor.implicitHeight > 0) {
-            let scaleX = root.width / internalEditor.implicitWidth
-            let scaleY = root.height / internalEditor.implicitHeight
-            // 初始缩放比例，使图片完整显示在窗口内
-            minScale = Math.min(scaleX, scaleY)
-            container.scale = minScale
+        if (root.width < 8 || root.height < 8)
+            return
+        if (internalEditor.implicitWidth <= 0 || internalEditor.implicitHeight <= 0)
+            return
+        let scaleX = root.width / internalEditor.implicitWidth
+        let scaleY = root.height / internalEditor.implicitHeight
+        minScale = Math.min(scaleX, scaleY)
+        if (container.scale < minScale || Math.abs(container.scale - 1.0) < 0.0001)
+            container.scale = minScale
+        else if (container.scale > maxScale)
+            container.scale = maxScale
 
-            // 居中显示
-            flick.contentX = Math.max(0, (container.width * minScale - flick.width) / 2)
-            flick.contentY = Math.max(0, (container.height * minScale - flick.height) / 2)
-        }
-    }
+        let maxX = Math.max(0, flick.contentWidth - flick.width)
+        let maxY = Math.max(0, flick.contentHeight - flick.height)
+        flick.contentX = Math.max(0, Math.min(flick.contentX, maxX))
+        flick.contentY = Math.max(0, Math.min(flick.contentY, maxY))
+    }
+
+    onWidthChanged: Qt.callLater(fitToWindow)
+    onHeightChanged: Qt.callLater(fitToWindow)
 
     function applyZoomCentered(factor) {
         applyZoomAtMouse(factor, flick.width / 2, flick.height / 2)
